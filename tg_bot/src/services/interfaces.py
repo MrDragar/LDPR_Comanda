@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import date
 
-from src.domain.entities import Repost
-from src.domain.entities.user import User
+from src.domain.entities import Repost, Sources, User
 
 
 class IUserService(ABC):
@@ -62,25 +61,29 @@ class IUserService(ABC):
 
 class IParticipationService(ABC):
     @abstractmethod
-    async def is_participant(self, user_id: int) -> bool:
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
         ...
 
     @abstractmethod
-    async def activate_participation(self, user_id: int) -> None:
+    async def activate_participation(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
         ...
 
 
 class IReferralService(ABC):
     @abstractmethod
-    async def activate_referral(self, inviter: int, invitee: int) -> None:
+    async def activate_referral(self, inviter_id: int, inviter_source: Sources, invitee_id: int, invitee_source: Sources) -> None:
         ...
 
     @abstractmethod
-    async def get_count_invitees(self, inviter: int) -> int:
+    async def get_count_invitees(self, inviter: int, inviter_source: Sources) -> int:
         ...
 
 
 class IReferralLinkService(ABC):
     @abstractmethod
-    def generate_post(self, user_id: int, image_path: str) -> Repost:
+    def generate_post(self, user_id: int) -> Repost:
         ...
