@@ -1,0 +1,10 @@
+python-dotenv~=1.0.1
+vkbottle~=4.6.2
+aiogram~=3.25.0
+SQLAlchemy~=2.0.38
+aiosqlite~=0.21.0
+pytest~=8.3.5
+pytest-asyncio~=0.25.3
+fuzzywuzzy~=0.18.0
+python-levenshtein~=0.27.3
+aiohttp-socks~=0.11.0
