@@ -17,7 +17,7 @@ class IUserService(ABC):
         ...
 
     @abstractmethod
-    async def is_user_exists(self, user_id: int) -> bool:
+    async def is_user_exists(self, user_id: int, inviter_source: Sources | None = None) -> bool:
         ...
 
     @abstractmethod
@@ -31,7 +31,7 @@ class IUserService(ABC):
     @abstractmethod
     async def validate_fio_part(self, part: str, part_name: str) -> str:
         ...
-    
+
     @abstractmethod
     async def get_similar_regions(self, region: str) -> list[str]:
         ...
@@ -75,7 +75,8 @@ class IParticipationService(ABC):
 
 class IReferralService(ABC):
     @abstractmethod
-    async def activate_referral(self, inviter_id: int, inviter_source: Sources, invitee_id: int, invitee_source: Sources) -> None:
+    async def activate_referral(self, inviter_id: int, inviter_source: Sources, invitee_id: int,
+                                invitee_source: Sources) -> None:
         ...
 
     @abstractmethod

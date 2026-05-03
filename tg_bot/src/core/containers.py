@@ -43,7 +43,8 @@ class Container(DeclarativeContainer):
         ReferralService,
         uow=uow,
         referral_repo=referral_repository,
-        participation_repo=participation_repository
+        participation_repo=participation_repository,
+        user_service=user_service
     )
     referral_link_service = providers.Factory(
         ReferralLinkService,

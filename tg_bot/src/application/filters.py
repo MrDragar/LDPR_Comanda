@@ -37,10 +37,11 @@ class ValidatedStartFilter(CommandStart):
     """Кастомный фильтр, наследующий CommandStart с валидацией формата"""
     def __init__(self, **kwargs):
         super().__init__(deep_link=True, **kwargs)
-        self.pattern = re.compile(r'^(\d+)_(TG|VK|MAX)$')
+        self.pattern = re.compile(r'^(\d+)_(tg|vk|max)$')
 
     async def __call__(self, message: Message, bot: Bot) -> bool | dict[str, Any]:
         is_valid = await super().__call__(message, bot)
+        logger.debug('Is valid: %s', is_valid)
         if not is_valid:
             return False
         text = message.text or ""
@@ -49,7 +50,7 @@ class ValidatedStartFilter(CommandStart):
             return False
         deep_link = parts[1]
         match = self.pattern.match(deep_link)
-
+        logger.debug('Match: %s', match)
         if match:
             return {
                 "user_id": int(match.group(1)),

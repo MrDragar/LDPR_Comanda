@@ -25,6 +25,8 @@ async def participant_start(
         message: types.Message,
         participation_service: IParticipationService, referral_service: IReferralService,
 ):
+    if message.chat.id <= 0:
+        return
     id_count = len(await participation_service.get_all_participation_ids(
         message.from_user.id, Sources.TG
     ))
@@ -45,6 +47,8 @@ async def participant_start(
 async def registered_start(
         message: types.Message, state: FSMContext
 ):
+    if message.chat.id <= 0:
+        return
     await message.reply(
         f"Вы уже прошли анкетирование.\n"
         f"Хотите ли вы принять участие в конкурсе?",
@@ -53,14 +57,15 @@ async def registered_start(
     await state.set_state(ParticipateRegisteredStates.step)
 
 
-@router.message(ValidatedStartFilter())
+@start_command_router.message(ValidatedStartFilter())
 async def cmd_start(
         message: types.Message, user_id: int, platform: str,
         referral_service: IReferralService,
         state: FSMContext
 ):
     if message.chat.id <= 0:
-        return 
+        return
+    logging.debug(f"Got referral: {user_id}, {platform}")
     await referral_service.activate_referral(
         user_id, Sources(platform),
         message.from_user.id, Sources.TG

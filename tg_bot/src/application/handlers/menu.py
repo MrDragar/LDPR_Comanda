@@ -17,6 +17,8 @@ async def show_numbers(
         message: types.Message,
         participation_service: IParticipationService,
 ):
+    if message.chat.id <= 0:
+        return
     numbers = await participation_service.get_all_participation_ids(
         message.from_user.id, Sources.TG
     )
@@ -36,6 +38,8 @@ async def generate_referral(
         referral_service: IReferralService,
         referral_link_service: ReferralLinkService
 ):
+    if message.chat.id <= 0:
+        return
     referral_count = await referral_service.get_count_invitees(
         message.from_user.id, Sources.TG
     )
