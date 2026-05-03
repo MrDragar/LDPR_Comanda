@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import date
 
-from src.domain.entities.user import User
+from src.domain.entities import Repost, Sources, User
 
 
 class IUserService(ABC):
@@ -17,7 +17,7 @@ class IUserService(ABC):
         ...
 
     @abstractmethod
-    async def is_user_exists(self, user_id: int) -> bool:
+    async def is_user_exists(self, user_id: int, inviter_source: Sources | None = None) -> bool:
         ...
 
     @abstractmethod
@@ -31,7 +31,7 @@ class IUserService(ABC):
     @abstractmethod
     async def validate_fio_part(self, part: str, part_name: str) -> str:
         ...
-    
+
     @abstractmethod
     async def get_similar_regions(self, region: str) -> list[str]:
         ...
@@ -56,4 +56,35 @@ class IUserService(ABC):
 
     @abstractmethod
     async def get_region_by_prefix(self, region_prefix: str) -> str:
+        ...
+
+
+class IParticipationService(ABC):
+    @abstractmethod
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def activate_participation(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        ...
+
+
+class IReferralService(ABC):
+    @abstractmethod
+    async def activate_referral(self, inviter_id: int, inviter_source: Sources, invitee_id: int,
+                                invitee_source: Sources) -> None:
+        ...
+
+    @abstractmethod
+    async def get_count_invitees(self, inviter: int, inviter_source: Sources) -> int:
+        ...
+
+
+class IReferralLinkService(ABC):
+    @abstractmethod
+    def generate_post(self, user_id: int) -> Repost:
         ...

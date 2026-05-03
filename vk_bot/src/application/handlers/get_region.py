@@ -1,6 +1,5 @@
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import GroupEventType, GroupTypes
-from vkbottle.dispatch.rules.base import PayloadRule, PayloadContainsRule
 from vkbottle.dispatch import BuiltinStateDispenser
 
 from src.application.filters import CMDRule

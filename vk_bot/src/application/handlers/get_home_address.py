@@ -13,7 +13,7 @@ router = BotLabeler()
 @router.message(state=RegistrationStates.HOME_ADDRESS)
 async def get_home_address(
         message: Message,
-        state_dispenser: BuiltinStateDispenser,
+        state_dispenser: BuiltinStateDispenser
 ):
     if not message.text: return
 

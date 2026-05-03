@@ -28,3 +28,7 @@ class FioFormatError(Exception):
 
 class NotFoundRegionError(Exception):
     ...
+
+
+class ReferralAlreadyExistsError(Exception):
+    pass

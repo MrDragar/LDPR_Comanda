@@ -2,14 +2,15 @@ import logging
 from aiogram import Bot as TgBot
 from vkbottle import PhotoMessageUploader
 
-from src.application.keyboards.miniapp_keyboard import get_miniapp_keyboard
-from src.services.interfaces import IUserService
+from src.application.keyboards.menu_keyboard import get_menu_keyboard
+from src.services.interfaces import IUserService, IParticipationService
 
 logger = logging.getLogger(__name__)
 
 
 async def finish_registration(
         user_service: IUserService,
+        participation_service: IParticipationService,
         peer_id: int,
         state_payload: dict,
         ctx_api,
@@ -50,6 +51,7 @@ async def finish_registration(
             home_address=state_payload.get('home_address'),
             news_subscription=state_payload['news_subscription']
         )
+        number = await participation_service.activate_participation(user.id, user.source)
 
         photo = await photo_uploader.upload(
             'docs/sokol_like.webp',
@@ -65,18 +67,26 @@ async def finish_registration(
             peer_id=peer_id,
             message=(
                 f"Поздравляем, вы успешно зарегистрированы.\n"
-                f"Ваш уникальный номер — Б{user.id}."
+                f"Ваш уникальный номер — {number}."
             ),
             random_id=0
         )
 
+        await state_dispenser.delete(peer_id)
         await ctx_api.messages.send(
             peer_id=peer_id,
-            message="Используйте кнопку ниже, чтобы открыть наш сайт",
-            keyboard=get_miniapp_keyboard(),
+            message=(
+                "Пригласи ещё трёх друзей к участию в розыгрыше и получи дополнительные номера для "
+                "увеличения шансов выигрыша"
+            ),
             random_id=0
         )
-
+        await ctx_api.messages.send(
+            peer_id=peer_id,
+            message="Меню",
+            random_id=0,
+            keyboard=get_menu_keyboard()
+        )
         log_text = (
             f"Новый пользователь зарегистрировался\n"
             f"Источник: ВК\n"
@@ -92,7 +102,8 @@ async def finish_registration(
             f"Домашний адрес: {user.home_address or ''}\n"
             f"Подписка на новости: {'Есть' if user.news_subscription else 'Нет'}\n\n"
             
-            f"Номер участника: Б{user.id}"
+            f"ID участника: {user.id}"
+            f"Номер участника: {number}"
         )
 
         await tg_bot.send_message(

@@ -55,10 +55,13 @@ class UserService(IUserService):
                 raise
             return user.region
 
-    async def is_user_exists(self, user_id: int) -> bool:
+    async def is_user_exists(self, user_id: int, inviter_source: Sources | None = None) -> bool:
         async with self.__uow.atomic():
             try:
-                user = await self.__user_repo.get_user(int(user_id), self.__source)
+                user = await self.__user_repo.get_user(
+                    int(user_id),
+                    inviter_source or self.__source
+                )
             except UserNotFoundError:
                 return False
             except Exception:

@@ -3,8 +3,6 @@ from vkbottle import GroupEventType, GroupTypes, DocMessagesUploader
 
 from src.application.filters import CMDRule
 from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
-from src.application.keyboards.personal_data_keyboard import \
-    get_personal_data_keyboard
 from src.application.states import RegistrationStates
 from vkbottle.dispatch import BuiltinStateDispenser
 

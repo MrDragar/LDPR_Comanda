@@ -12,6 +12,7 @@ from .get_city import router as city_router
 from .get_wish_to_join import router as wish_router
 from .get_home_address import router as home_router
 from .get_news_subscription import router as news_router
+from .menu import router as menu_router
 from .admin.post import router as admin_router
 
 full_labeler = BotLabeler()
@@ -31,4 +32,5 @@ full_labeler.load(city_router)
 full_labeler.load(wish_router)
 full_labeler.load(home_router)
 full_labeler.load(news_router)
+full_labeler.load(menu_router)
 full_labeler.load(start_router)

@@ -20,27 +20,27 @@ services:
       LOG_FILE: ${LOG_FILE}
       LOG_FORMAT: ${LOG_FORMAT}
     restart: always
-#  vk_bot:
-#    command: python3 -m src.main
-#    build: ./vk_bot
-#    volumes:
-#      - ./vk_bot/src:/app/src
-#      - ./logs:/app/logs
-#      - ./vk_bot/docs:/app/docs
-#      - ./db.sqlite3:/app/db.sqlite3
-#    env_file:
-#      - .env
-#    environment:
-#      TG_API_TOKEN: ${TG_API_TOKEN}
-#      VK_API_TOKEN: ${VK_API_TOKEN}
-#      VK_BOT_LINK: ${VK_BOT_LINK}
-#      TG_BOT_LINK: ${TG_BOT_LINK}
-#      ADMIN_IDS: ${ADMIN_IDS}
-#      LOG_CHAT: ${LOG_CHAT}
-#      LOG_LEVEL: ${LOG_LEVEL}
-#      LOG_FILE: ${LOG_FILE}
-#      LOG_FORMAT: ${LOG_FORMAT}
-#    restart: always
+  vk_bot:
+    command: python3 -m src.main
+    build: ./vk_bot
+    volumes:
+      - ./vk_bot/src:/app/src
+      - ./logs:/app/logs
+      - ./vk_bot/docs:/app/docs
+      - ./db.sqlite3:/app/db.sqlite3
+    env_file:
+      - .env
+    environment:
+      TG_API_TOKEN: ${TG_API_TOKEN}
+      VK_API_TOKEN: ${VK_API_TOKEN}
+      VK_BOT_LINK: ${VK_BOT_LINK}
+      TG_BOT_LINK: ${TG_BOT_LINK}
+      ADMIN_IDS: ${ADMIN_IDS}
+      LOG_CHAT: ${LOG_CHAT}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FILE: ${LOG_FILE}
+      LOG_FORMAT: ${LOG_FORMAT}
+    restart: always
 
 networks:
   app_network:
