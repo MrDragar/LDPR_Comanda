@@ -28,3 +28,7 @@ class UploadVideoStates(StatesGroup):
     location = State()
     video = State()
     uploading = State()
+
+
+class ParticipateRegisteredStates(StatesGroup):
+    step = State()

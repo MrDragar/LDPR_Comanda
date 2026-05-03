@@ -1,7 +1,7 @@
 from .user import User, Sources
-from participation import Participation
-from referral import Referral
-from repost import Repost
+from .participation import Participation
+from .referral import Referral
+from .repost import Repost
 
 
 __all__ = [

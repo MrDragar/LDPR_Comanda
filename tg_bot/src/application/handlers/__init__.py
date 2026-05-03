@@ -13,6 +13,8 @@ from .get_city import router as city_router
 from .get_wish_to_join import router as wish_to_join_router
 from .get_home_address import router as home_address_router
 from .get_news_subscription import router as news_subscription_router
+from .registered_yes import router as registered_yes_router
+from .menu import router as menu_router
 from .start import router as start_router, start_command_router
 
 router = Router(name=__name__)
@@ -31,4 +33,6 @@ router.include_router(city_router)
 router.include_router(wish_to_join_router)
 router.include_router(home_address_router)
 router.include_router(news_subscription_router)
+router.include_router(registered_yes_router)
+router.include_router(menu_router)
 router.include_router(start_router)

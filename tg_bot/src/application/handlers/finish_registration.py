@@ -2,11 +2,13 @@ from aiogram import types
 from aiogram.fsm.context import FSMContext
 
 from src.application.keyboards.menu_keyboard import get_menu_keyboard
-from src.application.keyboards.miniapp_keyboard import get_miniapp_keyboard
-from src.services.interfaces import IUserService
+from src.services.interfaces import IUserService, IParticipationService
 
 
-async def finish_registration(user_service: IUserService, state: FSMContext, message: types.Message, log_chat: str):
+async def finish_registration(
+        user_service: IUserService, state: FSMContext, message: types.Message, 
+        participation_service: IParticipationService, log_chat: str
+):
     data = await state.get_data()
     is_member = data['is_member']
     surname = data['surname']
@@ -23,6 +25,7 @@ async def finish_registration(user_service: IUserService, state: FSMContext, mes
     news_subscription = data['news_subscription']
 
     if await user_service.is_user_exists(message.from_user.id):
+        await state.clear()
         return await message.reply(f"Вы уже зарегистрировались.")
 
     user = await user_service.create_user(
@@ -31,18 +34,18 @@ async def finish_registration(user_service: IUserService, state: FSMContext, mes
         gender, city, wish_to_join, home_address, news_subscription
     )
 
+    number = await participation_service.activate_participation(user.id, user.source)
+
     await message.answer_sticker(
         types.FSInputFile('docs/sokol_like.webp')
     )
     await message.answer(
-        f"Поздравляем, вы успешно зарегистрированы.\nВаш уникальный номер - Б{user.id}.",
+        f"Поздравляем, вы успешно зарегистрированы.\nВаш уникальный номер - {number}.",
         parse_mode="HTML",
         reply_markup=types.ReplyKeyboardRemove()
     )
-    await message.answer(
-        'Используйте кнопку ниже, чтобы открыть наш сайт',
-        reply_markup=get_miniapp_keyboard()
-    )
+    await state.clear()
+    await message.answer("Пригласи ещё трёх друзей к участию в розыгрыше и получи дополнительные номера для увеличения шансов выигрыша")
     await message.answer("Меню", reply_markup=get_menu_keyboard())
     await message.bot.send_message(chat_id=log_chat, text=f"""
 Новый пользователь {'@' + user.username if user.username else '<нет username>'} зарегистрировался.
@@ -59,7 +62,8 @@ async def finish_registration(user_service: IUserService, state: FSMContext, mes
 Домашний адрес: {user.home_address or 'не указан'}
 Подписка на новости: {'Есть' if news_subscription else 'Нет'}
 
-Номер участника: Б{user.id}
+ID участника: {user.id}
+Номер участника: {number}
 """)
 
 

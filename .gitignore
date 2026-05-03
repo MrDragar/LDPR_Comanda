@@ -1,0 +1,6 @@
+.git
+.idea
+.env
+.venv
+db.sqlite3
+logs/

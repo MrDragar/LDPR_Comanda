@@ -1,38 +1,31 @@
-from aiogram import Bot as TgBot
-from vkbottle import PhotoMessageUploader
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
+import logging
+
+from aiogram import types, Router
+from aiogram.fsm.context import FSMContext
 
 from src.application.handlers.finish_registration import finish_registration
+from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.states import RegistrationStates
-from src.services.interfaces import IUserService
 
-router = BotLabeler()
+from src.services.interfaces import IUserService, IParticipationService
+
+router = Router(name=__name__)
+logger = logging.getLogger(__name__)
 
 
-@router.message(state=RegistrationStates.NEWS_SUBSCRIPTION)
-async def get_news_sub(
-        message: Message, user_service: IUserService,
-        state_dispenser: BuiltinStateDispenser,
-        photo_uploader: PhotoMessageUploader,
-        log_chat: str,
-        tg_bot: TgBot
+@router.message(RegistrationStates.news_subscription)
+async def get_news_subscription(
+        message: types.Message, state: FSMContext, user_service: IUserService,
+        participation_service: IParticipationService, log_chat: str
 ):
-    text = message.text.lower().strip() if message.text else ""
-    if text not in ['да', 'нет']:
-        await message.answer("Хотели бы вы получать новости? (Да/Нет)")
+    answer = message.text.lower().strip()
+    if not answer:
         return
-    state = await state_dispenser.get(message.from_id)
-    new_payload = {**state.payload, 'news_subscription': text == 'да'}
-    await finish_registration(
-        user_service=user_service,
-        peer_id=message.peer_id,
-        state_payload=new_payload,
-        ctx_api=message.ctx_api,
-        log_chat=log_chat,
-        state_dispenser=state_dispenser,
-        tg_bot=tg_bot,
-        photo_uploader=photo_uploader
-    )
-    await state_dispenser.delete(message.from_id)
-
+    if answer not in ['да', 'нет']:
+        await message.reply(
+            "Хотели бы вы получать информацию о инициативах и мероприятиях ЛДПР?",
+            reply_markup=get_boolean_keyboard()
+        )
+    await state.update_data(news_subscription=(answer == 'да'))
+    logger.debug(f"Got news_subscription: {answer}")
+    await finish_registration(user_service, state, message, participation_service, log_chat)
