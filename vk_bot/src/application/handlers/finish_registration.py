@@ -102,7 +102,7 @@ async def finish_registration(
             f"Домашний адрес: {user.home_address or ''}\n"
             f"Подписка на новости: {'Есть' if user.news_subscription else 'Нет'}\n\n"
             
-            f"ID участника: {user.id}"
+            f"ID участника: {user.id}\n"
             f"Номер участника: {number}"
         )
 
