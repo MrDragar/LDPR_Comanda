@@ -72,7 +72,6 @@ async def finish_registration(
             random_id=0
         )
 
-        await state_dispenser.delete(peer_id)
         await ctx_api.messages.send(
             peer_id=peer_id,
             message=(
