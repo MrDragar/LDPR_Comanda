@@ -22,10 +22,15 @@ class RetryRegionCallback(CallbackData, prefix="retry_reg"):
 =========================================
 
 import logging
+import re
 from typing import Any, Union, Dict
 
-from aiogram.filters import BaseFilter
-from aiogram.types import Message, Update
+from aiogram import types, Bot
+from aiogram.filters import BaseFilter, CommandStart
+from aiogram.types import Message
+
+from src.domain.entities import Sources
+from src.services.interfaces import IParticipationService, IUserService
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +39,48 @@ class AdminFilter(BaseFilter):
     async def __call__(self, message: Message, admin_ids: list[int]) -> Union[bool, Dict[str, Any]]:
         logger.debug(f"Checking user {message.from_user.id} privileges in {admin_ids}: {str(message.from_user.id) in admin_ids}")
         return str(message.from_user.id) in admin_ids
+
+
+class IsRegisteredFilter(BaseFilter):
+    """Проверяет, завершил ли пользователь регистрацию в БД."""
+    async def __call__(self, message: Message, user_service: IUserService) -> bool:
+        return await user_service.is_user_exists(message.from_user.id)
+
+
+class IsParticipantFilter(BaseFilter):
+    """Проверяет, активировал ли пользователь участие в конкретной активности."""
+    async def __call__(self, message: Message, participation_service: IParticipationService) -> bool:
+        return await participation_service.is_participant(
+            user_id=message.from_user.id,
+            user_source=Sources.TG
+        )
+
+
+class ValidatedStartFilter(CommandStart):
+    """Кастомный фильтр, наследующий CommandStart с валидацией формата"""
+    def __init__(self, **kwargs):
+        super().__init__(deep_link=True, **kwargs)
+        self.pattern = re.compile(r'^(\d+)_(tg|vk|max)$')
+
+    async def __call__(self, message: Message, bot: Bot) -> bool | dict[str, Any]:
+        is_valid = await super().__call__(message, bot)
+        logger.debug('Is valid: %s', is_valid)
+        if not is_valid:
+            return False
+        text = message.text or ""
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            return False
+        deep_link = parts[1]
+        match = self.pattern.match(deep_link)
+        logger.debug('Match: %s', match)
+        if match:
+            return {
+                "user_id": int(match.group(1)),
+                "platform": match.group(2),
+                "raw_deep_link": deep_link
+            }
+        return False
 
 
 =========================================
@@ -105,9 +152,6 @@ async def confirm_post_handler(
     bad_id = []
     count = 0
     for user in users:
-        if user.region not in ["Тамбовская область", 'Рязанская область', 'Владимирская область']:
-            continue
-        await asyncio.sleep(0.2)
         logger.info(f"Checking {user.id}")
         try:
             sent_message = await message.bot.copy_message(user.id, message.chat.id, message_id, disable_notification=True)
@@ -155,11 +199,13 @@ from aiogram import types
 from aiogram.fsm.context import FSMContext
 
 from src.application.keyboards.menu_keyboard import get_menu_keyboard
-from src.application.keyboards.miniapp_keyboard import get_miniapp_keyboard
-from src.services.interfaces import IUserService
+from src.services.interfaces import IUserService, IParticipationService
 
 
-async def finish_registration(user_service: IUserService, state: FSMContext, message: types.Message, log_chat: str):
+async def finish_registration(
+        user_service: IUserService, state: FSMContext, message: types.Message, 
+        participation_service: IParticipationService, log_chat: str
+):
     data = await state.get_data()
     is_member = data['is_member']
     surname = data['surname']
@@ -176,6 +222,7 @@ async def finish_registration(user_service: IUserService, state: FSMContext, mes
     news_subscription = data['news_subscription']
 
     if await user_service.is_user_exists(message.from_user.id):
+        await state.clear()
         return await message.reply(f"Вы уже зарегистрировались.")
 
     user = await user_service.create_user(
@@ -184,18 +231,18 @@ async def finish_registration(user_service: IUserService, state: FSMContext, mes
         gender, city, wish_to_join, home_address, news_subscription
     )
 
+    number = await participation_service.activate_participation(user.id, user.source)
+
     await message.answer_sticker(
         types.FSInputFile('docs/sokol_like.webp')
     )
     await message.answer(
-        f"Поздравляем, вы успешно зарегистрированы.\nВаш уникальный номер - Б{user.id}.",
+        f"Поздравляем, вы успешно зарегистрированы.\nВаш уникальный номер - {number}.",
         parse_mode="HTML",
         reply_markup=types.ReplyKeyboardRemove()
     )
-    await message.answer(
-        'Используйте кнопку ниже, чтобы открыть наш сайт',
-        reply_markup=get_miniapp_keyboard()
-    )
+    await state.clear()
+    await message.answer("Пригласи ещё трёх друзей к участию в розыгрыше и получи дополнительные номера для увеличения шансов выигрыша")
     await message.answer("Меню", reply_markup=get_menu_keyboard())
     await message.bot.send_message(chat_id=log_chat, text=f"""
 Новый пользователь {'@' + user.username if user.username else '<нет username>'} зарегистрировался.
@@ -212,7 +259,8 @@ async def finish_registration(user_service: IUserService, state: FSMContext, mes
 Домашний адрес: {user.home_address or 'не указан'}
 Подписка на новости: {'Есть' if news_subscription else 'Нет'}
 
-Номер участника: Б{user.id}
+ID участника: {user.id}
+Номер участника: {number}
 """)
 
 
@@ -542,7 +590,7 @@ from src.application.handlers.finish_registration import finish_registration
 from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.states import RegistrationStates
 
-from src.services.interfaces import IUserService
+from src.services.interfaces import IUserService, IParticipationService
 
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
@@ -551,7 +599,7 @@ logger = logging.getLogger(__name__)
 @router.message(RegistrationStates.news_subscription)
 async def get_news_subscription(
         message: types.Message, state: FSMContext, user_service: IUserService,
-        log_chat: str
+        participation_service: IParticipationService, log_chat: str
 ):
     answer = message.text.lower().strip()
     if not answer:
@@ -563,7 +611,7 @@ async def get_news_subscription(
         )
     await state.update_data(news_subscription=(answer == 'да'))
     logger.debug(f"Got news_subscription: {answer}")
-    await finish_registration(user_service, state, message, log_chat)
+    await finish_registration(user_service, state, message, participation_service, log_chat)
 
 
 =========================================
@@ -722,6 +770,8 @@ from .get_city import router as city_router
 from .get_wish_to_join import router as wish_to_join_router
 from .get_home_address import router as home_address_router
 from .get_news_subscription import router as news_subscription_router
+from .registered_yes import router as registered_yes_router
+from .menu import router as menu_router
 from .start import router as start_router, start_command_router
 
 router = Router(name=__name__)
@@ -740,8 +790,73 @@ router.include_router(city_router)
 router.include_router(wish_to_join_router)
 router.include_router(home_address_router)
 router.include_router(news_subscription_router)
+router.include_router(registered_yes_router)
+router.include_router(menu_router)
 router.include_router(start_router)
 
+
+=========================================
+ФАЙЛ: src/application/handlers/menu.py
+=========================================
+
+import logging
+
+from aiogram import Router, types, F
+from aiogram.types import FSInputFile
+
+from src.application.keyboards.menu_keyboard import get_menu_keyboard
+from src.domain.entities import Sources
+from src.services.interfaces import IParticipationService, IReferralService
+from src.services.referral_link_service import ReferralLinkService
+
+router = Router(name=__name__)
+logger = logging.getLogger(__name__)
+
+
+@router.message(F.text == 'Посмотреть свои номера')
+async def show_numbers(
+        message: types.Message,
+        participation_service: IParticipationService,
+):
+    if message.chat.id <= 0:
+        return
+    numbers = await participation_service.get_all_participation_ids(
+        message.from_user.id, Sources.TG
+    )
+
+    res = ['Ваши номера:\n', *list(map(str, numbers[:100]))]
+    if len(numbers) > 100:
+        res.append('...')
+    await message.reply(
+        '\n'.join(res)
+    )
+    await message.answer("Меню", reply_markup=get_menu_keyboard())
+    
+    
+@router.message(F.text == 'Реферальная ссылка')
+async def generate_referral(
+        message: types.Message,
+        referral_service: IReferralService,
+        referral_link_service: ReferralLinkService
+):
+    if message.chat.id <= 0:
+        return
+    referral_count = await referral_service.get_count_invitees(
+        message.from_user.id, Sources.TG
+    )
+    await message.answer(
+        f"Вы пригласили уже {referral_count} людей\n"
+        "Пригласи трёх друзей к участию в розыгрыше и получи дополнительные номера для "
+        "увеличения шансов выигрыша"
+    )
+    post = referral_link_service.generate_post(message.from_user.id)
+    photo = await message.reply_photo(
+        FSInputFile(post.image_path),
+        caption=post.text,
+        parse_mode='HTML'
+    )
+    logger.debug(F"Sent photo: {photo}")
+    await message.answer("Меню", reply_markup=get_menu_keyboard())
 
 =========================================
 ФАЙЛ: src/application/handlers/personal_data.py
@@ -786,6 +901,34 @@ async def pd_disagree(query: types.CallbackQuery, state: FSMContext):
 
 
 =========================================
+ФАЙЛ: src/application/handlers/registered_yes.py
+=========================================
+
+from aiogram import Router, types, F
+from aiogram.fsm.context import FSMContext
+
+from src.application.keyboards.menu_keyboard import get_menu_keyboard
+from src.application.states import ParticipateRegisteredStates
+from src.domain.entities import Sources
+from src.services.interfaces import IParticipationService
+
+router = Router()
+
+
+@router.message(ParticipateRegisteredStates.step, F.text == 'Да')
+async def take_a_part(
+        message: types.Message, state: FSMContext,
+        participation_service: IParticipationService,
+):
+    number = await participation_service.activate_participation(message.from_user.id, Sources.TG)
+    await message.reply(
+        f"Поздравляем, Вы успешно зарегистрированы в нашем конкурсе.\n"
+        f"Ваш уникальный номер - {number}."
+    )
+    await state.clear()
+    await message.answer("Меню", reply_markup=get_menu_keyboard())
+
+=========================================
 ФАЙЛ: src/application/handlers/start.py
 =========================================
 
@@ -797,143 +940,95 @@ from aiogram.fsm.context import FSMContext
 from src.application.keyboards.menu_keyboard import get_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import \
     get_personal_data_keyboard
-from src.application.states import RegistrationStates
+from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
+from src.application.states import RegistrationStates, ParticipateRegisteredStates
 
-from src.application.keyboards.miniapp_keyboard import get_miniapp_keyboard
-from src.services.interfaces import IUserService
+from src.application.filters import IsParticipantFilter, IsRegisteredFilter, ValidatedStartFilter
+from src.domain.entities import Sources
+from src.services.interfaces import IParticipationService, IReferralService
 
 router = Router(name=__name__)
 start_command_router = Router(name=__name__)
 logger = logging.getLogger(__name__)
 
 
+@router.message(IsParticipantFilter())
+@start_command_router.message(filters.CommandStart(), IsParticipantFilter())
+@start_command_router.message(F.text == 'Отмена', IsParticipantFilter())
+async def participant_start(
+        message: types.Message,
+        participation_service: IParticipationService, referral_service: IReferralService,
+):
+    if message.chat.id <= 0:
+        return
+    id_count = len(await participation_service.get_all_participation_ids(
+        message.from_user.id, Sources.TG
+    ))
+    referral_count = await referral_service.get_count_invitees(
+        message.from_user.id, Sources.TG
+    )
+    await message.reply(
+        f"Вы уже участвуете в нашем конкурсе.\n"
+        f"Количество ваших номеров: {id_count}\n"
+        f"Количество ваших рефералов: {referral_count}\n"
+    )
+    await message.answer("Меню", reply_markup=get_menu_keyboard())
+
+
+@router.message(~IsParticipantFilter(), IsRegisteredFilter())
+@start_command_router.message(filters.CommandStart(), ~IsParticipantFilter(), IsRegisteredFilter())
+@start_command_router.message(F.text == 'Отмена', ~IsParticipantFilter(), IsRegisteredFilter())
+async def registered_start(
+        message: types.Message, state: FSMContext
+):
+    if message.chat.id <= 0:
+        return
+    await message.reply(
+        f"Вы уже прошли анкетирование.\n"
+        f"Хотите ли вы принять участие в конкурсе?",
+        reply_markup=get_boolean_keyboard()
+    )
+    await state.set_state(ParticipateRegisteredStates.step)
+
+
+@start_command_router.message(ValidatedStartFilter())
+async def cmd_start(
+        message: types.Message, user_id: int, platform: str,
+        referral_service: IReferralService,
+        state: FSMContext
+):
+    if message.chat.id <= 0:
+        return
+    logging.debug(f"Got referral: {user_id}, {platform}")
+    await referral_service.activate_referral(
+        user_id, Sources(platform),
+        message.from_user.id, Sources.TG
+    )
+    await start(message, state)
+
+
 @router.message()
 @start_command_router.message(filters.CommandStart())
 @start_command_router.message(F.text == 'Отмена')
-async def start(message: types.Message, user_service: IUserService,
+async def start(message: types.Message,
                 state: FSMContext):
     if message.chat.id <= 0:
         return
-    if await user_service.is_user_exists(message.from_user.id):
-        logging.debug(f"User {message.from_user.id} already exists")
-        await message.reply(
-            "Здравствуйте. Я, соколёнок Русик, интернет-помощник ЛДПР. Добро пожаловать в ЛДПР!"
-        )
-        await message.answer(
-            'Используйте кнопку ниже, чтобы открыть наш сайт',
-            reply_markup=get_miniapp_keyboard()
-        )
-        await message.answer("Меню", reply_markup=get_menu_keyboard())
-        return
-
     logging.debug(f"User {message.from_user.id} Start conversation")
 
     await message.answer_sticker(types.FSInputFile('docs/sokol_stay.webp'))
     await message.reply(
-        "Здравствуйте. Я, соколёнок Русик, интернет-помощник ЛДПР. Добро пожаловать в ЛДПР!"
+        "Здравствуйте. Я, соколёнок Русик, интернет-помощник ЛДПР.\n"
+        "Вы регистрируетесь в розыгрыше партии.\n"
+        "Чтобы получить подарок, дайте согласие на обработку персональных данных и "
+        "ответьте на несколько простых вопросов.\n\n"
+        "Желаю удачи!"
     )
 
     await message.reply(
         "Для начала дайте согласие на обработку персональных данных",
         reply_markup=get_personal_data_keyboard())
     await state.set_state(RegistrationStates.personal_data)
-
-
-=========================================
-ФАЙЛ: src/application/handlers/upload_video/get_location.py
-=========================================
-
-import logging
-
-from aiogram import Router, types, F
-from aiogram.fsm.context import FSMContext
-
-from src.application.keyboards.cancel_keyboard import get_cancel_keyboard
-from src.application.keyboards.location_keyboard import get_location_keyboard
-from src.application.states import UploadVideoStates
-
-router = Router(name=__name__)
-logger = logging.getLogger(__name__)
-
-
-@router.message(F.text == 'Загрузить видео')
-async def ask_location(message: types.Message, state: FSMContext):
-    await message.reply(
-        "Для начала предоставьте вашу геолокацию",
-        reply_markup=get_location_keyboard())
-    await state.set_state(UploadVideoStates.location)
-
-
-@router.message(UploadVideoStates.location, F.location)
-async def get_location(message: types.Message, state: FSMContext):
-    location = await message.location
-    logger.debug(f"Got location {location}")
-    await state.update_data(location=location)
-    await state.set_state(UploadVideoStates.video)
-    await message.reply(
-        "Теперь отправьте ваше видео. Оно не может превышать 45 секунд и весить более 5 МБ",
-        reply_markup=get_cancel_keyboard()
-    )
-
-
-@router.message(UploadVideoStates.location)
-async def retry_location(message: types.Message, state: FSMContext):
-    await message.reply(
-        "Нажмите на кнопку на клавиатуре, чтобы предоставить нам вышу геолокацию",
-        reply_markup=get_location_keyboard())
-    await state.set_state(UploadVideoStates.location)
-
-
-=========================================
-ФАЙЛ: src/application/handlers/upload_video/__init__.py
-=========================================
-
-
-
-=========================================
-ФАЙЛ: src/application/handlers/upload_video/upload_video.py
-=========================================
-
-import logging
-
-from aiogram import Router, types, F
-from aiogram.fsm.context import FSMContext
-
-from src.application.keyboards.cancel_keyboard import get_cancel_keyboard
-from src.application.keyboards.location_keyboard import get_location_keyboard
-from src.application.states import UploadVideoStates
-
-router = Router(name=__name__)
-logger = logging.getLogger(__name__)
-
-
-@router.message(UploadVideoStates.video, F.video)
-async def upload_video(message: types.Message, state: FSMContext):
-    if message.video.file_size > 5 * 1024 * 1024:
-        await message.answer(
-            "❌ Видео слишком большое. Максимальный размер - 5 МБ.\n"
-            "Пожалуйста, отправьте другое видео."
-        )
-        return
-    if message.video.duration > 45:
-        await message.answer(
-            f"❌ Длительность видео слишком большая: {message.video.duration} секунд.\n"
-            "Максимальная длительность - 45 секунд.\n"
-            "Пожалуйста, отправьте другое видео."
-        )
-        return
-    data = await state.get_data()
-    location: types.Location = data['location']
-    file_info = await message.bot.get_file(message.video.file_id)
-    file_content = await message.bot.download_file(file_info.file_path)
-    video_bytes = file_content.read()
-
-    await state.set_state(UploadVideoStates.location)
-
-
-@router.message(UploadVideoStates.video)
-async def wrong_input(message: types.Message, state: FSMContext):
-    await message.reply("Отправьте, пожалуйста, видео", reply_markup=get_cancel_keyboard())
 
 
 =========================================
@@ -1026,8 +1121,10 @@ from aiogram.utils.keyboard import ReplyKeyboardMarkup, ReplyKeyboardBuilder
 
 def get_menu_keyboard() -> ReplyKeyboardMarkup:
     keyword = ReplyKeyboardBuilder()
-    keyword.button(text="Загрузить видео")
-    return keyword.as_markup(one_time_keyboard=True)
+    keyword.button(text="Реферальная ссылка")
+    keyword.button(text="Посмотреть свои номера")
+    keyword.adjust(2, 1)
+    return keyword.as_markup(one_time_keyboard=False)
 
 
 =========================================
@@ -1150,6 +1247,10 @@ class UploadVideoStates(StatesGroup):
     uploading = State()
 
 
+class ParticipateRegisteredStates(StatesGroup):
+    step = State()
+
+
 =========================================
 ФАЙЛ: src/core/config.py
 =========================================
@@ -1169,6 +1270,9 @@ log_file = os.getenv("LOG_FILE", None)
 log_format = os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 admin_ids = json.loads(os.getenv("ADMIN_IDS", '[]'))
 
+VK_BOT_LINK = os.getenv("VK_BOT_LINK", "https://vk.me/ldpr_bot")
+TG_BOT_LINK = os.getenv("TG_BOT_LINK", "https://t.me/ldpr_bot")
+
 
 =========================================
 ФАЙЛ: src/core/containers.py
@@ -1176,13 +1280,18 @@ admin_ids = json.loads(os.getenv("ADMIN_IDS", '[]'))
 
 from src.core.di import DeclarativeContainer, providers
 from src.domain.entities import Sources
-from src.domain.interfaces import IUnitOfWork, IUserRepository, IStringSorterRepository
+from src.domain.interfaces import IUnitOfWork, IUserRepository, IStringSorterRepository, \
+    IParticipationRepository, IReferralRepository
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
-from src.infrastructure.repositories import UserRepository, LevenshteinRepository, FuzzywuzzyRepository
+from src.infrastructure.repositories import UserRepository, \
+    FuzzywuzzyRepository, ParticipationRepository, ReferralRepository
 from src.services import UserService
 from src.services.interfaces import IUserService
 from src.core import config
+from src.services.participation_service import ParticipationService
+from src.services.referral_link_service import ReferralLinkService
+from src.services.referral_service import ReferralService
 
 
 class Container(DeclarativeContainer):
@@ -1195,12 +1304,36 @@ class Container(DeclarativeContainer):
     user_repository: providers.Factory[IUserRepository] = providers.Factory(
         UserRepository, uow=uow
     )
+    participation_repository: providers.Factory[IParticipationRepository]\
+        = providers.Factory(ParticipationRepository, uow=uow)
+    referral_repository: providers.Factory[IReferralRepository] = providers.Factory(
+        ReferralRepository, uow=uow)
     string_sorter: providers.Factory[IStringSorterRepository] = providers.Factory(
         FuzzywuzzyRepository
     )
     user_service: providers.Factory[IUserService] = providers.Factory(
         UserService, user_repo=user_repository, uow=uow, string_sorter_repo=string_sorter, source=Sources.TG
     )
+    participation_service = providers.Factory(
+        ParticipationService,
+        uow=uow,
+        participation_repo=participation_repository
+    )
+    referral_service = providers.Factory(
+        ReferralService,
+        uow=uow,
+        referral_repo=referral_repository,
+        participation_repo=participation_repository,
+        user_service=user_service
+    )
+    referral_link_service = providers.Factory(
+        ReferralLinkService,
+        vk_bot_link=config.VK_BOT_LINK,
+        tg_bot_link=config.TG_BOT_LINK,
+        source=Sources.TG,
+        image_path="docs/gifts.png"
+    )
+
     log_chat: providers.Object[str] = providers.Object(config.log_chat)
     admin_ids: providers.Object[list[int]] = providers.Object(config.admin_ids)
 
@@ -1463,12 +1596,63 @@ class Singleton(Provider[T]):
 =========================================
 
 from .user import User, Sources
+from .participation import Participation
+from .referral import Referral
+from .repost import Repost
 
 
 __all__ = [
     'User',
-    'Sources'
+    'Sources',
+    'Participation',
+    'Referral',
+    'Repost'
 ]
+
+
+=========================================
+ФАЙЛ: src/domain/entities/participation.py
+=========================================
+
+from dataclasses import dataclass
+from .user import Sources
+
+
+@dataclass
+class Participation:
+    id: int
+    user_id: int
+    user_source: Sources
+
+
+=========================================
+ФАЙЛ: src/domain/entities/referral.py
+=========================================
+
+from dataclasses import dataclass
+from .user import Sources
+
+
+@dataclass
+class Referral:
+    id: int
+    inviter_id: int
+    inviter_source: Sources
+    invitee_id: int
+    invitee_source: Sources
+
+
+=========================================
+ФАЙЛ: src/domain/entities/repost.py
+=========================================
+
+from dataclasses import dataclass
+
+
+@dataclass
+class Repost:
+    text: str
+    image_path: str
 
 
 =========================================
@@ -1543,6 +1727,10 @@ class NotFoundRegionError(Exception):
     ...
 
 
+class ReferralAlreadyExistsError(Exception):
+    pass
+
+
 =========================================
 ФАЙЛ: src/domain/__init__.py
 =========================================
@@ -1609,6 +1797,34 @@ class IUserRepository(ABC):
 class IStringSorterRepository(ABC):
     @abstractmethod
     async def sort_by_similarity(self, target: str, string_list: list[str]) -> list[str]:
+        ...
+
+
+class IParticipationRepository(ABC):
+    @abstractmethod
+    async def add(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        ...
+
+
+class IReferralRepository(ABC):
+    @abstractmethod
+    async def add(self, inviter_id: int, inviter_source: Sources, invitee_id: int, invitee_source: Sources) -> None:
+        ...
+
+    @abstractmethod
+    async def is_invitee_exists(self, invitee_id: int, invitee_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def get_count_invitees(self, inviter_id: int, inviter_source: Sources) -> int:
         ...
 
 
@@ -1708,10 +1924,73 @@ class IDatabase(ABC):
 =========================================
 
 from .user import UserORM
+from .referral import ReferralORM
+from .participation import ParticipationORM
 
 __all__ = [
     "UserORM",
+    "ReferralORM",
+    "ParticipationORM"
 ]
+
+
+=========================================
+ФАЙЛ: src/infrastructure/models/participation.py
+=========================================
+
+from sqlalchemy import ForeignKeyConstraint, Index, Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column
+from src.domain.entities.user import Sources
+from src.infrastructure.database import Base
+
+
+class ParticipationORM(Base):
+    __tablename__ = "participations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['user_id', 'user_source'],
+            ['users.id', 'users.source'],
+            ondelete="CASCADE"
+        ),
+        Index('idx_participation_user', 'user_id', 'user_source')
+    )
+
+
+=========================================
+ФАЙЛ: src/infrastructure/models/referral.py
+=========================================
+
+from sqlalchemy import ForeignKeyConstraint, Index, Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column
+from src.domain.entities.user import Sources
+from src.infrastructure.database import Base
+
+
+class ReferralORM(Base):
+    __tablename__ = "referrals"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    inviter_id: Mapped[int] = mapped_column(nullable=False)
+    inviter_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
+
+    # Не FK, но уникально (в связке с source)
+    invitee_id: Mapped[int] = mapped_column(nullable=False)
+    invitee_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['inviter_id', 'inviter_source'],
+            ['users.id', 'users.source'],
+            ondelete="CASCADE"
+        ),
+        Index('idx_referral_invitee_unique', 'invitee_id', 'invitee_source', unique=True),
+        Index('idx_referral_inviter', 'inviter_id', 'inviter_source')
+    )
 
 
 =========================================
@@ -1830,11 +2109,15 @@ class FuzzywuzzyRepository(IStringSorterRepository):
 from .user import UserRepository
 from .levenshtein import LevenshteinRepository
 from .fuzzywuzzy_sorter import FuzzywuzzyRepository
+from .participation import ParticipationRepository
+from .referral import ReferralRepository
 
 __all__ = [
     'UserRepository',
     'LevenshteinRepository',
-    'FuzzywuzzyRepository'
+    'FuzzywuzzyRepository',
+    'ParticipationRepository',
+    'ReferralRepository'
 ]
 
 
@@ -1855,6 +2138,90 @@ class LevenshteinRepository(IStringSorterRepository):
             distances[string] = dist
         string_list.sort(key=lambda x: distances[x])
         return string_list
+
+
+=========================================
+ФАЙЛ: src/infrastructure/repositories/participation.py
+=========================================
+
+from sqlalchemy import select
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IParticipationRepository
+from src.infrastructure.interfaces import IDatabaseUnitOfWork
+from src.infrastructure.models.participation import ParticipationORM
+
+
+class ParticipationRepository(IParticipationRepository):
+    def __init__(self, uow: IDatabaseUnitOfWork):
+        self.__uow = uow
+
+    async def add(self, user_id: int, user_source: Sources) -> int:
+        session = self.__uow.get_session()
+        participation_orm = ParticipationORM(user_id=user_id, user_source=user_source)
+        session.add(participation_orm)
+        await session.flush()
+        return participation_orm.id
+
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        session = self.__uow.get_session()
+        stmt = select(ParticipationORM).where(
+            ParticipationORM.user_id == user_id,
+            ParticipationORM.user_source == user_source
+        ).limit(1)
+        result = await session.scalar(stmt)
+        return result is not None
+
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        session = self.__uow.get_session()
+        stmt = select(ParticipationORM.id).where(
+            ParticipationORM.user_id == user_id,
+            ParticipationORM.user_source == user_source
+        )
+        result = await session.scalars(stmt)
+        return list(result.all())
+
+
+=========================================
+ФАЙЛ: src/infrastructure/repositories/referral.py
+=========================================
+
+from sqlalchemy import select, func
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IReferralRepository
+from src.infrastructure.interfaces import IDatabaseUnitOfWork
+from src.infrastructure.models.referral import ReferralORM
+
+
+class ReferralRepository(IReferralRepository):
+    def __init__(self, uow: IDatabaseUnitOfWork):
+        self.__uow = uow
+
+    async def add(self, inviter_id: int, inviter_source: Sources, invitee_id: int, invitee_source: Sources) -> None:
+        session = self.__uow.get_session()
+        referral_orm = ReferralORM(
+            inviter_id=inviter_id,
+            inviter_source=inviter_source,
+            invitee_id=invitee_id,
+            invitee_source=invitee_source
+        )
+        session.add(referral_orm)
+
+    async def is_invitee_exists(self, invitee_id: int, invitee_source: Sources) -> bool:
+        session = self.__uow.get_session()
+        stmt = select(ReferralORM).where(
+            ReferralORM.invitee_id == invitee_id,
+            ReferralORM.invitee_source == invitee_source
+        ).limit(1)
+        result = await session.scalar(stmt)
+        return result is not None
+
+    async def get_count_invitees(self, inviter_id: int, inviter_source: Sources) -> int:
+        session = self.__uow.get_session()
+        stmt = select(func.count()).select_from(ReferralORM).where(
+            ReferralORM.inviter_id == inviter_id,
+            ReferralORM.inviter_source == inviter_source
+        )
+        return await session.scalar(stmt) or 0
 
 
 =========================================
@@ -2002,17 +2369,6 @@ class UnitOfWork(IDatabaseUnitOfWork):
 
 
 =========================================
-ФАЙЛ: src/__init__.py
-=========================================
-
-from . import application
-from . import core
-from . import domain
-from . import infrastructure
-from . import services
-
-
-=========================================
 ФАЙЛ: src/main.py
 =========================================
 
@@ -2074,8 +2430,7 @@ __all__ = [
 from abc import ABC, abstractmethod
 from datetime import date
 
-from src.domain.entities import Repost
-from src.domain.entities.user import User
+from src.domain.entities import Repost, Sources, User
 
 
 class IUserService(ABC):
@@ -2091,7 +2446,7 @@ class IUserService(ABC):
         ...
 
     @abstractmethod
-    async def is_user_exists(self, user_id: int) -> bool:
+    async def is_user_exists(self, user_id: int, inviter_source: Sources | None = None) -> bool:
         ...
 
     @abstractmethod
@@ -2105,7 +2460,7 @@ class IUserService(ABC):
     @abstractmethod
     async def validate_fio_part(self, part: str, part_name: str) -> str:
         ...
-    
+
     @abstractmethod
     async def get_similar_regions(self, region: str) -> list[str]:
         ...
@@ -2135,28 +2490,137 @@ class IUserService(ABC):
 
 class IParticipationService(ABC):
     @abstractmethod
-    async def is_participant(self, user_id: int) -> bool:
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
         ...
 
     @abstractmethod
-    async def activate_participation(self, user_id: int) -> None:
+    async def activate_participation(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
         ...
 
 
 class IReferralService(ABC):
     @abstractmethod
-    async def activate_referral(self, inviter: int, invitee: int) -> None:
+    async def activate_referral(self, inviter_id: int, inviter_source: Sources, invitee_id: int,
+                                invitee_source: Sources) -> None:
         ...
 
     @abstractmethod
-    async def get_count_invitees(self, inviter: int) -> int:
+    async def get_count_invitees(self, inviter: int, inviter_source: Sources) -> int:
         ...
 
 
 class IReferralLinkService(ABC):
     @abstractmethod
-    def generate_post(self, user_id: int, image_path: str) -> Repost:
+    def generate_post(self, user_id: int) -> Repost:
         ...
+
+
+=========================================
+ФАЙЛ: src/services/participation_service.py
+=========================================
+
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IUnitOfWork, IParticipationRepository
+from src.services.interfaces import IParticipationService
+
+
+class ParticipationService(IParticipationService):
+    def __init__(self, uow: IUnitOfWork, participation_repo: IParticipationRepository):
+        self.__uow = uow
+        self.__participation_repo = participation_repo
+
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        async with self.__uow.atomic():
+            return await self.__participation_repo.is_participant(user_id, user_source)
+
+    async def activate_participation(self, user_id: int, user_source: Sources) -> int:
+        async with self.__uow.atomic():
+            return await self.__participation_repo.add(user_id, user_source)
+
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        async with self.__uow.atomic():
+            return await self.__participation_repo.get_all_participation_ids(user_id, user_source)
+
+
+=========================================
+ФАЙЛ: src/services/referral_link_service.py
+=========================================
+
+from src.domain.entities import Repost
+from src.domain.entities.user import Sources
+from src.services.interfaces import IReferralLinkService
+
+
+class ReferralLinkService(IReferralLinkService):
+    def __init__(self, vk_bot_link: str, tg_bot_link: str, source: Sources, image_path: str):
+        self.vk_bot_link = vk_bot_link
+        self.tg_bot_link = tg_bot_link
+        self.source = source
+        self.image_path = image_path
+
+    def generate_post(self, user_id: int) -> Repost:
+        vk_url = f"{self.vk_bot_link}?ref={user_id}_{self.source.value}"
+        tg_url = f"{self.tg_bot_link}?start={user_id}_{self.source.value}"
+
+        text = (
+            "<b>🔥 Грандиозный конкурс от ЛДПР!</b>\n\n"
+            "Участвуй и выигрывай крутые призы!\n"
+            "Присоединяйся прямо сейчас и приглашай друзей:\n\n"
+            f"ВКонтакте: <a href='{vk_url}'>Перейти в бота ВК</a>\n"
+            f"Telegram: <a href='{tg_url}'>Перейти в бота TG</a>\n\n"
+            "<i>Твое будущее в твоих руках!</i>"
+        )
+
+        return Repost(text=text, image_path=self.image_path)
+
+
+=========================================
+ФАЙЛ: src/services/referral_service.py
+=========================================
+
+import logging
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IUnitOfWork, IReferralRepository, IParticipationRepository
+from src.services.interfaces import IReferralService, IUserService
+
+logger = logging.getLogger(__name__)
+
+
+class ReferralService(IReferralService):
+    def __init__(
+            self, uow: IUnitOfWork, referral_repo: IReferralRepository,
+            participation_repo: IParticipationRepository, user_service: IUserService
+    ):
+        self.__uow = uow
+        self.__referral_repo = referral_repo
+        self.__participation_repo = participation_repo
+        self.__user_service = user_service
+
+    async def activate_referral(self, inviter_id: int, inviter_source: Sources, invitee_id: int,
+                                invitee_source: Sources) -> None:
+        if not await self.__user_service.is_user_exists(inviter_id, inviter_source):
+            return
+        async with self.__uow.atomic():
+
+            is_already_referral = await self.__referral_repo.is_invitee_exists(invitee_id,
+                                                                               invitee_source)
+            if is_already_referral:
+                logger.debug(
+                    f"User {invitee_id} (source: {invitee_source.value}) is already a referral.")
+                return
+
+            old_count = await self.__referral_repo.get_count_invitees(inviter_id, inviter_source)
+            await self.__referral_repo.add(inviter_id, inviter_source, invitee_id, invitee_source)
+            if old_count % 3 == 2:
+                await self.__participation_repo.add(inviter_id, inviter_source)
+
+    async def get_count_invitees(self, inviter: int, inviter_source: Sources) -> int:
+        async with self.__uow.atomic():
+            return await self.__referral_repo.get_count_invitees(inviter, inviter_source)
 
 
 =========================================
@@ -2220,10 +2684,13 @@ class UserService(IUserService):
                 raise
             return user.region
 
-    async def is_user_exists(self, user_id: int) -> bool:
+    async def is_user_exists(self, user_id: int, inviter_source: Sources | None = None) -> bool:
         async with self.__uow.atomic():
             try:
-                user = await self.__user_repo.get_user(int(user_id), self.__source)
+                user = await self.__user_repo.get_user(
+                    int(user_id),
+                    inviter_source or self.__source
+                )
             except UserNotFoundError:
                 return False
             except Exception:

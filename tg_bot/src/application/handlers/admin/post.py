@@ -43,10 +43,10 @@ async def confirm_post_handler(
     users = await user_service.get_all_users()
     message_id = (await state.get_data())['message_id']
     await state.clear()
-    users = list(filter(lambda x: x.region in [
-        'Пензенская область', 'Владимирская область',
-        'Тамбовская область', 'Рязанская область'
-    ], users))
+    # users = list(filter(lambda x: x.region in [
+    #     'Пензенская область', 'Владимирская область',
+    #     'Тамбовская область', 'Рязанская область'
+    # ], users))
     await message.answer(f"Начинаю рассылку на {len(users)} пользователей", reply_markup=ReplyKeyboardRemove())
     success_count = 0
     good_id = []
@@ -55,7 +55,8 @@ async def confirm_post_handler(
     for user in users:
         logger.info(f"Checking {user.id}")
         try:
-            sent_message = await message.bot.copy_message(user.id, message.chat.id, message_id, disable_notification=True)
+            sent_message = await message.bot.copy_message(user.id, message.chat.id, message_id,
+                                                          disable_notification=False)
             good_id.append(user.id)
             success_count += 1
         except Exception as e:
