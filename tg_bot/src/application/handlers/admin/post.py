@@ -43,6 +43,10 @@ async def confirm_post_handler(
     users = await user_service.get_all_users()
     message_id = (await state.get_data())['message_id']
     await state.clear()
+    users = list(filter(lambda x: x.region in [
+        'Пензенская область', 'Владимирская область',
+        'Тамбовская область', 'Рязанская область'
+    ], users))
     await message.answer(f"Начинаю рассылку на {len(users)} пользователей", reply_markup=ReplyKeyboardRemove())
     success_count = 0
     good_id = []
