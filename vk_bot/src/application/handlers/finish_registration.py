@@ -75,16 +75,9 @@ async def finish_registration(
         await ctx_api.messages.send(
             peer_id=peer_id,
             message=(
-                "Пригласи ещё трёх друзей к участию в розыгрыше и получи дополнительные номера для "
-                "увеличения шансов выигрыша"
+                "Пригласи ещё трёх друзей и получи дополнительные баллы"
             ),
             random_id=0
-        )
-        await ctx_api.messages.send(
-            peer_id=peer_id,
-            message="Меню",
-            random_id=0,
-            keyboard=get_menu_keyboard()
         )
         log_text = (
             f"Новый пользователь зарегистрировался\n"

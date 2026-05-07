@@ -45,8 +45,7 @@ async def finish_registration(
         reply_markup=types.ReplyKeyboardRemove()
     )
     await state.clear()
-    await message.answer("Пригласи ещё трёх друзей к участию в розыгрыше и получи дополнительные номера для увеличения шансов выигрыша")
-    await message.answer("Меню", reply_markup=get_menu_keyboard())
+    await message.answer("Пригласи ещё трёх друзей и получи дополнительные баллы")
     await message.bot.send_message(chat_id=log_chat, text=f"""
 Новый пользователь {'@' + user.username if user.username else '<нет username>'} зарегистрировался.
 Источник: ТГ

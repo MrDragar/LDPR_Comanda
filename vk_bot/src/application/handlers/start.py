@@ -10,7 +10,7 @@ from src.application.keyboards.menu_keyboard import get_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources
-from src.services.interfaces import IUserService, IReferralService, IParticipationService
+from src.services.interfaces import IUserService, IReferralService
 
 router = BotLabeler()
 start_command_router = BotLabeler()
@@ -29,30 +29,13 @@ def parse_ref(ref: str) -> tuple[int, Sources] | None:
 async def start(
         message: Message, user_service: IUserService, 
         state_dispenser: BuiltinStateDispenser, photo_uploader: PhotoMessageUploader,
-        participation_service: IParticipationService, referral_service: IReferralService
+        referral_service: IReferralService
 ):
     if message.peer_id < 0:
         return
-    if await participation_service.is_participant(message.peer_id, Sources.VK):
-        id_count = len(await participation_service.get_all_participation_ids(
-            message.peer_id, Sources.VK
-        ))
-        referral_count = await referral_service.get_count_invitees(
-            message.peer_id, Sources.VK
-        )
-        await message.answer(
-            f"Вы уже участвуете в нашем конкурсе.\n"
-            f"Количество ваших номеров: {id_count}\n"
-            f"Количество ваших рефералов: {referral_count}\n"
-        )
-        await message.answer("Меню", keyboard=get_menu_keyboard())
-        return
-
     if await user_service.is_user_exists(message.from_id):
         await message.answer(
-            f"Вы уже прошли анкетирование.\n"
-            f"Хотите ли вы принять участие в конкурсе?",
-            keyboard=get_boolean_keyboard()
+            "Бот находится на стадии разработки"
         )
         return
     if message.ref:
@@ -66,11 +49,17 @@ async def start(
     photo = await photo_uploader.upload('docs/sokol_stay.webp', peer_id=message.peer_id)
     await message.answer(attachment=photo)
     await message.answer(
-        "Здравствуйте. Я, соколёнок Русик, интернет-помощник ЛДПР.\n"
-        "Вы регистрируетесь в розыгрыше партии.\n"
-        "Чтобы получить подарок, дайте согласие на обработку персональных данных и "
-        "ответьте на несколько простых вопросов.\n\n"
-        "Желаю удачи!"
+        "Здравствуйте! Я — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"
+        "Вы на шаг ближе к тому, чтобы стать частью большой команды, "
+        "которая меняет страну к лучшему.\n\n"
+        "Чтобы начать путь активиста, получать баллы за задания и "
+        "участвовать в розыгрышах партии, нужно:\n"
+        "✅ дать согласие на обработку данных\n"
+        "✅ ответить на несколько простых вопросов о себе\n\n"
+        "Это займёт не больше 2 минут. После регистрации вам откроются онлайн-задания, "
+        "обучение и доступ в магазин подарков.\n\n"
+        "Готовы? Давайте знакомиться!"
+
     )
     await message.answer("Если вы допустили ошибку при заполнении анкеты, напишите мне 'Заново' или 'Начать'")
     await message.answer(
