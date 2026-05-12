@@ -1,6 +1,5 @@
 from vkbottle import PhotoMessageUploader
 from vkbottle.bot import BotLabeler, Message
-from vkbottle.tools.formatting import Formatter
 
 from src.application.keyboards.menu_keyboard import get_menu_keyboard
 from src.domain.entities import Sources

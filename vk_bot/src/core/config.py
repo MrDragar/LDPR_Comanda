@@ -15,3 +15,4 @@ log_format = os.getenv("LOG_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %
 admin_ids = json.loads(os.getenv("ADMIN_IDS", '[]'))
 VK_BOT_LINK = os.getenv("VK_BOT_LINK", "https://vk.me/ldpr_bot")
 TG_BOT_LINK = os.getenv("TG_BOT_LINK", "https://t.me/ldpr_bot")
+group_id = os.getenv("GROUP_ID")
