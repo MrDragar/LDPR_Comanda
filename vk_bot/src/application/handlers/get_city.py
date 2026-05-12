@@ -32,5 +32,5 @@ async def get_city(
         await state_dispenser.set(message.from_id,
                                   RegistrationStates.WISH_TO_JOIN,
                                   **new_payload)
-        await message.answer("Хотите ли Вы присоединиться к команде ЛДПР?",
+        await message.answer("Хотите ли Вы вступить в партию ЛДПР?",
                              keyboard=get_boolean_keyboard())

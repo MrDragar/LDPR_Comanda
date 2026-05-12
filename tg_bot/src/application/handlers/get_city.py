@@ -26,5 +26,5 @@ async def get_city(message: types.Message, state: FSMContext):
             'Укажите свой домашний адрес'
         )
         return await state.set_state(RegistrationStates.home_address)
-    await message.reply("Хотите ли Вы присоединиться к команде ЛДПР?", reply_markup=get_boolean_keyboard())
+    await message.reply("Хотите ли Вы ступить в партию ЛДПР?", reply_markup=get_boolean_keyboard())
     await state.set_state(RegistrationStates.wish_to_join)

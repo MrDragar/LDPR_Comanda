@@ -57,12 +57,11 @@ async def finish_registration(
 Номер телефона: {user.phone_number}
 Регион: {user.region}
 Город: {user.city}
-Хочет присоединиться к команде ЛДПР: {'Да' if user.wish_to_join else 'Нет'}
+Хочет вступить в партию ЛДПР: {'Да' if user.wish_to_join else 'Нет'}
 Домашний адрес: {user.home_address or 'не указан'}
 Подписка на новости: {'Есть' if news_subscription else 'Нет'}
 
 ID участника: {user.id}
-Номер участника: {number}
 """)
 
 

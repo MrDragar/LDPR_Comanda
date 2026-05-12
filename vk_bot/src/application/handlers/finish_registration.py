@@ -92,7 +92,7 @@ async def finish_registration(
             f"Номер телефона: {user.phone_number}\n"
             f"Регион: {user.region}\n"
             f"Город: {user.city}\n"
-            f"Хочет присоединиться к команде ЛДПР: {'Да' if user.wish_to_join else 'Нет'}\n"
+            f"Хочет вступить в партию ЛДПР: {'Да' if user.wish_to_join else 'Нет'}\n"
             f"Домашний адрес: {user.home_address or ''}\n"
             f"Подписка на новости: {'Есть' if user.news_subscription else 'Нет'}\n\n"
             
