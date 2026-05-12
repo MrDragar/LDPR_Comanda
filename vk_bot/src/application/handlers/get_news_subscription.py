@@ -1,23 +1,17 @@
-from aiogram import Bot as TgBot
-from vkbottle import PhotoMessageUploader
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch import BuiltinStateDispenser
 
-from src.application.handlers.finish_registration import finish_registration
+from src.application.keyboards.check_keyboard import get_check_keyboard
 from src.application.states import RegistrationStates
-from src.services.interfaces import IUserService, IParticipationService
 
 router = BotLabeler()
 
 
 @router.message(state=RegistrationStates.NEWS_SUBSCRIPTION)
 async def get_news_sub(
-        message: Message, user_service: IUserService,
-        participation_service: IParticipationService,
+        message: Message,
         state_dispenser: BuiltinStateDispenser,
-        photo_uploader: PhotoMessageUploader,
-        log_chat: str,
-        tg_bot: TgBot
+        group_id: int
 ):
     text = message.text.lower().strip() if message.text else ""
     if text not in ['да', 'нет']:
@@ -25,15 +19,14 @@ async def get_news_sub(
         return
     state = await state_dispenser.get(message.from_id)
     new_payload = {**state.payload, 'news_subscription': text == 'да'}
-    await finish_registration(
-        user_service=user_service,
-        participation_service=participation_service,
-        peer_id=message.peer_id,
-        state_payload=new_payload,
-        ctx_api=message.ctx_api,
-        log_chat=log_chat,
-        state_dispenser=state_dispenser,
-        tg_bot=tg_bot,
-        photo_uploader=photo_uploader
+    await state_dispenser.set(
+        message.from_id,
+        RegistrationStates.CHECK_SUBSCRIPTION,
+        **new_payload
     )
-    await state_dispenser.delete(message.from_id)
+    await message.answer(
+        "Для работы бота вам необходимо подписаться на наше сообщество "
+        f"https://vk.com/club{group_id}\n"
+    )
+    await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
+                         keyboard=get_check_keyboard())
