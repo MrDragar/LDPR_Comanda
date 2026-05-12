@@ -78,7 +78,8 @@ async def finish_registration(
         await ctx_api.messages.send(
             peer_id=peer_id,
             message="Меню",
-            keyboatd=get_menu_keyboard()
+            keyboatd=get_menu_keyboard(),
+            random_id=0
         )
         log_text = (
             f"Новый пользователь зарегистрировался\n"
