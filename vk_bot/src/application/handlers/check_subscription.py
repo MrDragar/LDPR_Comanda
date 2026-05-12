@@ -24,7 +24,7 @@ async def check_sub(
     if text == 'проверить':
         if not await message.ctx_api.groups.is_member(group_id=group_id, user_id=message.from_id):
             await message.answer(
-                "Для работы бота вам необходимо подписаться на наше сообщество "
+                "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
                 f"https://vk.com/club{group_id}\n"
             )
             await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
@@ -33,7 +33,7 @@ async def check_sub(
 
     else:
         await message.answer(
-            "Для работы бота вам необходимо подписаться на наше сообщество "
+            "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
             f"https://vk.com/club{group_id}\n"
         )
         await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
