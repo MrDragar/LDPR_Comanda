@@ -1,10 +1,10 @@
 import re
 from datetime import date
 
-from src.domain.entities.user import User, Sources
+from src.domain.entities.user import User, Sources, UserRole
 from src.domain.exceptions import UserNotFoundError, PhoneBadFormatError, \
     PhoneAlreadyExistsError, PhoneBadCountryError, EmailAlreadyExistsError, \
-    EmailBadFormatError, FioFormatError, NotFoundRegionError
+    EmailBadFormatError, FioFormatError, NotFoundRegionError, DomainError
 from src.domain.interfaces import IUnitOfWork, IUserRepository, \
     IStringSorterRepository
 from src.services.interfaces import IUserService
@@ -160,3 +160,13 @@ class UserService(IUserService):
             if region.startswith(region_prefix):
                 return region
         raise NotFoundRegionError(f"No such region starting with {region_prefix}")
+    
+    async def get_user_role(self, user_id: int, user_source: Sources) -> UserRole:
+        async with self.__uow.atomic():
+            try:
+                user = await self.__user_repo.get_user(int(user_id), user_source)
+                return user.role
+            except UserNotFoundError:
+                raise DomainError("Пользователь не найден")
+            except Exception:
+                raise DomainError("Ошибка при получении роли")

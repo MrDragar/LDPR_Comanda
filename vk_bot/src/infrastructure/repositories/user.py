@@ -7,6 +7,7 @@ from src.domain.entities import User, Sources
 from src.domain.interfaces import IUserRepository
 from ..interfaces import IDatabaseUnitOfWork
 from ..models.user import UserORM
+from ...domain.entities.user import UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -95,3 +96,23 @@ class UserRepository(IUserRepository):
 
         logger.debug(f"Updated news subscription for user id={user_id}")
         return await user_orm.to_domain()
+
+    async def update_user_balance(self, user_id: int, source: Sources, new_balance: int) -> None:
+        session = self.__uow.get_session()
+        stmt = select(UserORM).where(UserORM.id == user_id, UserORM.source == source)
+        user_orm = await session.scalar(stmt)
+        if user_orm:
+            user_orm.balance = new_balance
+            logger.info(f"Updated balance for user {user_id} to {new_balance}")
+        else:
+            raise exceptions.UserNotFoundError()
+
+    async def update_user_role(self, user_id: int, source: Sources, role: UserRole) -> None:
+        session = self.__uow.get_session()
+        stmt = select(UserORM).where(UserORM.id == user_id, UserORM.source == source)
+        user_orm = await session.scalar(stmt)
+        if user_orm:
+            user_orm.role = role
+            logger.info(f"Updated role for user {user_id} to {role.value}")
+        else:
+            raise exceptions.UserNotFoundError()

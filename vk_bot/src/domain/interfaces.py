@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from contextlib import _AsyncGeneratorContextManager
+from datetime import date
 
 from .entities import User, Sources
+from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, Transaction, TaskStatus
 
 
 class IUnitOfWork(ABC):
@@ -25,6 +27,14 @@ class IUserRepository(ABC):
     
     @abstractmethod
     async def is_email_existing(self, email: str) -> bool:
+        ...
+
+    @abstractmethod
+    async def update_user_balance(self, user_id: int, source: Sources, new_balance: int) -> None:
+        ...
+
+    @abstractmethod
+    async def update_user_role(self, user_id: int, source: Sources, role) -> None:
         ...
 
     @abstractmethod
@@ -61,3 +71,49 @@ class IReferralRepository(ABC):
     @abstractmethod
     async def get_count_invitees(self, inviter_id: int, inviter_source: Sources) -> int:
         ...
+
+class IOnlineTaskRepository(ABC):
+    @abstractmethod
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int) -> tuple[list[OnlineTask], int]: ...
+    @abstractmethod
+    async def get_task_by_id(self, task_id: int) -> OnlineTask | None: ...
+    @abstractmethod
+    async def create_task(self, task: OnlineTask) -> OnlineTask: ...
+    @abstractmethod
+    async def is_task_accepted_by_user(self, user_id: int, user_source: Sources, task_id: int) -> bool: ...
+
+
+class IOfflineTaskRepository(ABC):
+    @abstractmethod
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int) -> tuple[list[OfflineTask], int]: ...
+    @abstractmethod
+    async def get_task_by_id(self, task_id: int) -> OfflineTask | None: ...
+    @abstractmethod
+    async def create_task(self, task: OfflineTask) -> OfflineTask: ...
+    @abstractmethod
+    async def is_task_accepted_by_user(self, user_id: int, user_source: Sources, task_id: int) -> bool: ...
+
+
+class IAcceptedTaskRepository(ABC):
+    @abstractmethod
+    async def accept_online_task(self, accepted: AcceptedOnlineTask) -> AcceptedOnlineTask:
+        ...
+
+    @abstractmethod
+    async def update_offline_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
+        ...
+
+    @abstractmethod
+    async def get_user_accepted_offline_tasks(self, user_id: int, user_source: Sources, skip: int, limit: int) -> tuple[list[AcceptedOfflineTask], int]:
+        ...
+
+    @abstractmethod
+    async def cancel_accepted_task(self, user_id: int, user_source: Sources, task_id: int, is_online: bool) -> None:
+        ...
+
+
+class ITransactionRepository(ABC):
+    @abstractmethod
+    async def add_transaction(self, transaction: Transaction) -> Transaction:
+        ...
+    
