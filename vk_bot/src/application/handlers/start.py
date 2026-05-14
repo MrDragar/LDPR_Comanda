@@ -5,8 +5,6 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle import PhotoMessageUploader
 from vkbottle.dispatch import BuiltinStateDispenser
 
-from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
-from src.application.keyboards.menu_keyboard import get_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources

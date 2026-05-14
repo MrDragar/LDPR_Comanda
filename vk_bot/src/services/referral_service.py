@@ -1,6 +1,6 @@
 import logging
 from src.domain.entities.user import Sources
-from src.domain.interfaces import IUnitOfWork, IReferralRepository, IParticipationRepository
+from src.domain.interfaces import IUnitOfWork, IReferralRepository
 from src.services.interfaces import IReferralService, IUserService
 
 logger = logging.getLogger(__name__)
@@ -8,12 +8,10 @@ logger = logging.getLogger(__name__)
 
 class ReferralService(IReferralService):
     def __init__(
-            self, uow: IUnitOfWork, referral_repo: IReferralRepository,
-            participation_repo: IParticipationRepository, user_service: IUserService
+            self, uow: IUnitOfWork, referral_repo: IReferralRepository, user_service: IUserService
     ):
         self.__uow = uow
         self.__referral_repo = referral_repo
-        self.__participation_repo = participation_repo
         self.__user_service = user_service
 
     async def activate_referral(self, inviter_id: int, inviter_source: Sources, invitee_id: int,
@@ -31,8 +29,6 @@ class ReferralService(IReferralService):
 
             old_count = await self.__referral_repo.get_count_invitees(inviter_id, inviter_source)
             await self.__referral_repo.add(inviter_id, inviter_source, invitee_id, invitee_source)
-            if old_count % 3 == 2:
-                await self.__participation_repo.add(inviter_id, inviter_source)
 
     async def get_count_invitees(self, inviter: int, inviter_source: Sources) -> int:
         async with self.__uow.atomic():

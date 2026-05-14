@@ -1,11 +1,8 @@
-from aiogram import Bot as TgBot
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch import BuiltinStateDispenser
 
-from src.application.handlers.finish_registration import finish_registration
 from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.states import RegistrationStates
-from src.services.interfaces import IUserService
 
 router = BotLabeler()
 

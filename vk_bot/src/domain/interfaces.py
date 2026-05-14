@@ -49,20 +49,6 @@ class IStringSorterRepository(ABC):
         ...
 
 
-class IParticipationRepository(ABC):
-    @abstractmethod
-    async def add(self, user_id: int, user_source: Sources) -> int:
-        ...
-
-    @abstractmethod
-    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
-        ...
-
-    @abstractmethod
-    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
-        ...
-
-
 class IReferralRepository(ABC):
     @abstractmethod
     async def add(self, inviter_id: int, inviter_source: Sources, invitee_id: int, invitee_source: Sources) -> None:
