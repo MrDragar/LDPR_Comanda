@@ -170,3 +170,19 @@ class UserService(IUserService):
                 raise DomainError("Пользователь не найден")
             except Exception:
                 raise DomainError("Ошибка при получении роли")
+            
+    async def get_user(self, user_id: int, user_source: Sources) -> User:
+        async with self.__uow.atomic():
+            return await self.__user_repo.get_user(user_id, user_source)
+
+    async def search_users_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]:
+        async with self.__uow.atomic():
+            return await self.__user_repo.search_by_fio(surname, name, patronymic, skip, limit)
+
+    async def update_user_role(self, user_id: int, source: Sources, role: UserRole) -> None:
+        async with self.__uow.atomic():
+            await self.__user_repo.update_user_role(user_id, source, role)
+
+    async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int:
+        async with self.__uow.atomic():
+            return await self.__user_repo.get_completed_tasks_count(user_id, source, is_online)

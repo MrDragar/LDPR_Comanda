@@ -36,6 +36,12 @@ class IUserRepository(ABC):
     @abstractmethod
     async def update_user_role(self, user_id: int, source: Sources, role) -> None:
         ...
+    
+    @abstractmethod
+    async def search_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]: ...
+
+    @abstractmethod
+    async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int: ...
 
     @abstractmethod
     async def get_users(
@@ -71,6 +77,7 @@ class IReferralRepository(ABC):
     @abstractmethod
     async def get_count_invitees(self, inviter_id: int, inviter_source: Sources) -> int:
         ...
+
 
 class IOnlineTaskRepository(ABC):
     @abstractmethod
@@ -109,6 +116,22 @@ class IAcceptedTaskRepository(ABC):
 
     @abstractmethod
     async def cancel_accepted_task(self, user_id: int, user_source: Sources, task_id: int, is_online: bool) -> None:
+        ...
+
+    @abstractmethod
+    async def get_in_progress_for_task(self, task_id: int, skip: int, limit: int) -> tuple[
+        list[AcceptedOfflineTask], int]: ...
+
+    @abstractmethod
+    async def create_accepted_offline_task(self, accepted: AcceptedOfflineTask) -> None:
+        ...
+
+    @abstractmethod
+    async def get_in_progress_users_for_task(self, task_id: int, skip: int, limit: int) -> tuple[list[AcceptedOfflineTask], int]:
+        ...
+
+    @abstractmethod
+    async def add_accepted_offline_task(self, accepted: AcceptedOfflineTask) -> None:
         ...
 
 

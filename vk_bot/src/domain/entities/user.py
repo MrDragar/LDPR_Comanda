@@ -13,8 +13,8 @@ class UserRole(enum.Enum):
     STAFF_CA = "сотрудник ЦА"
     COORDINATOR_RO = "координатор РО"
     STAFF_RO = "сотрудник РО"
-    STAFF_MO = "сотрудник МО"
-    STAFF_PO = "сотрудник ПО"
+    # STAFF_MO = "сотрудник МО"
+    # STAFF_PO = "сотрудник ПО"
     USER = "пользователь"
 
 

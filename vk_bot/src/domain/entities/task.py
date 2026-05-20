@@ -51,7 +51,7 @@ class AcceptedOnlineTask:
 class AcceptedOfflineTask:
     user_id: int
     user_source: Sources
-    task: OfflineTask
+    task: OfflineTask | None
     status: TaskStatus
 
 

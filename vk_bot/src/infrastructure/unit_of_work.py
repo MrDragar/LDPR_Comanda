@@ -17,6 +17,11 @@ class UnitOfWork(IDatabaseUnitOfWork):
 
     @asynccontextmanager
     async def atomic(self) -> AsyncGenerator[None, None]:
+        session = self.current_session.get()
+        if session:
+            yield None
+            return
+
         async with self.database.create_session() as session:
             token = self.current_session.set(session)
             try:

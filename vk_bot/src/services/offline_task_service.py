@@ -92,3 +92,48 @@ class OfflineTaskService(IOfflineTaskService):
             task = OfflineTask(id=0, region=region, date=date, reward=reward, title=title,
                                description=description, location=location, contacts=contacts)
             return await self.__task_repo.create_task(task)
+
+    async def get_in_progress_users(self, task_id: int, page: int, limit: int) -> tuple[
+        list[AcceptedOfflineTask], int]:
+        if page < 1: raise DomainError("Страница >= 1")
+        async with self.__uow.atomic():
+            return await self.__accepted_repo.get_in_progress_for_task(task_id, (page - 1) * limit,
+                                                                       limit)
+    
+    async def get_users_for_task(self, task_id: int, page: int = 1, limit: int = 10) -> tuple[list[AcceptedOfflineTask], int]:
+        if page < 1:
+            raise DomainError("Страница должна быть >= 1")
+        async with self.__uow.atomic():
+            return await self.__accepted_repo.get_in_progress_users_for_task(task_id, (page - 1) * limit, limit)
+
+    async def accept_offline_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
+        """
+        Принимает офлайн задачу пользователем.
+        Вся валидация и проверка ограничений вынесена сюда, в слой сервисов.
+        """
+        async with self.__uow.atomic():
+            # 1. Проверка существования задачи
+            task = await self.__task_repo.get_task_by_id(task_id)
+            if not task:
+                raise DomainError("Оффлайн задача не найдена")
+
+            # 2. Проверка на дубликат (уже принята/в процессе)
+            if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
+                raise DomainError("Вы уже приняли эту задачу или она находится в процессе выполнения")
+
+            # 3. Проверка лимита активных задач (максимум 2)
+            # Получаем все задачи пользователя и считаем только IN_PROGRESS
+            all_user_tasks, _ = await self.__accepted_repo.get_user_accepted_offline_tasks(user_id, user_source, skip=0, limit=100)
+            active_count = sum(1 for t in all_user_tasks if t.status == TaskStatus.IN_PROGRESS)
+            if active_count >= 2:
+                raise DomainError("Нельзя взять более 2 активных офлайн задач одновременно")
+
+            # 4. Создание записи со статусом IN_PROGRESS
+            accepted = AcceptedOfflineTask(
+                user_id=user_id,
+                user_source=user_source,
+                task=task,
+                status=TaskStatus.IN_PROGRESS
+            )
+            await self.__accepted_repo.add_accepted_offline_task(accepted)
+            logger.info(f"User {user_id} successfully accepted offline task {task_id}")

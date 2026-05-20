@@ -23,3 +23,28 @@ class RegistrationStates(BaseStateGroup):
 class PostsStates(BaseStateGroup):
     GET_MESSAGE = "get_message"
     CONFIRM = "confirm"
+
+
+class AdminCAStates(BaseStateGroup):
+    SEARCH_FIO = "ca_search_fio"
+    SEARCH_RESULTS = "ca_search_results"
+    SELECT_USER = "ca_select_user"
+    CHANGE_ROLE = "ca_change_role"
+
+
+class AdminTaskStates(BaseStateGroup):
+    CREATE_ONLINE = "admin_create_online"
+    CREATE_OFFLINE = "admin_create_offline"
+    VERIFY_TASK_LIST = "admin_verify_list"
+    VERIFY_USERS = "admin_verify_users"
+    VERIFY_ACTION = "admin_verify_action"
+
+
+class UserTaskStates(BaseStateGroup):
+    SELECT_TYPE = "user_select_type"
+    ONLINE_LIST = "user_online_list"
+    ONLINE_VIEW = "user_online_view"
+    OFFLINE_LIST = "user_offline_list"
+    OFFLINE_VIEW = "user_offline_view"
+    MY_TASKS = "user_my_tasks"
+    MY_TASK_VIEW = "user_my_task_view"

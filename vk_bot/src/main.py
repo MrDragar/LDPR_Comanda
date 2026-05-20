@@ -8,7 +8,6 @@ from src.core import config
 from src.core.containers import Container
 
 
-
 def main():
     logging.basicConfig(
         level=config.log_level,
@@ -19,16 +18,11 @@ def main():
 
     container = Container()
 
-    bot = Bot(token=config.VK_API_TOKEN)
-    tg_bot = TgBot(
-        token=config.TG_API_TOKEN,
-        session=AiohttpSession(proxy=config.proxy)
-    )
+    bot = container.bot()
     bot.api.admin_ids = config.admin_ids
     bot.api.log_chat = config.log_chat
 
     DIProvideMiddleware.container = container
-    DIProvideMiddleware.tg_bot = tg_bot
     DIProvideMiddleware.state_dispenser = bot.state_dispenser
     DIProvideMiddleware.doc_uploader = DocMessagesUploader(bot.api)
     DIProvideMiddleware.photo_uploader = PhotoMessageUploader(bot.api)

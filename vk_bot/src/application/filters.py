@@ -3,6 +3,8 @@ from vkbottle.bot import Message
 from vkbottle import GroupEventType, GroupTypes
 from vkbottle.dispatch.rules import ABCRule
 
+from src.domain.entities import Sources
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,3 +26,11 @@ class CMDRule(ABCRule[GroupTypes.MessageEvent]):
         if 'cmd' not in payload:
             return False
         return payload['cmd'] == self.cmd
+
+
+async def check_role(user_service, user_id: int, allowed_roles: list) -> bool:
+    try:
+        role = await user_service.get_user_role(user_id, Sources.VK)
+        return role in allowed_roles
+    except:
+        return False

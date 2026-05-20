@@ -7,7 +7,6 @@ class DIProvideMiddleware(BaseMiddleware[Message]):
     state_dispenser = None
     doc_uploader = None
     photo_uploader = None
-    tg_bot = None
 
     async def pre(self):
         self.send({
@@ -15,5 +14,4 @@ class DIProvideMiddleware(BaseMiddleware[Message]):
             "state_dispenser": self.state_dispenser,
             "doc_uploader": self.doc_uploader,
             "photo_uploader": self.photo_uploader,
-            "tg_bot": self.tg_bot
         })

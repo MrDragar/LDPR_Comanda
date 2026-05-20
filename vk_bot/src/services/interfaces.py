@@ -31,6 +31,14 @@ class IUserService(ABC):
     async def get_region_by_prefix(self, region_prefix: str) -> str: ...
     @abstractmethod
     async def get_user_role(self, user_id: int, user_source: Sources) -> UserRole: ...
+    @abstractmethod
+    async def get_user(self, user_id: int, user_source: Sources) -> User: ...
+    @abstractmethod
+    async def search_users_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]: ...
+    @abstractmethod
+    async def update_user_role(self, user_id: int, source: Sources, role: UserRole) -> None: ...
+    @abstractmethod
+    async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int: ...
 
 
 class IBalanceService(ABC):
@@ -67,6 +75,18 @@ class IOfflineTaskService(ABC):
     @abstractmethod
     async def create_task_by_personal(self, user_id: int, user_source: Sources, date: date, reward: int, title: str, description: str, location: str, contacts: str) -> OfflineTask: ...
 
+    @abstractmethod
+    async def get_in_progress_users(self, task_id: int, page: int, limit: int) -> tuple[
+        list[AcceptedOfflineTask], int]: ...
+    
+    @abstractmethod
+    async def get_users_for_task(self, task_id: int, page: int = 1, limit: int = 10) -> tuple[
+        list[AcceptedOfflineTask], int]: ...
+
+    @abstractmethod
+    async def accept_offline_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
+        ...
+
 
 class IReferralService(ABC):
     @abstractmethod
@@ -83,3 +103,10 @@ class IReferralLinkService(ABC):
     @abstractmethod
     def generate_post(self, user_id: int) -> Repost:
         ...
+    
+
+class INotificationService(ABC):
+    @abstractmethod
+    async def notify_user_vk(self, peer_id: int, text: str, keyboard: str | None = None) -> None: ...
+    @abstractmethod
+    async def notify_user_tg(self, chat_id: int, text: str) -> None: ...

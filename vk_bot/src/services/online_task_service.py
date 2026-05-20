@@ -7,7 +7,7 @@ from src.services.interfaces import IOnlineTaskService, IBalanceService
 from src.domain.exceptions import DomainError
 
 logger = logging.getLogger(__name__)
-ITEMS_PER_PAGE = 10
+ITEMS_PER_PAGE = 6
 
 
 class OnlineTaskService(IOnlineTaskService):
@@ -23,10 +23,11 @@ class OnlineTaskService(IOnlineTaskService):
         if page < 1: raise DomainError("Страница должна быть >= 1")
         today = date.today()
         async with self.__uow.atomic():
-            tasks, total = await self.__task_repo.get_active_tasks_for_user(user_id, user_source,
-                                                                            today, skip=(
-                                                                                                    page - 1) * ITEMS_PER_PAGE,
-                                                                            limit=ITEMS_PER_PAGE)
+            tasks, total = await self.__task_repo.get_active_tasks_for_user(
+                user_id, user_source, today,
+                skip=(page - 1) * ITEMS_PER_PAGE,
+                limit=ITEMS_PER_PAGE
+            )
             pages = (total + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
             return tasks, pages
 

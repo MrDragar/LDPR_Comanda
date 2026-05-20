@@ -1,12 +1,13 @@
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from src.domain import exceptions
 from src.domain.entities import User, Sources
 from src.domain.interfaces import IUserRepository
 from ..interfaces import IDatabaseUnitOfWork
 from ..models.user import UserORM
+from ...domain.entities.task import TaskStatus
 from ...domain.entities.user import UserRole
 
 logger = logging.getLogger(__name__)
@@ -116,3 +117,24 @@ class UserRepository(IUserRepository):
             logger.info(f"Updated role for user {user_id} to {role.value}")
         else:
             raise exceptions.UserNotFoundError()
+    
+    async def search_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]:
+        session = self.__uow.get_session()
+        stmt = select(UserORM).where(
+            UserORM.surname.ilike(f"%{surname}%"),
+            UserORM.name.ilike(f"%{name}%")
+        )
+        if patronymic:
+            stmt = stmt.where(UserORM.patronymic.ilike(f"%{patronymic}%"))
+        stmt = stmt.offset(skip).limit(limit)
+        result = await session.execute(stmt)
+        return [await u.to_domain() for u in result.scalars().all()]
+
+    async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int:
+        from src.infrastructure.models.task import AcceptedOnlineTaskORM, AcceptedOfflineTaskORM
+        session = self.__uow.get_session()
+        model = AcceptedOnlineTaskORM if is_online else AcceptedOfflineTaskORM
+        stmt = select(func.count()).where(
+            model.user_id == user_id, model.user_source == source, model.status == TaskStatus.ACCEPTED
+        )
+        return await session.scalar(stmt) or 0

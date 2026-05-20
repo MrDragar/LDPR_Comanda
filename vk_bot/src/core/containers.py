@@ -1,3 +1,7 @@
+from aiogram.client.session.aiohttp import AiohttpSession
+from vkbottle import Bot
+from aiogram import Bot as TgBot
+
 from src.core.di import DeclarativeContainer, providers
 from src.domain.entities import Sources
 from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRepository,
@@ -14,6 +18,7 @@ from src.services import UserService, BalanceService, OnlineTaskService, Offline
 from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTaskService, \
     IBalanceService
 from src.core import config
+from src.services.notification_service import NotificationService
 from src.services.referral_link_service import ReferralLinkService
 from src.services.referral_service import ReferralService
 
@@ -66,3 +71,14 @@ class Container(DeclarativeContainer):
     log_chat: providers.Object[str] = providers.Object(config.log_chat)
     admin_ids: providers.Object[list[int]] = providers.Object(config.admin_ids)
     group_id: providers.Object[int] = providers.Object(config.group_id)
+
+    bot: providers.Singleton[Bot] = providers.Singleton(Bot, token=config.VK_API_TOKEN)
+    tg_bot: providers.Singleton[TgBot] = providers.Singleton(
+        TgBot, token=config.TG_API_TOKEN, session=AiohttpSession(proxy=config.proxy)
+    )
+
+    notification_service = providers.Factory(
+        NotificationService,
+        vk_bot=bot,
+        tg_bot=tg_bot
+    )
