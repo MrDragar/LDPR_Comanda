@@ -3,7 +3,7 @@ from aiogram import Bot as TgBot
 from vkbottle import PhotoMessageUploader
 
 from src.services.interfaces import IUserService
-from src.application.keyboards.menu_keyboard import get_menu_keyboard
+from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ async def finish_registration(
         await ctx_api.messages.send(
             peer_id=peer_id,
             message="Меню",
-            keyboard=get_menu_keyboard(),
+            keyboard=get_role_menu_keyboard(user.role),
             random_id=0
         )
         log_text = (

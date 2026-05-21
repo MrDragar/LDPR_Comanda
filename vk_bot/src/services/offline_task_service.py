@@ -8,7 +8,7 @@ from src.services.interfaces import IOfflineTaskService, IBalanceService, IUserS
 from src.domain.exceptions import DomainError
 
 logger = logging.getLogger(__name__)
-ITEMS_PER_PAGE = 10
+ITEMS_PER_PAGE = 5
 
 
 class OfflineTaskService(IOfflineTaskService):

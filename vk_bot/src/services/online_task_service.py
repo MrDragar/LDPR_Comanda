@@ -7,7 +7,7 @@ from src.services.interfaces import IOnlineTaskService, IBalanceService
 from src.domain.exceptions import DomainError
 
 logger = logging.getLogger(__name__)
-ITEMS_PER_PAGE = 6
+ITEMS_PER_PAGE = 4
 
 
 class OnlineTaskService(IOnlineTaskService):

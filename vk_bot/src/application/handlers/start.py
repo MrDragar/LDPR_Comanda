@@ -5,6 +5,7 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle import PhotoMessageUploader
 from vkbottle.dispatch import BuiltinStateDispenser
 
+from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources
@@ -32,9 +33,11 @@ async def start(
     if message.peer_id < 0:
         return
     if await user_service.is_user_exists(message.from_id):
-        await message.answer(
-            "Бот находится на стадии разработки"
-        )
+        try:
+            role = await user_service.get_user_role(message.from_id, Sources.VK)
+        except Exception:
+            role = None
+        await message.answer("Главное меню:", keyboard=get_role_menu_keyboard(role))
         return
     if message.ref:
         parsed_ref = parse_ref(message.ref)
