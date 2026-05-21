@@ -7,13 +7,15 @@ from src.domain.entities import Sources
 from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRepository,
                                    IReferralRepository, IOnlineTaskRepository,
                                    IOfflineTaskRepository, IAcceptedTaskRepository,
-                                   ITransactionRepository, ILearningRepository)
+                                   ITransactionRepository, ILearningRepository,
+                                   IVKTaskVerificationRepository)
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepository,
                                              ReferralRepository, TransactionRepository,
                                              AcceptedTaskRepository, OfflineTaskRepository,
-                                             OnlineTaskRepository, LearningRepository)
+                                             OnlineTaskRepository, LearningRepository,
+                                             VKTaskVerificationRepository)
 from src.services import UserService, BalanceService, OnlineTaskService, OfflineTaskService
 from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTaskService, \
     IBalanceService, ILearningService
@@ -34,6 +36,9 @@ class Container(DeclarativeContainer):
     bot: providers.Singleton[Bot] = providers.Singleton(Bot, token=config.VK_API_TOKEN)
     tg_bot: providers.Singleton[TgBot] = providers.Singleton(
         TgBot, token=config.TG_API_TOKEN, session=AiohttpSession(proxy=config.proxy)
+    )
+    vk_verify_repo: providers.Factory[IVKTaskVerificationRepository] = providers.Factory(
+        VKTaskVerificationRepository, bot=bot
     )
     learning_repository: providers.Factory[ILearningRepository] = providers.Factory(
         LearningRepository, uow=uow
@@ -64,7 +69,8 @@ class Container(DeclarativeContainer):
     online_task_service: providers.Factory[IOnlineTaskService] = providers.Factory(
         OnlineTaskService, uow=uow, task_repo=online_task_repository,
         accepted_repo=accepted_task_repository, balance_svc=balance_service,
-        user_svc=user_service, notification_svc=notification_service
+        user_svc=user_service, notification_svc=notification_service,
+        vk_verify_repo=vk_verify_repo
     )
     offline_task_service: providers.Factory[IOfflineTaskService] = providers.Factory(
         OfflineTaskService, uow=uow, task_repo=offline_task_repository, accepted_repo=accepted_task_repository, 

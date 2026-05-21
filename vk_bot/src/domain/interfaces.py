@@ -3,7 +3,8 @@ from contextlib import _AsyncGeneratorContextManager
 from datetime import date
 
 from .entities import User, Sources, LearningTestAttempt
-from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, Transaction, TaskStatus
+from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, \
+    Transaction, TaskStatus, TaskType
 
 
 class IUnitOfWork(ABC):
@@ -150,3 +151,10 @@ class ILearningRepository(ABC):
     async def get_attempt(self, user_id: int, user_source: Sources) -> LearningTestAttempt | None: ...
     @abstractmethod
     async def save_attempt(self, attempt: LearningTestAttempt) -> None: ...
+
+
+class IVKTaskVerificationRepository(ABC):
+    @abstractmethod
+    async def verify_task(self, task_type: TaskType, user_id: int, group_id: int, post_id: int) -> bool:
+        """Проверяет выполнение действия пользователя над постом сообщества"""
+        ...

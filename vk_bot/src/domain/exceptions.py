@@ -38,3 +38,13 @@ class NotFoundRegionError(Exception):
 
 class ReferralAlreadyExistsError(Exception):
     pass
+
+
+class TaskNotCompletedError(DomainError):
+    """Вызывается, если действие пользователя в ВК не найдено"""
+    pass
+
+
+class VKApiError(DomainError):
+    """Вызывается при ошибках обращения к VK API"""
+    pass

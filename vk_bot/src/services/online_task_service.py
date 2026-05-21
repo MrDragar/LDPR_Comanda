@@ -2,9 +2,11 @@ import logging
 from datetime import date
 from src.domain.entities.user import Sources, UserGrade
 from src.domain.entities.task import OnlineTask, AcceptedOnlineTask, TaskStatus, TaskType
-from src.domain.interfaces import IUnitOfWork, IOnlineTaskRepository, IAcceptedTaskRepository
-from src.services.interfaces import IOnlineTaskService, IBalanceService, IUserService, INotificationService
-from src.domain.exceptions import DomainError
+from src.domain.interfaces import (IUnitOfWork, IOnlineTaskRepository, IAcceptedTaskRepository,
+                                   IVKTaskVerificationRepository)
+from src.services.interfaces import (IOnlineTaskService, IBalanceService, IUserService, 
+                                     INotificationService)
+from src.domain.exceptions import DomainError, TaskNotCompletedError
 
 logger = logging.getLogger(__name__)
 ITEMS_PER_PAGE = 4
@@ -13,13 +15,15 @@ ITEMS_PER_PAGE = 4
 class OnlineTaskService(IOnlineTaskService):
     def __init__(self, uow: IUnitOfWork, task_repo: IOnlineTaskRepository,
                  accepted_repo: IAcceptedTaskRepository, balance_svc: IBalanceService,
-                 user_svc: IUserService, notification_svc: INotificationService):
+                 user_svc: IUserService, notification_svc: INotificationService,
+                 vk_verify_repo: IVKTaskVerificationRepository):
         self.__uow = uow
         self.__task_repo = task_repo
         self.__accepted_repo = accepted_repo
         self.__balance_svc = balance_svc
         self.__user_svc = user_svc
         self.__notification_svc = notification_svc
+        self.__vk_verify_repo = vk_verify_repo
 
     async def search_tasks(self, user_id: int, user_source: Sources, page: int = 1) -> tuple[
         list[OnlineTask], int]:
@@ -42,10 +46,11 @@ class OnlineTaskService(IOnlineTaskService):
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
                 raise DomainError("Вы уже взяли эту задачу или она в процессе")
 
-            # Заглушка-проверка выполнения (в реальном проекте здесь API запросы к VK/Telegram)
-            is_completed = True
+            is_completed = await self.__vk_verify_repo.verify_task(
+                task.type, user_id, task.group_id, task.post_id
+            )
             if not is_completed:
-                raise DomainError("Задача не выполнена. Попробуйте позже.")
+                raise TaskNotCompletedError("Задание не выполнено. Пожалуйста, выполните действие в ВК и попробуйте снова.")
 
             accepted = AcceptedOnlineTask(user_id=user_id, user_source=user_source, task=task,
                                           status=TaskStatus.ACCEPTED)
