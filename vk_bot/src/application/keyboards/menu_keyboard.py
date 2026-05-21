@@ -8,6 +8,7 @@ def get_role_menu_keyboard(role: UserRole | None) -> str:
     kb.add(Text("Выполнить задание")).row()
     kb.add(Text("Мои задания")).row()
     kb.add(Text("Личный кабинет")).row()
+    kb.add(Text("Обучение")).row()
 
     if role in (UserRole.STAFF_RO,
                 UserRole.COORDINATOR_RO, UserRole.STAFF_CA):

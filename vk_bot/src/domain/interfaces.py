@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from contextlib import _AsyncGeneratorContextManager
 from datetime import date
 
-from .entities import User, Sources
+from .entities import User, Sources, LearningTestAttempt
 from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, Transaction, TaskStatus
 
 
@@ -56,6 +56,10 @@ class IUserRepository(ABC):
     async def update_user_news_subscription(
             self, user_id: int, source: Sources, news_subscription: bool
     ) -> User:
+        ...
+
+    @abstractmethod
+    async def update_user_grade(self, user_id: int, source: Sources, grade) -> None:
         ...
 
 
@@ -139,4 +143,10 @@ class ITransactionRepository(ABC):
     @abstractmethod
     async def add_transaction(self, transaction: Transaction) -> Transaction:
         ...
-    
+
+
+class ILearningRepository(ABC):
+    @abstractmethod
+    async def get_attempt(self, user_id: int, user_source: Sources) -> LearningTestAttempt | None: ...
+    @abstractmethod
+    async def save_attempt(self, attempt: LearningTestAttempt) -> None: ...

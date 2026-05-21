@@ -48,3 +48,7 @@ class UserTaskStates(BaseStateGroup):
     OFFLINE_VIEW = "user_offline_view"
     MY_TASKS = "user_my_tasks"
     MY_TASK_VIEW = "user_my_task_view"
+
+
+class LearningStates(BaseStateGroup):
+    QUIZ = "learning_quiz"

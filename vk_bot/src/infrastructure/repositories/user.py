@@ -138,3 +138,15 @@ class UserRepository(IUserRepository):
             model.user_id == user_id, model.user_source == source, model.status == TaskStatus.ACCEPTED
         )
         return await session.scalar(stmt) or 0
+
+    async def update_user_grade(self, user_id: int, source: Sources, grade) -> None:
+        session = self.__uow.get_session()
+        stmt = select(UserORM).where(UserORM.id == user_id, UserORM.source == source)
+        user_orm = await session.scalar(stmt)
+        if user_orm:
+            user_orm.grade = grade
+            logger.info(f"Updated grade for user {user_id} to {grade.value}")
+        else:
+            from src.domain import exceptions
+            raise exceptions.UserNotFoundError()
+    

@@ -1,7 +1,7 @@
 import re
 from datetime import date
 
-from src.domain.entities.user import User, Sources, UserRole
+from src.domain.entities.user import User, Sources, UserRole, UserGrade
 from src.domain.exceptions import UserNotFoundError, PhoneBadFormatError, \
     PhoneAlreadyExistsError, PhoneBadCountryError, EmailAlreadyExistsError, \
     EmailBadFormatError, FioFormatError, NotFoundRegionError, DomainError
@@ -186,3 +186,7 @@ class UserService(IUserService):
     async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int:
         async with self.__uow.atomic():
             return await self.__user_repo.get_completed_tasks_count(user_id, source, is_online)
+
+    async def update_user_grade(self, user_id: int, source: Sources, grade: UserGrade) -> None:
+        async with self.__uow.atomic():
+            await self.__user_repo.update_user_grade(user_id, source, grade)

@@ -5,6 +5,7 @@ from .admin.tasks import router as admin_tasks_router
 from .user.menu import router as user_menu_router
 from .user.tasks import router as user_tasks_router
 from .user.profile import router as user_profile_router
+from .user.learning import router as user_learning_router
 from .personal_data import router as pd_router
 from .get_membership import router as membership_router
 from .get_fio import router as fio_router
@@ -30,6 +31,7 @@ full_labeler.load(admin_tasks_router)
 full_labeler.load(user_menu_router)
 full_labeler.load(user_tasks_router)
 full_labeler.load(user_profile_router)
+full_labeler.load(user_learning_router)
 full_labeler.load(pd_router)
 full_labeler.load(pd_router)
 full_labeler.load(membership_router)

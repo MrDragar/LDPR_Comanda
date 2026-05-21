@@ -1,9 +1,9 @@
 import logging
 from datetime import date
-from src.domain.entities.user import Sources
+from src.domain.entities.user import Sources, UserGrade
 from src.domain.entities.task import OnlineTask, AcceptedOnlineTask, TaskStatus, TaskType
 from src.domain.interfaces import IUnitOfWork, IOnlineTaskRepository, IAcceptedTaskRepository
-from src.services.interfaces import IOnlineTaskService, IBalanceService
+from src.services.interfaces import IOnlineTaskService, IBalanceService, IUserService, INotificationService
 from src.domain.exceptions import DomainError
 
 logger = logging.getLogger(__name__)
@@ -12,11 +12,14 @@ ITEMS_PER_PAGE = 4
 
 class OnlineTaskService(IOnlineTaskService):
     def __init__(self, uow: IUnitOfWork, task_repo: IOnlineTaskRepository,
-                 accepted_repo: IAcceptedTaskRepository, balance_svc: IBalanceService):
+                 accepted_repo: IAcceptedTaskRepository, balance_svc: IBalanceService,
+                 user_svc: IUserService, notification_svc: INotificationService):
         self.__uow = uow
         self.__task_repo = task_repo
         self.__accepted_repo = accepted_repo
         self.__balance_svc = balance_svc
+        self.__user_svc = user_svc
+        self.__notification_svc = notification_svc
 
     async def search_tasks(self, user_id: int, user_source: Sources, page: int = 1) -> tuple[
         list[OnlineTask], int]:
@@ -52,6 +55,20 @@ class OnlineTaskService(IOnlineTaskService):
             await self.__balance_svc.add_balance(user_id, user_source, task.reward,
                                                  f"Выполнение онлайн-задачи #{task_id}")
             logger.info(f"Task {task_id} checked and accepted for user {user_id}")
+            
+            # --- Логика повышения грейда ---
+            user = await self.__user_svc.get_user(user_id, user_source)
+            if user.grade == UserGrade.SYMPATHIZER:
+                completed_online = await self.__user_svc.get_completed_tasks_count(user_id, user_source, is_online=True)
+                if completed_online >= 3:
+                    await self.__user_svc.update_user_grade(user_id, user_source, UserGrade.BIG_TEAM_MEMBER)
+                    upgrade_msg = (
+                        "Поздравляем, вы получили новый уровень \"Участник большой команды\". "
+                        "Теперь вы можете вступить в нашу закрытую группу.\n"
+                        "Вам открылся отдел \"Обучение\". Чтобы перейти на следующий уровень, "
+                        "вам необходимо пройти наш курс"
+                    )
+                    await self.__notification_svc.notify_user_vk(user_id, upgrade_msg)
 
     async def get_task(self, task_id: int) -> OnlineTask | None:
         async with self.__uow.atomic():
