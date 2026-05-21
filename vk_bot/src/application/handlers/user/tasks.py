@@ -14,21 +14,19 @@ router = BotLabeler()
 
 
 def _build_task_keyboard(tasks, current_page: int, total_pages: int, prefix: str) -> str:
-    """Вспомогательная функция для генерации клавиатуры с пагинацией."""
+    """Генерирует клавиатуру с задачами и однострочной навигацией."""
     kb = Keyboard(inline=True)
     for t in tasks:
         title = f"#{t.id} {t.type.value}" if hasattr(t, "type") else f"#{t.id} {t.title[:15]}"
         kb.add(Callback(title, {"cmd": f"view_{prefix}", "tid": t.id}))
         kb.row()
 
+    kb.row()  # Навигация всегда на последней строке
     if total_pages > 1:
-        kb.row()
         if current_page > 1:
             kb.add(Callback("⬅️ Назад", {"cmd": f"prev_{prefix}"}))
         if current_page < total_pages:
             kb.add(Callback("Вперёд ➡️", {"cmd": f"next_{prefix}"}))
-        kb.row()
-
     kb.add(Callback("🔙 В меню", {"cmd": "back_to_menu"}))
     return kb.get_json()
 
