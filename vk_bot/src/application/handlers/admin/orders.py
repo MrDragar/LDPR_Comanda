@@ -31,14 +31,14 @@ def _order_kb(orders, page, total, admin_region=None):
 
 
 @router.message(text=["Управление заказами"])
-async def start_orders(message: Message, order_svc: IOrderService, user_svc: IUserService,
+async def start_orders(message: Message, order_service: IOrderService, user_service: IUserService,
                        state_dispenser: BuiltinStateDispenser):
-    u = await user_svc.get_user(message.from_id, Sources.VK)
+    u = await user_service.get_user(message.from_id, Sources.VK)
     allowed = [UserRole.STAFF_CA, UserRole.COORDINATOR_RO, UserRole.STAFF_RO]
     if u.role not in allowed: return await message.answer("Недостаточно прав")
 
     region = u.region if u.role != UserRole.STAFF_CA else None
-    orders, total = await order_svc.get_admin_orders(region, 1)
+    orders, total = await order_service.get_admin_orders(region, 1)
     if not orders: return await message.answer("Нет ожидающих заказов.")
     await state_dispenser.set(message.from_id, OrderStates.BROWSE, page=1, total=total,
                               region=region)
@@ -47,11 +47,11 @@ async def start_orders(message: Message, order_svc: IOrderService, user_svc: IUs
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_order"))
-async def next_order(event: GroupTypes.MessageEvent, order_svc: IOrderService,
+async def next_order(event: GroupTypes.MessageEvent, order_service: IOrderService,
                      state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
     np = state.payload.get("page", 1) + 1
-    orders, total = await order_svc.get_admin_orders(state.payload.get("region"), np)
+    orders, total = await order_service.get_admin_orders(state.payload.get("region"), np)
     await state_dispenser.set(event.object.peer_id, OrderStates.BROWSE, page=np, total=total,
                               region=state.payload.get("region"))
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
@@ -64,11 +64,11 @@ async def next_order(event: GroupTypes.MessageEvent, order_svc: IOrderService,
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("prev_order"))
-async def prev_order(event: GroupTypes.MessageEvent, order_svc: IOrderService,
+async def prev_order(event: GroupTypes.MessageEvent, order_service: IOrderService,
                      state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
     np = max(1, state.payload.get("page", 1) - 1)
-    orders, total = await order_svc.get_admin_orders(state.payload.get("region"), np)
+    orders, total = await order_service.get_admin_orders(state.payload.get("region"), np)
     await state_dispenser.set(event.object.peer_id, OrderStates.BROWSE, page=np, total=total,
                               region=state.payload.get("region"))
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
@@ -81,10 +81,10 @@ async def prev_order(event: GroupTypes.MessageEvent, order_svc: IOrderService,
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_order"))
-async def view_order(event: GroupTypes.MessageEvent, order_svc: IOrderService,
+async def view_order(event: GroupTypes.MessageEvent, order_service: IOrderService,
                      state_dispenser: BuiltinStateDispenser):
     oid = event.object.payload["oid"]
-    orders, _ = await order_svc.get_admin_orders(None, 1)  # быстрый поиск
+    orders, _ = await order_service.get_admin_orders(None, 1)  # быстрый поиск
     order = next((o for o in orders if o.id == oid), None)
     if not order: return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                                            message="Заказ не найден", random_id=0)
@@ -105,19 +105,19 @@ async def view_order(event: GroupTypes.MessageEvent, order_svc: IOrderService,
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("accept_order"))
-async def accept_order(event: GroupTypes.MessageEvent, order_svc: IOrderService,
-                       notif_svc: INotificationService, state_dispenser: BuiltinStateDispenser):
+async def accept_order(event: GroupTypes.MessageEvent, order_service: IOrderService,
+                       notification_service: INotificationService, state_dispenser: BuiltinStateDispenser):
     oid = event.object.payload["oid"]
-    await order_svc.update_order_status(oid, OrderStatus.COMPLETED)
+    await order_service.update_order_status(oid, OrderStatus.COMPLETED)
     msg = f"✅ Заказ #{oid} подтвержден!"
-    await notif_svc.notify_user_vk(event.object.user_id,
+    await notification_service.notify_user_vk(event.object.user_id,
                                    msg)  # упрощенно, в реальности нужен user_id заказа
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                       message="✅ Заказ принят и передан в обработку.", random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
                                                            user_id=event.object.user_id,
                                                            peer_id=event.object.peer_id)
-    await start_orders(event, order_svc, None, state_dispenser)
+    await start_orders(event, order_service, None, state_dispenser)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("decline_order"))
@@ -132,15 +132,15 @@ async def ask_reason(event: GroupTypes.MessageEvent, state_dispenser: BuiltinSta
 
 
 @router.message(state=OrderStates.CANCEL_REASON)
-async def process_decline(message: Message, order_svc: IOrderService,
-                          notif_svc: INotificationService, bal_svc: IBalanceService,
+async def process_decline(message: Message, order_service: IOrderService,
+                          notification_service: INotificationService, balance_service: IBalanceService,
                           state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(message.from_id)
     oid = state.payload.get("oid")
     reason = message.text.strip()
     try:
-        await order_svc.update_order_status(oid, OrderStatus.CANCELLED, reason)
-        await notif_svc.notify_user_vk(message.from_id,
+        await order_service.update_order_status(oid, OrderStatus.CANCELLED, reason)
+        await notification_service.notify_user_vk(message.from_id,
                                        f"❌ Заказ #{oid} отклонен. Причина: {reason}. Баллы возвращены на баланс.")
         await state_dispenser.delete(message.from_id)
         await message.answer(

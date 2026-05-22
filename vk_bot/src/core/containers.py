@@ -109,11 +109,11 @@ class Container(DeclarativeContainer):
         user_svc=user_service, balance_svc=balance_service
     )
     
-    product_svc: providers.Factory[IProductService] = providers.Factory(
+    product_service: providers.Factory[IProductService] = providers.Factory(
         ProductService, uow=uow, repo=product_repo,
         s3_storage=s3_storage
     )
-    order_svc: providers.Factory[IOrderService] = providers.Factory(
+    order_service: providers.Factory[IOrderService] = providers.Factory(
         OrderService, uow=uow, repo=order_repo, prod_repo=product_repo,
         balance_svc=balance_service, user_svc=user_service, notif_svc=notification_service
     )

@@ -73,7 +73,7 @@ async def add_price(message: Message, state_dispenser: BuiltinStateDispenser):
 
 
 @router.message(state=AdminShopStates.ADD_PRICE)
-async def finish_add(message: Message, prod_svc: IProductService, state_dispenser: BuiltinStateDispenser):
+async def finish_add(message: Message, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(message.from_id)
     if not state: return
     try:
@@ -88,8 +88,8 @@ async def finish_add(message: Message, prod_svc: IProductService, state_dispense
 
 
 @router.message(state=AdminShopStates.ADD_PHOTO)
-async def upload_photo(message: Message, prod_svc: IProductService, state_dispenser: BuiltinStateDispenser):
-    if not message.docs:
+async def upload_photo(message: Message, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
+    if not message.attachments:
         return await message.answer("⚠️ Пожалуйста, отправьте файл документом.")
 
     state = await state_dispenser.get(message.from_id)
@@ -97,11 +97,14 @@ async def upload_photo(message: Message, prod_svc: IProductService, state_dispen
 
     p = state.payload
     try:
-        doc_url = message.docs[0].url
+        doc_url = max(
+            message.attachments[0].photo.sizes, key=lambda size: size.height if size.height
+            else size.width
+        ).url
         file_bytes = await download_file_bytes(doc_url)
 
         # Вызов сервиса, который сам загрузит фото в S3 и сохранит в БД
-        await prod_svc.create_product(
+        await product_service.create_product(
             name=p["name"],
             desc=p["desc"],
             price=p["price"],
@@ -119,29 +122,29 @@ async def upload_photo(message: Message, prod_svc: IProductService, state_dispen
 
 
 @router.message(text=["Скрыть товар"])
-async def start_hide(message: Message, prod_svc: IProductService, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
+async def start_hide(message: Message, product_service: IProductService, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]): return await message.answer("Недостаточно прав")
-    prods, total = await prod_svc.list_products(1)
+    prods, total = await product_service.list_products(1)
     if not prods: return await message.answer("Нет активных товаров.")
     await state_dispenser.set(message.from_id, AdminShopStates.HIDE_BROWSE, page=1, total=total)
     await message.answer("📦 Выберите товар для скрытия:", keyboard=_hide_kb(prods, 1, total))
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_hide"))
-async def next_hide(event: GroupTypes.MessageEvent, prod_svc: IProductService, state_dispenser: BuiltinStateDispenser):
+async def next_hide(event: GroupTypes.MessageEvent, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
     np = state.payload.get("page", 1) + 1
-    prods, total = await prod_svc.list_products(np)
+    prods, total = await product_service.list_products(np)
     await state_dispenser.set(event.object.peer_id, AdminShopStates.HIDE_BROWSE, page=np, total=total)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="📦 Выберите товар для скрытия:", keyboard=_hide_kb(prods, np, total), random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("prev_hide"))
-async def prev_hide(event: GroupTypes.MessageEvent, prod_svc: IProductService, state_dispenser: BuiltinStateDispenser):
+async def prev_hide(event: GroupTypes.MessageEvent, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
     np = max(1, state.payload.get("page", 1) - 1)
-    prods, total = await prod_svc.list_products(np)
+    prods, total = await product_service.list_products(np)
     await state_dispenser.set(event.object.peer_id, AdminShopStates.HIDE_BROWSE, page=np, total=total)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="📦 Выберите товар для скрытия:", keyboard=_hide_kb(prods, np, total), random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
@@ -156,8 +159,8 @@ async def confirm_hide(event: GroupTypes.MessageEvent, state_dispenser: BuiltinS
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("execute_hide"))
-async def execute_hide(event: GroupTypes.MessageEvent, prod_svc: IProductService, state_dispenser: BuiltinStateDispenser):
-    await prod_svc.hide_product(event.object.payload["pid"])
+async def execute_hide(event: GroupTypes.MessageEvent, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
+    await product_service.hide_product(event.object.payload["pid"])
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="✅ Товар успешно скрыт.", random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
-    await start_hide(event, prod_svc, None, state_dispenser)
+    await start_hide(event, product_service, None, state_dispenser)
