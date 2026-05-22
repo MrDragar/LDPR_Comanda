@@ -9,10 +9,12 @@ def get_role_menu_keyboard(role: UserRole | None) -> str:
     kb.add(Text("Мои задания")).row()
     kb.add(Text("Личный кабинет")).row()
     kb.add(Text("Обучение")).row()
+    kb.add(Text("Магазин")).row()
 
     if role in (UserRole.STAFF_RO,
                 UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
         kb.add(Text("Проверить офлайн задачи")).row()
+        kb.add(Text("Управление заказами")).row()
 
     if role in (UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
         kb.add(Text("Создать офлайн задачу")).row()
@@ -20,5 +22,7 @@ def get_role_menu_keyboard(role: UserRole | None) -> str:
 
     if role == UserRole.STAFF_CA:
         kb.add(Text("Создать онлайн задачу")).row()
+        kb.add(Text("Добавить товар")).row()
+        kb.add(Text("Скрыть товар")).row()
 
     return kb.get_json()

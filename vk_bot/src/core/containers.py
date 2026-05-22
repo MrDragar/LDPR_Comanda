@@ -8,7 +8,8 @@ from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRe
                                    IReferralRepository, IOnlineTaskRepository,
                                    IOfflineTaskRepository, IAcceptedTaskRepository,
                                    ITransactionRepository, ILearningRepository,
-                                   IVKTaskVerificationRepository)
+                                   IVKTaskVerificationRepository, IS3Storage, IProductRepository,
+                                   IOrderRepository)
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepository,
@@ -16,14 +17,17 @@ from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepositor
                                              AcceptedTaskRepository, OfflineTaskRepository,
                                              OnlineTaskRepository, LearningRepository,
                                              VKTaskVerificationRepository)
+from src.infrastructure.repositories.s3_storage import S3Storage
+from src.infrastructure.repositories.shop_repo import OrderRepository, ProductRepository
 from src.services import UserService, BalanceService, OnlineTaskService, OfflineTaskService
 from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTaskService, \
-    IBalanceService, ILearningService
+    IBalanceService, ILearningService, IProductService, IOrderService
 from src.core import config
 from src.services.learning_service import LearningService
 from src.services.notification_service import NotificationService
 from src.services.referral_link_service import ReferralLinkService
 from src.services.referral_service import ReferralService
+from src.services.shop_services import ProductService, OrderService
 
 
 class Container(DeclarativeContainer):
@@ -38,7 +42,7 @@ class Container(DeclarativeContainer):
         TgBot, token=config.TG_API_TOKEN, session=AiohttpSession(proxy=config.proxy)
     )
     vk_verify_repo: providers.Factory[IVKTaskVerificationRepository] = providers.Factory(
-        VKTaskVerificationRepository, bot=bot
+        VKTaskVerificationRepository, service_token=config.SERVICE_TOKEN
     )
     learning_repository: providers.Factory[ILearningRepository] = providers.Factory(
         LearningRepository, uow=uow
@@ -55,6 +59,13 @@ class Container(DeclarativeContainer):
     offline_task_repository: providers.Factory[IOfflineTaskRepository] = providers.Factory(OfflineTaskRepository, uow=uow)
     accepted_task_repository: providers.Factory[IAcceptedTaskRepository] = providers.Factory(AcceptedTaskRepository, uow=uow)
     transaction_repository: providers.Factory[ITransactionRepository] = providers.Factory(TransactionRepository, uow=uow)
+    s3_storage: providers.Singleton[IS3Storage] = providers.Singleton(
+        S3Storage, bucket=config.S3_BUCKET, region=config.S3_REGION,
+        access_key=config.S3_KEY, secret_key=config.S3_SECRET, endpoint_url=config.S3_ENDPOINT
+    )
+    product_repo: providers.Factory[IProductRepository] = providers.Factory(ProductRepository,
+                                                                            uow=uow)
+    order_repo: providers.Factory[IOrderRepository] = providers.Factory(OrderRepository, uow=uow)
     notification_service = providers.Factory(
         NotificationService,
         vk_bot=bot,
@@ -96,4 +107,13 @@ class Container(DeclarativeContainer):
     learning_service: providers.Factory[ILearningService] = providers.Factory(
         LearningService, uow=uow, repo=learning_repository, 
         user_svc=user_service, balance_svc=balance_service
+    )
+    
+    product_svc: providers.Factory[IProductService] = providers.Factory(
+        ProductService, uow=uow, repo=product_repo,
+        s3_storage=s3_storage
+    )
+    order_svc: providers.Factory[IOrderService] = providers.Factory(
+        OrderService, uow=uow, repo=order_repo, prod_repo=product_repo,
+        balance_svc=balance_service, user_svc=user_service, notif_svc=notification_service
     )

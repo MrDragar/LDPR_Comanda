@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from contextlib import _AsyncGeneratorContextManager
 from datetime import date
 
-from .entities import User, Sources, LearningTestAttempt
+from .entities import User, Sources, LearningTestAttempt, Product, Order, OrderStatus
 from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, \
     Transaction, TaskStatus, TaskType
 
@@ -158,3 +158,35 @@ class IVKTaskVerificationRepository(ABC):
     async def verify_task(self, task_type: TaskType, user_id: int, group_id: int, post_id: int) -> bool:
         """Проверяет выполнение действия пользователя над постом сообщества"""
         ...
+
+
+class IProductRepository(ABC):
+    @abstractmethod
+    async def get_active_products(self, skip: int, limit: int) -> tuple[list[Product], int]: ...
+    @abstractmethod
+    async def get_by_id(self, product_id: int) -> Product | None: ...
+    @abstractmethod
+    async def create(self, product: Product) -> Product: ...
+    @abstractmethod
+    async def update_quantity(self, product_id: int, new_quantity: int) -> None: ...
+    @abstractmethod
+    async def toggle_active(self, product_id: int, is_active: bool) -> None: ...
+
+
+class IOrderRepository(ABC):
+    @abstractmethod
+    async def create(self, order: Order) -> Order: ...
+    @abstractmethod
+    async def get_pending_by_user(self, user_id: int, user_source: Sources, skip: int, limit: int) -> tuple[list[Order], int]: ...
+    @abstractmethod
+    async def get_pending_by_admin(self, admin_region: str | None, skip: int, limit: int) -> tuple[list[Order], int]: ...
+    @abstractmethod
+    async def update_status(self, order_id: int, status: OrderStatus, reason: str | None = None) -> Order: ...
+    @abstractmethod
+    async def get_by_id(self, order_id: int) -> Order | None: ...
+
+
+class IS3Storage(ABC):
+    @abstractmethod
+    async def upload_photo(self, file_bytes: bytes, filename: str) -> str: ...
+

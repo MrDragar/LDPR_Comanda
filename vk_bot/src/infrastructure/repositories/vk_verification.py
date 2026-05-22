@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class VKTaskVerificationRepository(IVKTaskVerificationRepository):
-    def __init__(self, bot: Bot):
-        self.api = API(token="40ba90d740ba90d740ba90d77843fba03a440ba40ba90d72ab50352f009028db46e198a")
+    def __init__(self, service_token: str):
+        self.api = API(token=service_token)
 
     async def verify_task(self, task_type: TaskType, user_id: int, group_id: int,
                           post_id: int) -> bool:

@@ -2,6 +2,7 @@ from .user import User, Sources
 from .referral import Referral
 from .repost import Repost
 from .learning import LearningTestAttempt
+from .shop import Product, Order, OrderStatus
 
 
 __all__ = [
@@ -9,5 +10,8 @@ __all__ = [
     'Sources',
     'Referral',
     'Repost',
-    'LearningTestAttempt'
+    'LearningTestAttempt',
+    'Product',
+    'Order',
+    'OrderStatus'
 ]

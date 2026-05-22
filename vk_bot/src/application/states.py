@@ -52,3 +52,24 @@ class UserTaskStates(BaseStateGroup):
 
 class LearningStates(BaseStateGroup):
     QUIZ = "learning_quiz"
+
+
+class ShopStates(BaseStateGroup):
+    BROWSE = "shop_browse"
+    DELIVERY_CHOICE = "shop_delivery"
+    MAIL_ADDR = "shop_mail_addr"
+    MAIL_FIO = "shop_mail_fio"
+
+
+class AdminShopStates(BaseStateGroup):
+    ADD_NAME = "admin_shop_name"
+    ADD_DESC = "admin_shop_desc"
+    ADD_QTY = "admin_shop_qty"
+    ADD_PRICE = "admin_shop_price"
+    ADD_PHOTO = "admin_shop_photo"
+    HIDE_BROWSE = "admin_hide_browse"
+
+
+class OrderStates(BaseStateGroup):
+    BROWSE = "order_browse"
+    CANCEL_REASON = "order_cancel_reason"

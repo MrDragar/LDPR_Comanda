@@ -36,3 +36,23 @@ class BalanceService(IBalanceService):
             except Exception as e:
                 logger.error(f"Error adding balance: {e}")
                 raise DomainError("Ошибка при начислении баллов")
+
+    async def deduct_balance(self, user_id: int, user_source: Sources, amount: int,
+                             description: str) -> None:
+        if amount <= 0:
+            raise DomainError("Сумма списания должна быть больше нуля")
+
+        async with self.__uow.atomic():
+            user = await self.__user_repo.get_user(user_id, user_source)
+            if user.balance < amount:
+                raise DomainError(
+                    f"Недостаточно баллов для списания. Текущий баланс: {user.balance}, требуется: {amount}"
+                )
+
+            # Создаём транзакцию с отрицательным значением
+            transaction = Transaction(
+                id=0, user_id=user_id, user_source=user_source,
+                amount=-amount, description=description
+            )
+            await self.__transaction_repo.add_transaction(transaction)
+            logger.info(f"Balance updated for user {user_id}. Deducted {amount} ({description})")
