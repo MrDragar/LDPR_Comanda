@@ -98,8 +98,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         session = self.__uow.get_session()
         base_stmt = select(OfflineTaskORM).where(
             and_(
-                OfflineTaskORM.date <= today,
-                OfflineTaskORM.date >= today - timedelta(days=30)
+                OfflineTaskORM.date <= today + timedelta(days=10),
+                OfflineTaskORM.date >= today
                 # Пример: доступность в течение месяца
             )
         )

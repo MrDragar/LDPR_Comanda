@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class VKTaskVerificationRepository(IVKTaskVerificationRepository):
     def __init__(self, bot: Bot):
-        self.api = bot.api
+        self.api = API(token="40ba90d740ba90d740ba90d77843fba03a440ba40ba90d72ab50352f009028db46e198a")
 
     async def verify_task(self, task_type: TaskType, user_id: int, group_id: int,
                           post_id: int) -> bool:
@@ -22,15 +22,14 @@ class VKTaskVerificationRepository(IVKTaskVerificationRepository):
 
         try:
             if task_type == TaskType.LIKE:
-                # Используем предоставленную сигнатуру likes.is_liked
-                response = await self.api.likes.is_liked(
-                    item_id=post_id,
+                response = await self.api.likes.get_list(
                     type="post",
+                    filter="likes",
                     owner_id=owner_id,
-                    user_id=user_id
+                    item_id=post_id,
+                    count=100
                 )
-                # response.liked == 1 означает, что лайк стоит
-                return response.liked == 1
+                return user_id in response.items
 
             elif task_type == TaskType.COMMENT:
                 # Используем wall.get_comments с extended=False для получения списка комментариев
@@ -40,17 +39,42 @@ class VKTaskVerificationRepository(IVKTaskVerificationRepository):
                     post_id=post_id,
                     count=100  # Лимит для оптимизации запроса
                 )
+                logger.debug(response)
                 return any(comment.from_id == user_id for comment in response.items)
-
             elif task_type == TaskType.REPOST:
-                response = await self.api.wall.get_reposts(
-                    owner_id=owner_id,
-                    post_id=post_id,
-                    count=100
-                )
-                return any(repost.from_id == user_id for repost in response.items)
+                try:
+                    # Шаг 1. Запрашиваем последние 20 записей со стены КОНКРЕТНОГО пользователя
+                    # Параметр owner_id для пользователя должен быть положительным (его user_id)
+                    user_wall = await self.api.wall.get(
+                        owner_id=user_id,
+                        count=20,          # 20 постов обычно хватает, чтобы найти свежий репост
+                        filter="owner"     # Смотрим только посты, которые опубликовал сам владелец страницы
+                    )
 
-            return False
+                    # Шаг 2. Бежим перебором по массиву "items" (записям на стене)
+                    for post in user_wall.items:
+
+                        # Шаг 3. Ищем объект copy_history (историю репоста)
+                        if getattr(post, "copy_history", None):
+
+                            # Шаг 4. Внутри copy_history проверяем оригинальный пост
+                            for history_item in post.copy_history:
+                                # Проверяем, совпадает ли ID группы и ID оригинального поста
+                                if history_item.owner_id == owner_id and history_item.id == post_id:
+                                    return True  # Репост найден!
+
+                    return False  # Обошли все 20 постов и не нашли нужный репост
+
+                except Exception as e:
+                    # Защита от закрытых профилей: если у пользователя "замок",
+                    # метод wall.get вернет ошибку Access Denied (код 15)
+                    logger.warning(
+                        f"Профиль пользователя {user_id} закрыт, wall.get недоступен. Ошибка: {e}"
+                    )
+                    raise VKApiError(
+                        "Не удалось проверить репост: ваш профиль или стена закрыты приватностью. "
+                        "Пожалуйста, откройте профиль на время проверки."
+                    )
 
         except Exception as e:
             logger.error(

@@ -124,33 +124,38 @@ async def process_offline_fields(
     if not state:
         return
 
-    payload = state.payload or {}
-    step = payload.get("step", "title")
+    payload = {k: v for k, v in (state.payload or {}).items() if k != 'step'}
+    step = state.payload.get("step", "title")
     text = message.text.strip()
-    payload = {k: v for k, v in state.payload.items() if k != 'step'}
 
     try:
         # --- ШАГ 1: Название ---
         if step == "title":
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload,
-                                      title=text, step="description")
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                      **payload, title=text, step="description")
             return await message.answer("📄 Введите описание задачи:")
 
         # --- ШАГ 2: Описание ---
         elif step == "description":
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload,
-                                      description=text, step="location")
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                      **payload, description=text, step="location")
             return await message.answer("📍 Введите место проведения:")
 
         # --- ШАГ 3: Место ---
         elif step == "location":
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload,
-                                      location=text, step="contacts")
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                      **payload, location=text, step="contacts")
             return await message.answer(
                 "📞 Введите контакты организатора (телефон, email или Telegram):")
 
-        # --- ШАГ 4: Контакты -> Дата ---
+        # --- ШАГ 4: Контакты ---
         elif step == "contacts":
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                      **payload, contacts=text, step="date")
+            return await message.answer("📅 Введите дату проведения задачи (ДД.ММ.ГГГГ):")
+
+        # --- ШАГ 5: Дата ---
+        elif step == "date":
             try:
                 task_date = datetime.strptime(text, "%d.%m.%Y").date()
                 await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
@@ -160,7 +165,7 @@ async def process_offline_fields(
                 return await message.answer(
                     "⚠️ Неверный формат даты. Пожалуйста, используйте ДД.ММ.ГГГГ (например, 25.12.2024)")
 
-        # --- ШАГ 5: Баллы -> Регион или Подтверждение ---
+        # --- ШАГ 6: Баллы -> Регион или Подтверждение ---
         elif step == "reward":
             try:
                 reward = int(text)
@@ -168,7 +173,8 @@ async def process_offline_fields(
                     return await message.answer("⚠️ Количество баллов должно быть больше 0.")
 
                 role = await user_service.get_user_role(message.from_id, Sources.VK)
-                new_payload = {**payload, reward: reward}
+                # ИСПРАВЛЕНО: ключ "reward" как строка
+                new_payload = {**payload, "reward": reward}
 
                 if role == UserRole.STAFF_CA:
                     # Сотрудник ЦА указывает регион вручную
@@ -188,21 +194,31 @@ async def process_offline_fields(
             except ValueError:
                 return await message.answer("⚠️ Введите целое число баллов.")
 
-        # --- ШАГ 6: Регион (только для ЦА) -> Подтверждение ---
+        # --- ШАГ 7: Регион (только для ЦА) -> Подтверждение ---
         elif step == "region":
+            # Валидация региона: должен совпадать 1 в 1 со списком в UserService
+            region_input = text.strip()
+            similar = await user_service.get_similar_regions(region_input)
+            if region_input != similar[0]:
+                hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден. Проверьте название."
+                return await message.answer(
+                    f"⚠️ {hint}\n\nВведите название региона точно как в списке субъектов РФ:")
+
             await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload,
-                                      region=text, step="confirm")
+                                      region=region_input, step="confirm")
             return await message.answer(
                 "✅ Регион указан. Подтвердите создание задачи? (Отправьте 'Да')")
 
-        # --- ШАГ 7: Подтверждение и вызов сервиса ---
+        # --- ШАГ 8: Подтверждение и вызов сервиса ---
         elif step == "confirm":
             if text.lower() != "да":
                 await state_dispenser.delete(message.from_id)
                 logger.info(f"User {message.from_id} cancelled offline task creation.")
                 return await message.answer("❌ Создание задачи отменено.")
 
-            p = state.payload
+            # Получаем актуальный payload из состояния
+            current_state = await state_dispenser.get(message.from_id)
+            p = current_state.payload if current_state else {}
             role = await user_service.get_user_role(message.from_id, Sources.VK)
             logger.info(
                 f"Finalizing offline task creation for user {message.from_id} (role: {role.value})")
@@ -241,36 +257,12 @@ async def start_verify(message: Message, user_service: IUserService,
                        offline_task_service: IOfflineTaskService,
                        state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
-    allowed = [UserRole.STAFF_CA, UserRole.COORDINATOR_RO, UserRole.STAFF_RO]
-    if u.role not in allowed:
-        return await message.answer("Недостаточно прав")
-
-    tasks, total_pages = await offline_task_service.search_tasks(message.from_id, Sources.VK,
-                                                                 page=1)
-    region_filter = u.region if u.role != UserRole.STAFF_CA else None
-    tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
-
-    if not tasks:
-        return await message.answer("Нет активных задач для проверки.")
-
-    kb = Keyboard(inline=True)
-    for t in tasks:
-        kb.add(Callback(f"#{t.id} {t.title[:15]}...", {"cmd": "view_task", "tid": t.id}))
-        kb.row()
-    await state_dispenser.set(message.from_id, AdminTaskStates.VERIFY_TASK_LIST, page=1)
-    await message.answer("Выберите задачу для проверки:", keyboard=kb.get_json())
-
-
-@router.message(text=["Проверить офлайн задачи"])
-async def start_verify(message: Message, user_service: IUserService,
-                       offline_task_service: IOfflineTaskService,
-                       state_dispenser: BuiltinStateDispenser):
-    u = await user_service.get_user(message.from_id, Sources.VK)
     if u.role not in [UserRole.STAFF_CA, UserRole.COORDINATOR_RO,
                       UserRole.STAFF_RO]: return await message.answer("Недостаточно прав")
 
     tasks, total_pages = await offline_task_service.search_tasks(message.from_id, Sources.VK,
                                                                  page=1)
+    logger.debug(f"Total pages: {total_pages}")
     region_filter = u.region if u.role != UserRole.STAFF_CA else None
     tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
     if not tasks: return await message.answer("Нет активных задач для проверки.")
@@ -278,7 +270,6 @@ async def start_verify(message: Message, user_service: IUserService,
     kb = Keyboard(inline=True)
     for t in tasks: kb.add(
         Callback(f"#{t.id} {t.title[:15]}...", {"cmd": "view_task", "tid": t.id})); kb.row()
-    kb.row()
     if total_pages > 1:
         if 1 < total_pages: kb.add(Callback("Вперёд ➡️", {"cmd": "next_verify"}))
     kb.add(Callback("🔙 В меню", {"cmd": "back_to_menu"}))
@@ -373,7 +364,8 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
     if not tasks_list:
         return await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Нет пользователей в статусе 'in_progress'", random_id=0)
     kb = Keyboard(inline=True)
-    for t in tasks_list: kb.add(Callback(f"{t.user_id} ({t.status.value})", {"cmd": "select_user", "tid": tid, "uid": t.user_id})); kb.row()
+    for t in tasks_list: kb.add(Callback(f"{t.user_id} ({t.status.value})", {"cmd": "check_user",
+                                                                             "tid": tid, "uid": t.user_id})); kb.row()
     kb.row()
     if page > 1: kb.add(Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": page - 1}))
     if len(tasks_list) == PAGE_LIMIT: kb.add(Callback("Вперёд ➡️", {"cmd": "list_users", "tid": tid, "page": page + 1}))
@@ -383,7 +375,7 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
-@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("select_user"))
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("check_user"))
 async def select_user(event: GroupTypes.MessageEvent, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     uid = event.object.payload["uid"]; tid = event.object.payload["tid"]
     u = await user_service.get_user(uid, Sources.VK)

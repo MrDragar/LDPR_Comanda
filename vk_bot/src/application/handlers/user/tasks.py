@@ -1,12 +1,12 @@
 import logging
 from vkbottle.bot import BotLabeler, Message
-from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
+from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes, Text
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import UserTaskStates
 from src.domain.exceptions import DomainError
 from src.services.interfaces import IOnlineTaskService, IOfflineTaskService, IUserService, \
     INotificationService
-from src.domain.entities.user import Sources
+from src.domain.entities.user import Sources, UserGrade
 from src.application.filters import CMDRule
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,11 @@ async def prev_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
 async def offline_list(message: Message, offline_task_service: IOfflineTaskService,
                        user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
+    if u.grade not in (UserGrade.AGITATOR, UserGrade.RESERVE):
+        kb = Keyboard(one_time=True).add(Text("На главную"))
+        return await message.answer("Этот тип заданий открывается при достижении ранга "
+                                    "'Агитатор'. Для его прохождения необходимо пройти обучене",
+                                    keyboard=kb.get_json())
     all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1)
     tasks = [t for t in all_tasks if t.region == u.region]
 
