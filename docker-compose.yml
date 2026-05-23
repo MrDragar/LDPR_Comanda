@@ -41,6 +41,12 @@ services:
       LOG_FILE: ${LOG_FILE}
       LOG_FORMAT: ${LOG_FORMAT}
       GROUP_ID: ${VK_GROUP_ID}
+      SERVICE_TOKEN: ${VK_SERVICE_TOKEN}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION}
+      S3_KEY: ${S3_KEY}
+      S3_SECRET: ${S3_SECRET}
+      S3_ENDPOINT: ${S3_ENDPOINT}
     restart: always
 
 networks:
