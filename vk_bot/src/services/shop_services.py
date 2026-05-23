@@ -67,7 +67,10 @@ class OrderService(IOrderService):
             p = await self.__prod_repo.get_by_id(product_id)
             if not p or not p.is_active: raise DomainError("Товар недоступен")
             if p.quantity < 1: raise DomainError("Товар закончился")
-
+            
+            if await self.__repo.has_user_ordered_product(user_id, source, product_id):
+                raise DomainError("Вы уже заказывали этот товар. Повторный заказ каждого товара возможен только 1 раз.")
+            
             balance = await self.__balance.get_balance(user_id, source)
             if balance < p.price: raise DomainError("Недостаточно баллов")
 

@@ -1,10 +1,11 @@
 import logging
 from datetime import date
-from src.domain.entities.user import Sources, UserRole
+from src.domain.entities.user import Sources, UserRole, UserGrade
 from src.domain.entities.task import OfflineTask, AcceptedOfflineTask, TaskStatus
 from src.domain.interfaces import IUnitOfWork, IOfflineTaskRepository, IAcceptedTaskRepository, \
     IUserRepository
-from src.services.interfaces import IOfflineTaskService, IBalanceService, IUserService
+from src.services.interfaces import IOfflineTaskService, IBalanceService, IUserService, \
+    INotificationService
 from src.domain.exceptions import DomainError
 
 logger = logging.getLogger(__name__)
@@ -14,13 +15,15 @@ ITEMS_PER_PAGE = 5
 class OfflineTaskService(IOfflineTaskService):
     def __init__(self, uow: IUnitOfWork, task_repo: IOfflineTaskRepository,
                  accepted_repo: IAcceptedTaskRepository,
-                 user_repo: IUserRepository, balance_svc: IBalanceService, user_svc: IUserService):
+                 user_repo: IUserRepository, balance_svc: IBalanceService, user_svc: IUserService,
+                 notification_svc: INotificationService):
         self.__uow = uow
         self.__task_repo = task_repo
         self.__accepted_repo = accepted_repo
         self.__user_repo = user_repo
         self.__balance_svc = balance_svc
         self.__user_svc = user_svc
+        self.__notification_svc = notification_svc
 
     async def search_tasks(self, user_id: int, user_source: Sources, page: int = 1) -> tuple[
         list[OfflineTask], int]:
@@ -50,6 +53,19 @@ class OfflineTaskService(IOfflineTaskService):
                 await self.__balance_svc.add_balance(user_id, user_source, task.reward,
                                                      f"Подтверждение оффлайн-задачи #{task_id}")
                 logger.info(f"Offline task {task_id} status set to ACCEPTED for user {user_id}")
+                user = await self.__user_svc.get_user(user_id, user_source)
+                if user.grade == UserGrade.AGITATOR:
+                    # Считаем принятые оффлайн задачи (лимит 200 хватит для проверки)
+                    all_accepted, _ = await self.__accepted_repo.get_user_accepted_offline_tasks(
+                        user_id, user_source, skip=0, limit=200)
+                    accepted_count = sum(1 for t in all_accepted if t.status == TaskStatus.ACCEPTED)
+
+                    if accepted_count >= 40:
+                        await self.__user_svc.update_user_grade(user_id, user_source,
+                                                                UserGrade.RESERVE)
+                        msg = ("Поздравляем! Вы получили новый ранг 'Кадровый резерв ЛДПР'. "
+                               "У вас открылся новый раздел: 'Закрытые мероприятия'.")
+                        await self.__notification_svc.notify_user_vk(user_id, msg)
             elif new_status == TaskStatus.DECLINED:
                 logger.info(f"Offline task {task_id} status set to DECLINED for user {user_id}")
 

@@ -85,7 +85,8 @@ class Container(DeclarativeContainer):
     )
     offline_task_service: providers.Factory[IOfflineTaskService] = providers.Factory(
         OfflineTaskService, uow=uow, task_repo=offline_task_repository, accepted_repo=accepted_task_repository, 
-        user_repo=user_repository, balance_svc=balance_service, user_svc=user_service
+        user_repo=user_repository, balance_svc=balance_service, user_svc=user_service,
+        notification_svc=notification_service
     )
     referral_service = providers.Factory(
         ReferralService,

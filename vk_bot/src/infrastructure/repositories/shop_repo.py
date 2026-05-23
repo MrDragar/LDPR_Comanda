@@ -107,7 +107,16 @@ class OrderRepository(IOrderRepository):
         session = self.__uow.get_session()
         o = await session.get(OrderORM, order_id)
         return self._orm_to_domain(o) if o else None
-
+    
+    async def has_user_ordered_product(self, user_id: int, user_source: Sources, product_id: int) -> bool:
+        session = self.__uow.get_session()
+        stmt = select(func.count()).select_from(OrderORM).where(
+            OrderORM.user_id == user_id,
+            OrderORM.user_source == user_source,
+            OrderORM.product_id == product_id
+        )
+        return (await session.scalar(stmt) or 0) > 0
+    
     @staticmethod
     def _orm_to_domain(orm: OrderORM) -> Order:
         return Order(id=orm.id, user_id=orm.user_id, user_source=orm.user_source,
