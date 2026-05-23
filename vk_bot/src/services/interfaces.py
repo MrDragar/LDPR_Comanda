@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from datetime import date
-from src.domain.entities import Repost, Sources, User, OrderStatus, Order, Product
+from datetime import date, time
+from src.domain.entities import Repost, Sources, User, OrderStatus, Order, Product, \
+    EventRegistration, ClosedEvent
 from src.domain.entities.task import OnlineTask, OfflineTask, AcceptedOfflineTask, TaskStatus, \
     TaskType
 from src.domain.entities.user import UserRole
@@ -143,3 +144,16 @@ class IOrderService(ABC):
     async def get_admin_orders(self, admin_region: str | None, page: int) -> tuple[list[Order], int]: ...
     @abstractmethod
     async def update_order_status(self, order_id: int, new_status: OrderStatus, reason: str | None = None) -> Order: ...
+
+
+class IClosedEventService(ABC):
+    @abstractmethod
+    async def create_event(self, title: str, desc: str, loc: str, d: date, t: time, region: str) -> ClosedEvent: ...
+    @abstractmethod
+    async def list_events(self, region: str | None, page: int) -> tuple[list[ClosedEvent], int]: ...
+    @abstractmethod
+    async def register(self, user_id: int, source: Sources, event_id: int) -> None: ...
+    @abstractmethod
+    async def list_participants(self, event_id: int, page: int) -> tuple[list[EventRegistration], int]: ...
+    @abstractmethod
+    async def get_event(self, event_id: int) -> ClosedEvent | None: ...

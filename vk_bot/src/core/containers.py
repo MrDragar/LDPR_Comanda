@@ -9,19 +9,22 @@ from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRe
                                    IOfflineTaskRepository, IAcceptedTaskRepository,
                                    ITransactionRepository, ILearningRepository,
                                    IVKTaskVerificationRepository, IS3Storage, IProductRepository,
-                                   IOrderRepository)
+                                   IOrderRepository, IClosedEventRepository,
+                                   IEventRegistrationRepository)
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepository,
                                              ReferralRepository, TransactionRepository,
                                              AcceptedTaskRepository, OfflineTaskRepository,
                                              OnlineTaskRepository, LearningRepository,
-                                             VKTaskVerificationRepository)
+                                             VKTaskVerificationRepository,
+                                             EventRegistrationRepository, ClosedEventRepository)
 from src.infrastructure.repositories.s3_storage import S3Storage
 from src.infrastructure.repositories.shop_repo import OrderRepository, ProductRepository
 from src.services import UserService, BalanceService, OnlineTaskService, OfflineTaskService
+from src.services.closed_event_service import ClosedEventService
 from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTaskService, \
-    IBalanceService, ILearningService, IProductService, IOrderService
+    IBalanceService, ILearningService, IProductService, IOrderService, IClosedEventService
 from src.core import config
 from src.services.learning_service import LearningService
 from src.services.notification_service import NotificationService
@@ -59,13 +62,15 @@ class Container(DeclarativeContainer):
     offline_task_repository: providers.Factory[IOfflineTaskRepository] = providers.Factory(OfflineTaskRepository, uow=uow)
     accepted_task_repository: providers.Factory[IAcceptedTaskRepository] = providers.Factory(AcceptedTaskRepository, uow=uow)
     transaction_repository: providers.Factory[ITransactionRepository] = providers.Factory(TransactionRepository, uow=uow)
+    event_repository: providers.Factory[IClosedEventRepository] = providers.Factory(ClosedEventRepository, uow=uow)
+    reg_repository: providers.Factory[IEventRegistrationRepository] = providers.Factory(EventRegistrationRepository, uow=uow)
     s3_storage: providers.Singleton[IS3Storage] = providers.Singleton(
         S3Storage, bucket=config.S3_BUCKET, region=config.S3_REGION,
         access_key=config.S3_KEY, secret_key=config.S3_SECRET, endpoint_url=config.S3_ENDPOINT
     )
-    product_repo: providers.Factory[IProductRepository] = providers.Factory(ProductRepository,
-                                                                            uow=uow)
-    order_repo: providers.Factory[IOrderRepository] = providers.Factory(OrderRepository, uow=uow)
+    product_repository: providers.Factory[IProductRepository] = providers.Factory(ProductRepository,
+                                                                                  uow=uow)
+    order_repository: providers.Factory[IOrderRepository] = providers.Factory(OrderRepository, uow=uow)
     notification_service = providers.Factory(
         NotificationService,
         vk_bot=bot,
@@ -111,10 +116,13 @@ class Container(DeclarativeContainer):
     )
     
     product_service: providers.Factory[IProductService] = providers.Factory(
-        ProductService, uow=uow, repo=product_repo,
+        ProductService, uow=uow, repo=product_repository,
         s3_storage=s3_storage
     )
     order_service: providers.Factory[IOrderService] = providers.Factory(
-        OrderService, uow=uow, repo=order_repo, prod_repo=product_repo,
+        OrderService, uow=uow, repo=order_repository, prod_repo=product_repository,
         balance_svc=balance_service, user_svc=user_service, notif_svc=notification_service
+    )
+    closed_event_service: providers.Factory[IClosedEventService] = providers.Factory(
+        ClosedEventService, uow=uow, event_repo=event_repository, reg_repo=reg_repository, user_repo=user_repository
     )

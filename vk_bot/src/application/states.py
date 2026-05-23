@@ -73,3 +73,10 @@ class AdminShopStates(BaseStateGroup):
 class OrderStates(BaseStateGroup):
     BROWSE = "order_browse"
     CANCEL_REASON = "order_cancel_reason"
+
+
+class ClosedEventStates(BaseStateGroup):
+    BROWSE_USER = "ce_browse_user"
+    BROWSE_ADMIN = "ce_browse_admin"
+    CREATE = "ce_create"
+    PART_LIST = "ce_part_list"

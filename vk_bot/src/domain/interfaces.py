@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 from contextlib import _AsyncGeneratorContextManager
 from datetime import date
 
-from .entities import User, Sources, LearningTestAttempt, Product, Order, OrderStatus
+from .entities import User, Sources, LearningTestAttempt, Product, Order, OrderStatus, ClosedEvent, \
+    EventRegistration
 from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, \
     Transaction, TaskStatus, TaskType
 
@@ -192,3 +193,20 @@ class IS3Storage(ABC):
     @abstractmethod
     async def upload_photo(self, file_bytes: bytes, filename: str) -> str: ...
 
+
+class IClosedEventRepository(ABC):
+    @abstractmethod
+    async def create(self, event: ClosedEvent) -> ClosedEvent: ...
+    @abstractmethod
+    async def get_by_id(self, event_id: int) -> ClosedEvent | None: ...
+    @abstractmethod
+    async def get_active_by_region(self, region: str | None, skip: int, limit: int) -> tuple[list[ClosedEvent], int]: ...
+
+
+class IEventRegistrationRepository(ABC):
+    @abstractmethod
+    async def register_user(self, user_id: int, user_source: Sources, event_id: int) -> EventRegistration: ...
+    @abstractmethod
+    async def is_registered(self, user_id: int, user_source: Sources, event_id: int) -> bool: ...
+    @abstractmethod
+    async def get_participants(self, event_id: int, skip: int, limit: int) -> tuple[list[EventRegistration], int]: ...

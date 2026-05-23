@@ -3,6 +3,7 @@ from .referral import Referral
 from .repost import Repost
 from .learning import LearningTestAttempt
 from .shop import Product, Order, OrderStatus
+from .closed_event import ClosedEvent, EventRegistration
 
 
 __all__ = [
@@ -13,5 +14,7 @@ __all__ = [
     'LearningTestAttempt',
     'Product',
     'Order',
-    'OrderStatus'
+    'OrderStatus',
+    'ClosedEvent',
+    'EventRegistration'
 ]

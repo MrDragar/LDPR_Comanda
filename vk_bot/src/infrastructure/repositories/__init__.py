@@ -6,9 +6,12 @@ from .task_repo import OnlineTaskRepository, OfflineTaskRepository, AcceptedTask
 from .balance_repo import TransactionRepository
 from .learning import LearningRepository
 from .vk_verification import VKTaskVerificationRepository 
+from .closed_event_repo import ClosedEventRepository, EventRegistrationRepository
+
 
 __all__ = [
     'UserRepository', 'LevenshteinRepository', 'FuzzywuzzyRepository', 'ReferralRepository',
     'OnlineTaskRepository', 'OfflineTaskRepository', 'AcceptedTaskRepository',
-    'TransactionRepository', 'LearningRepository', 'VKTaskVerificationRepository'
+    'TransactionRepository', 'LearningRepository', 'VKTaskVerificationRepository',
+    'ClosedEventRepository', 'EventRegistrationRepository'
 ]

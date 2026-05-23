@@ -22,6 +22,8 @@ from .check_subscription import router as check_router
 from .user.shop import router as user_shop_router
 from .admin.shop import router as admin_shop_router
 from .admin.orders import router as admin_orders_router
+from .user.closed_events import router as user_ce_router
+from .admin.closed_events import router as admin_ce_router
 from .admin.post import router as admin_router
 
 full_labeler = BotLabeler()
@@ -51,4 +53,6 @@ full_labeler.load(check_router)
 full_labeler.load(user_shop_router)
 full_labeler.load(admin_shop_router)
 full_labeler.load(admin_orders_router)
+full_labeler.load(user_ce_router)
+full_labeler.load(admin_ce_router)
 full_labeler.load(start_router)
