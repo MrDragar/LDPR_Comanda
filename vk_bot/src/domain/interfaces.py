@@ -94,6 +94,9 @@ class IOnlineTaskRepository(ABC):
     async def create_task(self, task: OnlineTask) -> OnlineTask: ...
     @abstractmethod
     async def is_task_accepted_by_user(self, user_id: int, user_source: Sources, task_id: int) -> bool: ...
+    @staticmethod
+    @abstractmethod
+    def _parse_vk_url(url: str) -> tuple[int, int]: ...
 
 
 class IOfflineTaskRepository(ABC):

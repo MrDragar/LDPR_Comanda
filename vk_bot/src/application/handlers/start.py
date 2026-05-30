@@ -32,6 +32,7 @@ async def start(
 ):
     if message.peer_id < 0:
         return
+    await state_dispenser.delete(message.from_id)
     if await user_service.is_user_exists(message.from_id):
         try:
             role = await user_service.get_user_role(message.from_id, Sources.VK)

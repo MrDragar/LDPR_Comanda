@@ -23,8 +23,7 @@ class OnlineTask:
     duration: int
     type: TaskType
     reward: int
-    post_id: int
-    group_id: int
+    url: str 
 
 
 @dataclass

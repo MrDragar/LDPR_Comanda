@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import date, timedelta
 from sqlalchemy import select, func, or_, and_, text
 from sqlalchemy.sql import expression
@@ -54,7 +55,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         tasks = [
             OnlineTask(
                 id=t.id, date=t.date, duration=t.duration,
-                type=t.type, reward=t.reward, post_id=t.post_id, group_id=t.group_id
+                type=t.type, reward=t.reward, url=t.url
             ) for t in tasks_orm
         ]
         logger.debug(f"Found {len(tasks)} active online tasks for user {user_id}")
@@ -66,7 +67,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         orm = await session.scalar(stmt)
         if not orm: return None
         return OnlineTask(id=orm.id, date=orm.date, duration=orm.duration, type=orm.type,
-                          reward=orm.reward, post_id=orm.post_id, group_id=orm.group_id)
+                          reward=orm.reward, url=orm.url)
 
     async def create_task(self, task: OnlineTask) -> OnlineTask:
         session = self.__uow.get_session()
@@ -87,6 +88,19 @@ class OnlineTaskRepository(IOnlineTaskRepository):
             AcceptedOnlineTaskORM.status.in_([TaskStatus.IN_PROGRESS, TaskStatus.ACCEPTED])
         )
         return (await session.scalar(stmt)) is not None
+
+    @staticmethod
+    def _parse_vk_url(url: str) -> tuple[int, int]:
+        pattern = r'vk\.com/wall-?(\d+)_(\d+)'
+        match = re.search(pattern, url)
+        if not match:
+            raise ValueError(f"Не удалось распарсить VK URL: {url}")
+
+        owner_id = int(match.group(1))
+        post_id = int(match.group(2))
+
+        group_id = abs(owner_id)
+        return group_id, post_id
 
 
 class OfflineTaskRepository(IOfflineTaskRepository):

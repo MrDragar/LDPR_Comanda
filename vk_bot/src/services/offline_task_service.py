@@ -57,7 +57,7 @@ class OfflineTaskService(IOfflineTaskService):
                 if user.grade == UserGrade.AGITATOR:
                     # Считаем принятые оффлайн задачи (лимит 200 хватит для проверки)
                     all_accepted, _ = await self.__accepted_repo.get_user_accepted_offline_tasks(
-                        user_id, user_source, skip=0, limit=200)
+                        user_id, user_source, skip=0, limit=1000)
                     accepted_count = sum(1 for t in all_accepted if t.status == TaskStatus.ACCEPTED)
 
                     if accepted_count >= 40:

@@ -45,9 +45,13 @@ class OnlineTaskService(IOnlineTaskService):
 
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
                 raise DomainError("Вы уже взяли эту задачу или она в процессе")
+            try:
+                group_id, post_id = self.__task_repo._parse_vk_url(task.url)
+            except ValueError as e:
+                raise DomainError(f"Ошибка парсинга ссылки задания: {e}")
 
             is_completed = await self.__vk_verify_repo.verify_task(
-                task.type, user_id, task.group_id, task.post_id
+                task.type, user_id, group_id, post_id
             )
             if not is_completed:
                 raise TaskNotCompletedError("Задание не выполнено. Пожалуйста, выполните действие в ВК и попробуйте снова.")
@@ -80,10 +84,18 @@ class OnlineTaskService(IOnlineTaskService):
             return await self.__task_repo.get_task_by_id(task_id)
 
     async def create_task(self, date: date, duration: int, type: TaskType, reward: int,
-                          post_id: int, group_id: int) -> OnlineTask:
+                          url: str) -> OnlineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
         if duration <= 0: raise DomainError("Длительность должна быть больше нуля")
+        if not url.startswith("https://vk.com/"):
+            raise DomainError("Ссылка должна быть валидным URL ВКонтакте")
         async with self.__uow.atomic():
-            task = OnlineTask(id=0, date=date, duration=duration, type=type, reward=reward,
-                              post_id=post_id, group_id=group_id)
+            task = OnlineTask(
+                id=0,
+                date=date,
+                duration=duration,
+                type=type,
+                reward=reward,
+                url=url
+            )
             return await self.__task_repo.create_task(task)

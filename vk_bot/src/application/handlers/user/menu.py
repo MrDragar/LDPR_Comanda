@@ -15,10 +15,6 @@ logger = logging.getLogger(__name__)
 router = BotLabeler()
 
 
-def get_main_menu_kb():
-    return Keyboard(one_time=False).add(Text("Выполнить задание")).row().add(Text("Мои задания")).row().add(Text("Личный кабинет")).get_json()
-
-
 @router.message(text=["Меню", "На главную", "Вернуться на главную страницу"])
 async def show_menu(message: Message, user_service: IUserService) -> None:
     try:

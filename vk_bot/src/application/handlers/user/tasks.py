@@ -186,7 +186,6 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     if not task:
         return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                                  message="Ошибка: задание не найдено", random_id=0)
-    vk_link = f"https://vk.com/wall-{task.group_id}_{task.post_id}"
     kb = Keyboard(inline=True)
     kb.add(Callback("Проверить", {"cmd": "check_online", "tid": tid}))
     kb.row().add(Callback("Назад к списку", {"cmd": "back_online_list"}))
@@ -194,7 +193,7 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     text = (f"📋 Задание #{task.id}\n"
             f"📌 Тип: {task.type.value}\n"
             f"💰 Награда: {task.reward}\n"
-            f"🔗 Ссылка на задание: {vk_link}")
+            f"🔗 Ссылка на задание: {task.url}")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_VIEW, tid=tid)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text,
                                       keyboard=kb.get_json(), random_id=0)

@@ -17,7 +17,8 @@ PAGE_LIMIT = 5
 def _event_kb(events, page, total, prefix="user"):
     kb = Keyboard(inline=True)
     for e in events:
-        kb.add(Callback(f"📅 {e.title[:20]} ({e.date.strftime('%d.%m')})", {"cmd": f"view_{prefix}", "eid": e.id}))
+        kb.add(Callback(f"📅 {e.title[:20]} ({e.date.strftime('%d.%m')})"[:40], {"cmd": f"view"
+                                                                                   f"_{prefix}", "eid": e.id}))
         kb.row()
     kb.row()
     if total > 1:
@@ -28,13 +29,13 @@ def _event_kb(events, page, total, prefix="user"):
 
 
 @router.message(text=["Закрытые мероприятия"])
-async def open_ce(message: Message, user_service: IUserService, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+async def open_ce(message: Message, user_service: IUserService, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
     if u.grade != UserGrade.RESERVE:
         kb = Keyboard(one_time=True).add(Text("На главную"))
         return await message.answer("Для разблокировки этого раздела необходим ранг \"Кадровый резерв ЛДПР\". Для его достижения выполните 40 оффлайн заданий", keyboard=kb.get_json())
 
-    evs, total = await event_service.list_events(u.region, 1)
+    evs, total = await closed_event_service.list_events(u.region, 1)
     if not evs: return await message.answer("В вашем регионе пока нет закрытых мероприятий.")
     pages = (total + PAGE_LIMIT - 1) // PAGE_LIMIT
     await state_dispenser.set(message.from_id, ClosedEventStates.BROWSE_USER, page=1, region=u.region, total=pages)
@@ -42,28 +43,56 @@ async def open_ce(message: Message, user_service: IUserService, event_service: I
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_user"))
-async def next_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
-    await _navigate_ce(event, 1, user_service, event_service, state_dispenser)
+async def next_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+    await _navigate_ce(event, 1, user_service, closed_event_service, state_dispenser)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("prev_user"))
-async def prev_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
-    await _navigate_ce(event, -1, user_service, event_service, state_dispenser)
+async def prev_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+    await _navigate_ce(event, -1, user_service, closed_event_service, state_dispenser)
 
 
-async def _navigate_ce(event, delta, user_service, event_service, state_dispenser):
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_ce_user"))
+async def back_to_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService,
+                          closed_event_service: IClosedEventService):
+    u = await user_service.get_user(event.object.user_id, Sources.VK)
+    evs, total_count = await closed_event_service.list_events(u.region, page=1)
+
+    if not evs:
+        return await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="В вашем регионе пока нет закрытых мероприятий.",
+            random_id=0
+        )
+    pages = (total_count + PAGE_LIMIT - 1) // PAGE_LIMIT
+    kb = _event_kb(evs, page=1, total=pages, prefix="user")
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"📍 Актуальные мероприятия в {u.region} (стр. 1/{pages}):",
+        keyboard=kb,
+        random_id=0
+    )
+
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id,
+        user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+
+async def _navigate_ce(event, delta, user_service, closed_event_service, state_dispenser):
     state = await state_dispenser.get(event.object.peer_id)
     np = max(1, min(state.payload.get("page", 1) + delta, state.payload.get("total", 1)))
-    evs, total = await event_service.list_events(state.payload.get("region"), np)
+    evs, total = await closed_event_service.list_events(state.payload.get("region"), np)
     await state_dispenser.set(event.object.peer_id, ClosedEventStates.BROWSE_USER, page=np, **state.payload)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"📍 Мероприятия (стр. {np}/{state.payload['total']}):", keyboard=_event_kb(evs, np, state.payload['total']), random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_user"))
-async def view_user_ce(event: GroupTypes.MessageEvent, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+async def view_user_ce(event: GroupTypes.MessageEvent, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
     eid = event.object.payload["eid"]
-    ev = await event_service.get_event(eid)
+    ev = await closed_event_service.get_event(eid)
     if not ev: 
         return await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Мероприятие не найдено", random_id=0)
     kb = Keyboard(inline=True).add(Callback("✅ Записаться", {"cmd": "register_ce", "eid": eid})).row().add(Callback("🔙 Назад", {"cmd": "back_ce_user"}))
@@ -74,9 +103,9 @@ async def view_user_ce(event: GroupTypes.MessageEvent, event_service: IClosedEve
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("register_ce"))
-async def register_ce(event: GroupTypes.MessageEvent, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+async def register_ce(event: GroupTypes.MessageEvent, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
     try:
-        await event_service.register(event.object.user_id, Sources.VK, event.object.payload["eid"])
+        await closed_event_service.register(event.object.user_id, Sources.VK, event.object.payload["eid"])
         await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="✅ Вы успешно записались на мероприятие!", random_id=0)
     except Exception as e:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"❌ {e}", random_id=0)

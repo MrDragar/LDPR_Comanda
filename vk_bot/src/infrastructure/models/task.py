@@ -13,8 +13,7 @@ class OnlineTaskORM(Base):
     duration: Mapped[int] = mapped_column(nullable=False)
     type: Mapped[TaskType] = mapped_column(SQLEnum(TaskType), nullable=False)
     reward: Mapped[int] = mapped_column(nullable=False)
-    post_id: Mapped[int] = mapped_column(nullable=False)
-    group_id: Mapped[int] = mapped_column(nullable=False)
+    url: Mapped[str] = mapped_column(nullable=False)
 
 
 class OfflineTaskORM(Base):

@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
@@ -15,63 +16,75 @@ router = BotLabeler()
 PAGE_LIMIT = 5
 
 
-# --- СОЗДАНИЕ ОНЛАЙН ЗАДАЧИ ---
 @router.message(text=["Создать онлайн задачу"])
 async def start_create_online(message: Message, user_service: IUserService,
-                              state_dispenser: BuiltinStateDispenser):
+                             state_dispenser: BuiltinStateDispenser):
     if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]):
         return await message.answer("Недостаточно прав")
-    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="post_id")
-    await message.answer("Введите ID поста ВК (число из ссылки):")
+    # Сразу переходим к шагу ввода URL
+    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="url")
+    await message.answer("🔗 Введите ссылку на задание (URL поста ВК, например: https://vk.com/wall-123_456):")
 
 
 @router.message(state=AdminTaskStates.CREATE_ONLINE)
 async def process_online_fields(message: Message, state_dispenser: BuiltinStateDispenser,
-                                online_task_service: IOnlineTaskService, group_id: int):
+                                online_task_service: IOnlineTaskService):
     state = await state_dispenser.get(message.from_id)
     if not state: return
     step = state.payload.get("step")
     payload = {k: v for k, v in state.payload.items() if k != 'step'}
+    text = message.text.strip()
 
-    if step == "post_id":
-        try:
-            pid = int(message.text.strip())
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
-                                      post_id=pid, step="type")
+    try:
+        if step == "url":
+            pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
+            if not pattern.match(text):
+                return await message.answer(
+                    "⚠️ Ссылка должна быть валидной ссылкой на пост ВК (начинаться с https://vk.com/wall-...). Попробуйте снова.")
+
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
+                                      **payload, url=text, step="type")
+
             kb = Keyboard(inline=True)
-            for t in TaskType: kb.add(
-                Callback(t.value, {"cmd": "set_type", "type": t.value})); kb.row()
-            return await message.answer("Выберите тип задания:", keyboard=kb.get_json())
-        except ValueError:
-            return await message.answer("Введите корректное число ID поста.")
-    if step == "date":
-        try:
-            d = datetime.strptime(message.text.strip(), "%d.%m.%Y").date()
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
-                                      date=d, step="duration")
-            return await message.answer("Введите количество дней активности (число):")
-        except ValueError:
-            return await message.answer("Формат: ДД.ММ.ГГГГ")
-    if step == "duration":
-        try:
-            dur = int(message.text.strip())
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
-                                      duration=dur, step="reward")
+            for t in TaskType:
+                kb.add(Callback(t.value, {"cmd": "set_type", "type": t.value}))
+                kb.row()
+            return await message.answer("📌 Выберите тип задания:", keyboard=kb.get_json())
+
+        elif step == "date":
+            d = datetime.strptime(text, "%d.%m.%Y").date()
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
+                                      **payload, date=d, step="duration")
+            return await message.answer("⏱ Введите количество дней активности (число):")
+
+        elif step == "duration":
+            dur = int(text)
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
+                                      **payload, duration=dur, step="reward")
             return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):")
-        except ValueError:
-            return await message.answer("Введите корректное число дней.")
-    if step == "reward":
-        try:
-            reward = int(message.text.strip())
+
+        elif step == "reward":
+            reward = int(text)
             if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.")
-            await online_task_service.create_task(date=payload["date"],
-                                                  duration=payload["duration"],
-                                                  type=payload["type"], reward=reward,
-                                                  post_id=payload["post_id"], group_id=group_id)
+
+            await online_task_service.create_task(
+                date=payload["date"],
+                duration=payload["duration"],
+                type=payload["type"],
+                reward=reward,
+                url=payload["url"]
+            )
             await state_dispenser.delete(message.from_id)
             return await message.answer("✅ Онлайн задача успешно создана!")
-        except ValueError:
-            return await message.answer("Введите целое число баллов.")
+
+        else:
+            return await message.answer("Неизвестный шаг создания задачи. Начните заново.")
+
+    except ValueError:
+        return await message.answer("⚠️ Неверный формат данных. Попробуйте снова.")
+    except Exception as e:
+        logger.error(f"Error creating online task: {e}")
+        return await message.answer(f"❌ Произошла ошибка: {e}")
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("set_type"))
@@ -88,7 +101,6 @@ async def set_online_type(event: GroupTypes.MessageEvent, state_dispenser: Built
 
 
 # --- СОЗДАНИЕ ОФФЛАЙН ЗАДАЧИ ---
-
 @router.message(text=["Создать офлайн задачу"])
 async def start_create_offline(
         message: Message,
