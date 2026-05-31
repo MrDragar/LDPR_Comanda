@@ -54,7 +54,7 @@ async def start(
     photo = await photo_uploader.upload('docs/sokol_stay.webp', peer_id=message.peer_id)
     await message.answer(attachment=photo)
     await message.answer(
-        "Здравствуйте! Я — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"
+        "Здравствуйте!\nЯ — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"
         "Вы на шаг ближе к тому, чтобы стать частью большой команды, "
         "которая меняет страну к лучшему.\n\n"
         "Чтобы начать путь активиста, получать баллы за задания и "

@@ -192,7 +192,7 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
 
     text = (f"📋 Задание #{task.id}\n"
             f"📌 Тип: {task.type.value}\n"
-            f"💰 Награда: {task.reward}\n"
+            f"🏆 Награда: {task.reward} баллов\n"
             f"🔗 Ссылка на задание: {task.url}")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_VIEW, tid=tid)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text,
@@ -218,13 +218,13 @@ async def view_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
             event_id=event.object.event_id, user_id=event.object.user_id,
             peer_id=event.object.peer_id)
 
-    task_date = task.date.strftime("%d.%m.%Y") if hasattr(task.date, "strftime") else str(task.date)
+    period_str = f"{task.start_date.strftime('%d.%m.%Y')} - {task.end_date.strftime('%d.%m.%Y')}"
     text = (f"📋 {task.title}\n"
-            f"📅 Дата: {task_date}\n"
+            f"📅 Период: {period_str}\n"
             f"📝 {task.description}\n"
             f"📍 {task.location}\n"
             f"📞 {task.contacts}\n"
-            f"💰 {task.reward} баллов")
+            f"🏆 {task.reward} баллов")
     kb = Keyboard(inline=True)
     kb.add(Callback("Принять", {"cmd": "accept_offline", "tid": tid}))
     kb.row().add(Callback("Назад к списку", {"cmd": "back_offline_list"}))

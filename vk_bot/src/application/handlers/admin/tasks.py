@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, date
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
@@ -53,6 +53,9 @@ async def process_online_fields(message: Message, state_dispenser: BuiltinStateD
 
         elif step == "date":
             d = datetime.strptime(text, "%d.%m.%Y").date()
+            if d < date.today():
+                return await message.answer(
+                    "⚠️ Дата начала не может быть в прошлом. Укажите сегодняшнюю или будущую дату.")
             await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
                                       **payload, date=d, step="duration")
             return await message.answer("⏱ Введите количество дней активности (число):")
@@ -163,21 +166,33 @@ async def process_offline_fields(
         # --- ШАГ 4: Контакты ---
         elif step == "contacts":
             await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                      **payload, contacts=text, step="date")
-            return await message.answer("📅 Введите дату проведения задачи (ДД.ММ.ГГГГ):")
+                                      **payload, contacts=text, step="start_date")
+            return await message.answer("📅 Введите дату начала проведения задачи (ДД.ММ.ГГГГ):")
 
         # --- ШАГ 5: Дата ---
-        elif step == "date":
+        elif step == "start_date":
             try:
-                task_date = datetime.strptime(text, "%d.%m.%Y").date()
+                start_date = datetime.strptime(text, "%d.%m.%Y").date()
+                if start_date < date.today():
+                    return await message.answer("⚠️ Дата начала не может быть в прошлом. Укажите сегодняшнюю или будущую дату.")
                 await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                          **payload, date=task_date, step="reward")
+                                          **payload, start_date=start_date, step="duration")
+                return await message.answer("⏱ Введите продолжительность задачи в днях (число):")
+            except ValueError:
+                return await message.answer("⚠️ Неверный формат даты. Используйте ДД.ММ.ГГГГ")
+
+        # --- ШАГ 6: Продолжительность ---
+        elif step == "duration":
+            try:
+                duration = int(text)
+                if duration <= 0:
+                    return await message.answer("⚠️ Продолжительность должна быть больше 0.")
+                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                          **payload, duration=duration, step="reward")
                 return await message.answer("💰 Введите количество баллов за выполнение:")
             except ValueError:
-                return await message.answer(
-                    "⚠️ Неверный формат даты. Пожалуйста, используйте ДД.ММ.ГГГГ (например, 25.12.2024)")
-
-        # --- ШАГ 6: Баллы -> Регион или Подтверждение ---
+                return await message.answer("⚠️ Введите целое число дней.")
+        # --- ШАГ 7: Баллы -> Регион или Подтверждение ---
         elif step == "reward":
             try:
                 reward = int(text)
@@ -237,16 +252,18 @@ async def process_offline_fields(
 
             if role == UserRole.STAFF_CA:
                 # Вызов сервиса с явным указанием региона
-                task = await offline_task_service.create_task_by_admin(
-                    region=p["region"], date=p["date"], reward=p["reward"],
-                    title=p["title"], description=p["description"],
-                    location=p["location"], contacts=p["contacts"]
-                )
+                if role == UserRole.STAFF_CA:
+                    task = await offline_task_service.create_task_by_admin(
+                        region=p["region"], start_date=p["start_date"], duration=p["duration"],
+                        reward=p["reward"],
+                        title=p["title"], description=p["description"],
+                        location=p["location"], contacts=p["contacts"]
+                    )
             else:
                 # Вызов сервиса с авто-определением региона по user_id
                 task = await offline_task_service.create_task_by_personal(
-                    user_id=message.from_id, user_source=Sources.VK, date=p["date"],
-                    reward=p["reward"],
+                    user_id=message.from_id, user_source=Sources.VK, start_date=p["start_date"], 
+                    duration=p["duration"], reward=p["reward"],
                     title=p["title"], description=p["description"],
                     location=p["location"], contacts=p["contacts"]
                 )
@@ -361,7 +378,8 @@ async def view_task(event: GroupTypes.MessageEvent, offline_task_service: IOffli
     tid = event.object.payload["tid"]
     task = await offline_task_service.get_task(tid)
     if not task: return
-    text = f"📋 {task.title}\n📍 {task.location}\n📅 {task.date.strftime('%d.%m.%Y')}\n💰 {task.reward} баллов"
+    period_str = f"{task.start_date.strftime('%d.%m.%Y')} - {task.end_date.strftime('%d.%m.%Y')}"
+    text = f"📋 {task.title}\n📍 {task.location}\n📅 Период: {period_str}\n🏆 {task.reward} баллов"
     kb = Keyboard(inline=True).add(Callback("Список участников", {"cmd": "list_users", "tid": tid, "page": 1})).row().add(Callback("Назад к списку задач", {"cmd": "back_to_verify"}))
     await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_USERS, tid=tid, page=1)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text, keyboard=kb.get_json(), random_id=0)

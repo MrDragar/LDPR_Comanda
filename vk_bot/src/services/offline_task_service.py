@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import date, timedelta
 from src.domain.entities.user import Sources, UserRole, UserGrade
 from src.domain.entities.task import OfflineTask, AcceptedOfflineTask, TaskStatus
 from src.domain.interfaces import IUnitOfWork, IOfflineTaskRepository, IAcceptedTaskRepository, \
@@ -90,23 +90,36 @@ class OfflineTaskService(IOfflineTaskService):
                                                             is_online=False)
             logger.info(f"User {user_id} cancelled offline task {task_id}")
 
-    async def create_task_by_admin(self, region: str, date: date, reward: int, title: str,
+    async def create_task_by_admin(self, region: str, start_date: date, duration: int, reward: int,
+                                   title: str,
                                    description: str, location: str, contacts: str) -> OfflineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
+        if duration <= 0: raise DomainError("Продолжительность должна быть больше нуля")
+
+        # Вычисляем дату окончания (включительно)
+        end_date = start_date + timedelta(days=duration - 1)
+
         async with self.__uow.atomic():
-            task = OfflineTask(id=0, region=region, date=date, reward=reward, title=title,
-                               description=description, location=location, contacts=contacts)
+            task = OfflineTask(id=0, region=region, start_date=start_date, end_date=end_date,
+                               reward=reward, title=title, description=description,
+                               location=location, contacts=contacts)
             return await self.__task_repo.create_task(task)
 
-    async def create_task_by_personal(self, user_id: int, user_source: Sources, date: date,
+    async def create_task_by_personal(self, user_id: int, user_source: Sources, start_date: date,
+                                      duration: int,
                                       reward: int, title: str, description: str, location: str,
                                       contacts: str) -> OfflineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
+        if duration <= 0: raise DomainError("Продолжительность должна быть больше нуля")
+
+        end_date = start_date + timedelta(days=duration - 1)
+
         async with self.__uow.atomic():
             user = await self.__user_repo.get_user(user_id, user_source)
             region = user.region
-            task = OfflineTask(id=0, region=region, date=date, reward=reward, title=title,
-                               description=description, location=location, contacts=contacts)
+            task = OfflineTask(id=0, region=region, start_date=start_date, end_date=end_date,
+                               reward=reward, title=title, description=description,
+                               location=location, contacts=contacts)
             return await self.__task_repo.create_task(task)
 
     async def get_in_progress_users(self, task_id: int, page: int, limit: int) -> tuple[

@@ -63,7 +63,7 @@ async def finish_registration(
         await ctx_api.messages.send(
             peer_id=peer_id,
             message=(
-                f"Поздравляем, вы успешно зарегистрированы.\n"
+                f"Поздравляем!\nВы успешно зарегистрированы.\n"
             ),
             random_id=0
         )

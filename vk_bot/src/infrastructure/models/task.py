@@ -20,7 +20,8 @@ class OfflineTaskORM(Base):
     __tablename__ = "offline_tasks"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     region: Mapped[str] = mapped_column(nullable=False)
-    date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
     reward: Mapped[int] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str] = mapped_column(nullable=False)

@@ -30,7 +30,8 @@ class OnlineTask:
 class OfflineTask:
     id: int
     region: str
-    date: date
+    start_date: date
+    end_date: date
     reward: int
     title: str
     description: str

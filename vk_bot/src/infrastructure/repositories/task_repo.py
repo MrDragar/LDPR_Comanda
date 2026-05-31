@@ -112,9 +112,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         session = self.__uow.get_session()
         base_stmt = select(OfflineTaskORM).where(
             and_(
-                OfflineTaskORM.date <= today + timedelta(days=10),
-                OfflineTaskORM.date >= today
-                # Пример: доступность в течение месяца
+                OfflineTaskORM.start_date <= today,
+                OfflineTaskORM.end_date >= today
             )
         )
         subquery = (
@@ -126,7 +125,7 @@ class OfflineTaskRepository(IOfflineTaskRepository):
             )
         )
         final_stmt = base_stmt.where(OfflineTaskORM.id.notin_(subquery)).order_by(
-            OfflineTaskORM.date)
+            OfflineTaskORM.start_date)
         count_stmt = select(func.count()).select_from(final_stmt.subquery())
         total = await session.scalar(count_stmt) or 0
 
@@ -135,7 +134,7 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         tasks_orm = result.scalars().all()
 
         tasks = [
-            OfflineTask(id=t.id, region=t.region, date=t.date, reward=t.reward, title=t.title,
+            OfflineTask(id=t.id, region=t.region, start_date=t.start_date, end_date=t.end_date, reward=t.reward, title=t.title,
                         description=t.description, location=t.location, contacts=t.contacts)
             for t in tasks_orm
         ]
@@ -147,7 +146,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         stmt = select(OfflineTaskORM).where(OfflineTaskORM.id == task_id)
         orm = await session.scalar(stmt)
         if not orm: return None
-        return OfflineTask(id=orm.id, region=orm.region, date=orm.date, reward=orm.reward,
+        return OfflineTask(id=orm.id, region=orm.region, start_date=orm.start_date,
+                           end_date=orm.end_date, reward=orm.reward,
                            title=orm.title, description=orm.description, location=orm.location,
                            contacts=orm.contacts)
 

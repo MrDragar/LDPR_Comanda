@@ -33,7 +33,7 @@ async def open_ce(message: Message, user_service: IUserService, closed_event_ser
     u = await user_service.get_user(message.from_id, Sources.VK)
     if u.grade != UserGrade.RESERVE:
         kb = Keyboard(one_time=True).add(Text("На главную"))
-        return await message.answer("Для разблокировки этого раздела необходим ранг \"Кадровый резерв ЛДПР\". Для его достижения выполните 40 оффлайн заданий", keyboard=kb.get_json())
+        return await message.answer("Для разблокировки этого раздела необходим ранг \"Кадровый резерв ЛДПР\". Для его достижения выполните 40 офлайн заданий", keyboard=kb.get_json())
 
     evs, total = await closed_event_service.list_events(u.region, 1)
     if not evs: return await message.answer("В вашем регионе пока нет закрытых мероприятий.")

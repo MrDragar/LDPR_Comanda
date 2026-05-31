@@ -22,7 +22,7 @@ async def check_sub(
         service_token: str
 ):
     text = message.text.lower().strip() if message.text else ""
-    if text == 'проверить':
+    if text == 'проверить' or text:
         try:
             api = API(token=service_token)
             await api.groups.approve_request(group_id=group_id, user_id=message.from_id)
@@ -33,17 +33,17 @@ async def check_sub(
                 "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР\n"
                 f"https://vk.com/club{group_id}\n"
             )
-            await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда отправите заявку на '
-                                 'вступление в сообщество. Бот автоматически её одобрит',
+            await message.answer('Нажмите кнопку "Проверить", когда отправите заявку на '
+                                 'вступление в сообщество.\nБот автоматически её одобрит',
                                  keyboard=get_check_keyboard())
             return
     else:
         await message.answer(
-            "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
+            "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР\n"
             f"https://vk.com/club{group_id}\n"
         )
-        await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда отправите заявку на '
-                             'вступление в сообщество. Бот автоматически её одобрит',
+        await message.answer('Напишите "Проверить", когда отправите заявку на '
+                             'вступление в сообщество.\nБот автоматически её одобрит',
                              keyboard=get_check_keyboard())
         return 
     state = await state_dispenser.get(message.from_id)
