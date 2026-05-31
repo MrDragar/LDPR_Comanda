@@ -39,3 +39,12 @@ class LearningRepository(ILearningRepository):
             session.add(orm)
             logger.info(f"Created learning attempt for user {attempt.user_id}")
         await session.flush()
+    
+    async def is_passed(self, user_id: int, user_source: Sources) -> bool:
+        session = self.__uow.get_session()
+        stmt = select(LearningTestAttemptORM).where(
+            LearningTestAttemptORM.user_id == user_id,
+            LearningTestAttemptORM.user_source == user_source,
+            LearningTestAttemptORM.is_passed == True
+        )
+        return (await session.scalar(stmt)) is not None

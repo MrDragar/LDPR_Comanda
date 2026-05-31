@@ -69,3 +69,7 @@ class LearningService(ILearningService):
                     "status": "fail",
                     "message": "К сожалению, вы не прошли этот тест. Но вы всегда можете пройти его ещё раз"
                 }
+
+    async def is_learning_passed(self, user_id: int, user_source: Sources) -> bool:
+        async with self.__uow.atomic():
+            return await self.__repo.is_passed(user_id, user_source)

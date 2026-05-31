@@ -116,6 +116,15 @@ class OrderRepository(IOrderRepository):
             OrderORM.product_id == product_id
         )
         return (await session.scalar(stmt) or 0) > 0
+
+    async def get_all_by_user(self, user_id: int, user_source: Sources) -> list[Order]:
+        session = self.__uow.get_session()
+        stmt = select(OrderORM).where(
+            OrderORM.user_id == user_id,
+            OrderORM.user_source == user_source
+        ).order_by(OrderORM.created_at.desc())
+        result = await session.execute(stmt)
+        return [self._orm_to_domain(o) for o in result.scalars().all()]
     
     @staticmethod
     def _orm_to_domain(orm: OrderORM) -> Order:

@@ -6,7 +6,7 @@ from src.domain.exceptions import UserNotFoundError, PhoneBadFormatError, \
     PhoneAlreadyExistsError, PhoneBadCountryError, EmailAlreadyExistsError, \
     EmailBadFormatError, FioFormatError, NotFoundRegionError, DomainError
 from src.domain.interfaces import IUnitOfWork, IUserRepository, \
-    IStringSorterRepository
+    IStringSorterRepository, ITransactionRepository
 from src.services.interfaces import IUserService
 
 
@@ -20,10 +20,14 @@ class UserService(IUserService):
     __MAX_REGION_SUGGESTIONS = 10
     __source: Sources
 
-    def __init__(self, user_repo: IUserRepository, uow: IUnitOfWork, string_sorter_repo: IStringSorterRepository, source: Sources):
+    def __init__(
+            self, user_repo: IUserRepository, uow: IUnitOfWork, 
+            string_sorter_repo: IStringSorterRepository, transaction_repo: ITransactionRepository,
+            source: Sources):
         self.__user_repo = user_repo
         self.__uow = uow
         self.__string_sorter_repo = string_sorter_repo
+        self.__transaction_repo = transaction_repo
         self.__source = source
 
     async def create_user(
@@ -190,3 +194,29 @@ class UserService(IUserService):
     async def update_user_grade(self, user_id: int, source: Sources, grade: UserGrade) -> None:
         async with self.__uow.atomic():
             await self.__user_repo.update_user_grade(user_id, source, grade)
+    
+    async def get_user_rating(self, user_id: int, source: Sources) -> int:
+        async with self.__uow.atomic():
+            return await self.__transaction_repo.get_user_rating(user_id, source)
+
+    async def get_global_top(self, limit: int = 10) -> list[dict]:
+        async with self.__uow.atomic():
+            top = await self.__transaction_repo.get_global_top(limit)
+            res = []
+            for uid, score in top:
+                try:
+                    u = await self.__user_repo.get_user(uid, self.__source)
+                    res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
+                except: pass
+            return res
+
+    async def get_local_top(self, region: str, limit: int = 10) -> list[dict]:
+        async with self.__uow.atomic():
+            top = await self.__transaction_repo.get_local_top(region, limit)
+            res = []
+            for uid, score in top:
+                try:
+                    u = await self.__user_repo.get_user(uid, self.__source)
+                    res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
+                except: pass
+            return res

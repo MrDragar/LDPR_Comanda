@@ -1,5 +1,5 @@
 from aiogram import Bot as TgBot
-from vkbottle import PhotoMessageUploader
+from vkbottle import PhotoMessageUploader, API
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch import BuiltinStateDispenser
 
@@ -18,25 +18,32 @@ async def check_sub(
         photo_uploader: PhotoMessageUploader,
         log_chat: str,
         tg_bot: TgBot,
-        group_id: int
+        group_id: int,
+        service_token: str
 ):
     text = message.text.lower().strip() if message.text else ""
     if text == 'проверить':
+        try:
+            api = API(token=service_token)
+            await api.groups.approve_request(group_id=group_id, user_id=message.from_id)
+        except:
+            ...
         if not await message.ctx_api.groups.is_member(group_id=group_id, user_id=message.from_id):
             await message.answer(
-                "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
+                "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР\n"
                 f"https://vk.com/club{group_id}\n"
             )
-            await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
+            await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда отправите заявку на '
+                                 'вступление в сообщество. Бот автоматически её одобрит',
                                  keyboard=get_check_keyboard())
             return
-
     else:
         await message.answer(
             "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
             f"https://vk.com/club{group_id}\n"
         )
-        await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
+        await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда отправите заявку на '
+                             'вступление в сообщество. Бот автоматически её одобрит',
                              keyboard=get_check_keyboard())
         return 
     state = await state_dispenser.get(message.from_id)

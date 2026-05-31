@@ -5,9 +5,9 @@ from src.domain.entities.user import Sources
 
 
 class OrderStatus(Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    PENDING = "ожидание"
+    COMPLETED = "завершено"
+    CANCELLED = "отклонено"
 
 
 @dataclass

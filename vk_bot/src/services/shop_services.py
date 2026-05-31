@@ -120,3 +120,7 @@ class OrderService(IOrderService):
                     msg += f"\nПосылка отправлена. Адрес: {order.delivery_address or ''}, ФИО: {order.delivery_fio or ''}"
                 await self.__notif.notify_user_vk(order.user_id, msg)
             return order
+    
+    async def get_user_orders_history(self, user_id: int, source: Sources) -> list[Order]:
+        async with self.__uow.atomic():
+            return await self.__repo.get_all_by_user(user_id, source)

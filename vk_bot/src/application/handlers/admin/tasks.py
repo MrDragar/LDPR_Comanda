@@ -369,22 +369,56 @@ async def view_task(event: GroupTypes.MessageEvent, offline_task_service: IOffli
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("list_users"))
-async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService, state_dispenser: BuiltinStateDispenser):
+async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService,
+                     user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     tid = event.object.payload["tid"]
     page = event.object.payload.get("page", 1)
+
     tasks_list, total = await offline_task_service.get_users_for_task(tid, page, PAGE_LIMIT)
     if not tasks_list:
-        return await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Нет пользователей в статусе 'in_progress'", random_id=0)
+        return await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="Нет пользователей в статусе 'in_progress'",
+            random_id=0
+        )
+
     kb = Keyboard(inline=True)
-    for t in tasks_list: kb.add(Callback(f"{t.user_id} ({t.status.value})", {"cmd": "check_user",
-                                                                             "tid": tid, "uid": t.user_id})); kb.row()
+    for t in tasks_list:
+        # Получаем пользователя для отображения ФИО
+        try:
+            u = await user_service.get_user(t.user_id, Sources.VK)
+            fio = f"{u.surname} {u.name}"
+        except Exception:
+            fio = f"Пользователь {t.user_id}"
+
+        # Ограничение VK API: текст Callback кнопки не может превышать 40 символов
+        if len(fio) > 40:
+            fio = fio[:37] + "..."
+
+        kb.add(Callback(fio, {"cmd": "check_user", "tid": tid, "uid": t.user_id}))
+        kb.row()
+
     kb.row()
-    if page > 1: kb.add(Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": page - 1}))
-    if len(tasks_list) == PAGE_LIMIT: kb.add(Callback("Вперёд ➡️", {"cmd": "list_users", "tid": tid, "page": page + 1}))
+    if page > 1:
+        kb.add(Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": page - 1}))
+    if len(tasks_list) == PAGE_LIMIT:
+        kb.add(Callback("Вперёд ➡️", {"cmd": "list_users", "tid": tid, "page": page + 1}))
+
     kb.add(Callback("К задаче", {"cmd": "view_task", "tid": tid}))
-    await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_USERS, tid=tid, page=page)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Участники со статусом IN_PROGRESS:", keyboard=kb.get_json(), random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
+
+    await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_USERS, tid=tid,
+                              page=page)
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message="Участники со статусом IN_PROGRESS:",
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id,
+        user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("check_user"))
@@ -408,3 +442,56 @@ async def verify_action(event: GroupTypes.MessageEvent, offline_task_service: IO
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Статус задачи #{p['tid']} для пользователя {p['uid']} изменён на {action.value}", random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
     await list_users(event, offline_task_service=offline_task_service, state_dispenser=state_dispenser)
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_to_tasks"))
+async def back_to_tasks(event: GroupTypes.MessageEvent, user_service: IUserService,
+                        offline_task_service: IOfflineTaskService,
+                        state_dispenser: BuiltinStateDispenser):
+    """Возврат к списку задач на проверку из просмотра конкретной задачи"""
+    u = await user_service.get_user(event.object.user_id, Sources.VK)
+
+    # Загружаем задачи и фильтруем по региону (как в start_verify)
+    tasks, total_pages = await offline_task_service.search_tasks(event.object.user_id, Sources.VK,
+                                                                 page=1)
+    region_filter = u.region if u.role != UserRole.STAFF_CA else None
+    tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
+
+    if not tasks:
+        await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="Нет активных задач для проверки.",
+            random_id=0
+        )
+    else:
+        kb = Keyboard(inline=True)
+        for t in tasks:
+            kb.add(Callback(f"#{t.id} {t.title[:15]}...", {"cmd": "view_task", "tid": t.id}))
+            kb.row()
+
+        kb.row()
+        if total_pages > 1:
+            kb.add(Callback("Вперёд ➡️", {"cmd": "next_verify"}))
+        kb.add(Callback("🔙 В меню", {"cmd": "back_to_menu"}))
+
+        # Восстанавливаем состояние списка задач
+        await state_dispenser.set(
+            event.object.peer_id,
+            AdminTaskStates.VERIFY_TASK_LIST,
+            page=1,
+            region=region_filter,
+            total_pages=total_pages
+        )
+        await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message=f"Выберите задачу для проверки (стр. 1/{total_pages}):",
+            keyboard=kb.get_json(),
+            random_id=0
+        )
+
+    # Обязательно отвечаем на callback, чтобы убрать "часики" на кнопке
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id,
+        user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )

@@ -77,7 +77,8 @@ class Container(DeclarativeContainer):
         tg_bot=tg_bot
     )
     user_service: providers.Factory[IUserService] = providers.Factory(
-        UserService, user_repo=user_repository, uow=uow, string_sorter_repo=string_sorter, source=Sources.VK
+        UserService, user_repo=user_repository, uow=uow, string_sorter_repo=string_sorter, 
+        source=Sources.VK, transaction_repo=transaction_repository
     )
     balance_service: providers.Factory[IBalanceService] = providers.Factory(
         BalanceService, uow=uow, user_repo=user_repository, transaction_repo=transaction_repository
@@ -104,11 +105,12 @@ class Container(DeclarativeContainer):
         vk_bot_link=config.VK_BOT_LINK,
         tg_bot_link=config.TG_BOT_LINK,
         source=Sources.VK,
-        image_path="docs/gifts.png"
+        image_path="docs/image.jpg"
     )
     log_chat: providers.Object[str] = providers.Object(config.log_chat)
     admin_ids: providers.Object[list[int]] = providers.Object(config.admin_ids)
     group_id: providers.Object[int] = providers.Object(config.group_id)
+    service_token: providers.Object[str] = providers.Object(config.SERVICE_TOKEN)
 
     learning_service: providers.Factory[ILearningService] = providers.Factory(
         LearningService, uow=uow, repo=learning_repository, 

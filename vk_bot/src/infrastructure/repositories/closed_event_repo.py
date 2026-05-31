@@ -9,6 +9,21 @@ logger = logging.getLogger(__name__)
 
 
 class ClosedEventRepository(IClosedEventRepository):
+    async def get_user_events(self, user_id: int, user_source: Sources) -> list[ClosedEvent]:
+        session = self.__uow.get_session()
+        stmt = select(ClosedEventORM).join(
+            EventRegistrationORM, EventRegistrationORM.event_id == ClosedEventORM.id
+        ).where(
+            EventRegistrationORM.user_id == user_id,
+            EventRegistrationORM.user_source == user_source
+        ).order_by(ClosedEventORM.date, ClosedEventORM.time)
+        result = await session.execute(stmt)
+        return [
+            ClosedEvent(id=o.id, region=o.region, title=o.title, description=o.description,
+                        location=o.location, date=o.date, time=o.time)
+            for o in result.scalars().all()
+        ]
+
     def __init__(self, uow: IDatabaseUnitOfWork):
         self.__uow = uow
 
@@ -77,3 +92,4 @@ class EventRegistrationRepository(IEventRegistrationRepository):
                               event_id=o.event_id)
             for o in result.scalars().all()
         ], total
+    

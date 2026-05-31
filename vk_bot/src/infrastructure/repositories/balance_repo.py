@@ -1,5 +1,5 @@
 import logging
-from sqlalchemy import select
+from sqlalchemy import select, func, text
 from src.domain.entities.task import Transaction
 from src.domain.entities.user import Sources
 from src.domain.interfaces import ITransactionRepository
@@ -35,3 +35,38 @@ class TransactionRepository(ITransactionRepository):
         await session.flush()
         transaction.id = orm.id
         return transaction
+
+    async def get_user_rating(self, user_id: int, user_source: Sources) -> int:
+        session = self.__uow.get_session()
+        stmt = select(func.coalesce(func.sum(TransactionORM.amount), 0)).where(
+            TransactionORM.user_id == user_id,
+            TransactionORM.user_source == user_source,
+            TransactionORM.amount > 0
+        )
+        return int(await session.scalar(stmt) or 0)
+
+    async def get_global_top(self, limit: int = 10) -> list[tuple[int, int]]:
+        session = self.__uow.get_session()
+        stmt = select(
+            TransactionORM.user_id,
+            func.coalesce(func.sum(TransactionORM.amount), 0).label("total")
+        ).where(
+            TransactionORM.amount > 0
+        ).group_by(TransactionORM.user_id).order_by(text("total DESC")).limit(limit)
+        result = await session.execute(stmt)
+        return [(row.user_id, int(row.total)) for row in result.all()]
+
+    async def get_local_top(self, region: str, limit: int = 10) -> list[tuple[int, int]]:
+        session = self.__uow.get_session()
+        stmt = select(
+            TransactionORM.user_id,
+            func.coalesce(func.sum(TransactionORM.amount), 0).label("total")
+        ).join(
+            UserORM,
+            (UserORM.id == TransactionORM.user_id) & (UserORM.source == TransactionORM.user_source)
+        ).where(
+            TransactionORM.amount > 0,
+            UserORM.region == region
+        ).group_by(TransactionORM.user_id).order_by(text("total DESC")).limit(limit)
+        result = await session.execute(stmt)
+        return [(row.user_id, int(row.total)) for row in result.all()]

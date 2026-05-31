@@ -5,15 +5,15 @@ from .user import Sources
 
 
 class TaskType(enum.Enum):
-    REPOST = "repost"
-    COMMENT = "comment"
-    LIKE = "like"
+    REPOST = "репост"
+    COMMENT = "комментарий"
+    LIKE = "лайк"
 
 
 class TaskStatus(enum.Enum):
-    IN_PROGRESS = "in_progress"
-    DECLINED = "declined"
-    ACCEPTED = "accepted"
+    IN_PROGRESS = "в процессе"
+    DECLINED = "отклонено"
+    ACCEPTED = "принято"
 
 
 @dataclass

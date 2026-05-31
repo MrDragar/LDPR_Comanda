@@ -44,5 +44,8 @@ class ClosedEventService(IClosedEventService):
     async def get_event(self, event_id: int) -> ClosedEvent | None:
         async with self.__uow.atomic():
             return await self.__event_repo.get_by_id(event_id)
-
+    
+    async def get_user_events(self, user_id: int, source: Sources) -> list[ClosedEvent]:
+        async with self.__uow.atomic():
+            return await self.__event_repo.get_user_events(user_id, source)
     
