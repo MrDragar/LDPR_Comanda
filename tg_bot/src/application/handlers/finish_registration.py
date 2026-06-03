@@ -40,12 +40,11 @@ async def finish_registration(
         types.FSInputFile('docs/sokol_like.webp')
     )
     await message.answer(
-        f"Поздравляем, вы успешно зарегистрированы.\nВаш уникальный номер - {number}.",
+        f"Поздравляем, вы успешно зарегистрированы.\n",
         parse_mode="HTML",
         reply_markup=types.ReplyKeyboardRemove()
     )
     await state.clear()
-    await message.answer("Пригласи ещё трёх друзей и получи дополнительные баллы")
     await message.bot.send_message(chat_id=log_chat, text=f"""
 Новый пользователь {'@' + user.username if user.username else '<нет username>'} зарегистрировался.
 Источник: ТГ
