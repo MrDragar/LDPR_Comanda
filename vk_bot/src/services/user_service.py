@@ -34,7 +34,7 @@ class UserService(IUserService):
             self, user_id: int, username: str | None,
             surname: str, name: str, is_member: bool,
             patronymic: str | None, birth_date: date,
-            phone_number: str, region: str, email: str,
+            phone_number: str, region: str, email: str | None,
             gender: str, city: str, wish_to_join: bool, home_address: str | None,
             news_subscription: bool
     ) -> User:
@@ -92,7 +92,9 @@ class UserService(IUserService):
                 raise PhoneAlreadyExistsError
         return phone_number
 
-    async def validate_email(self, email: str) -> str:
+    async def validate_email(self, email: str | None) -> str | None:
+        if email is None:
+            return email
         pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(pattern, email.strip()):
             raise EmailBadFormatError()
@@ -220,3 +222,7 @@ class UserService(IUserService):
                     res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
                 except: pass
             return res
+
+    async def get_users_by_role(self, role: UserRole) -> list[User]:
+        async with self.__uow.atomic():
+            return await self.__user_repo.get_users(role=role, source=self.__source)

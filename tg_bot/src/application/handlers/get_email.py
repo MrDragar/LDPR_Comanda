@@ -17,6 +17,8 @@ async def get_email(message: types.Message, state: FSMContext, user_service: IUs
     if not email:
         return
     logger.debug(f"Got email {email}")
+    if email.lower() in ['-', 'нет', 'нету', 'отсутствует', '']:
+        email = None
     try:
         email = await user_service.validate_email(email)
     except exceptions.EmailBadFormatError:

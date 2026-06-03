@@ -29,9 +29,9 @@ async def get_birth_date(message: types.Message, state: FSMContext):
         return
 
     age = datetime.now().date().year - birth_date.year
-    if age < 18:
+    if age < 14:
         await message.reply(
-            "Вам должно быть не менее 18 лет. Попробуйте еще раз.")
+            "Вам должно быть не менее 14 лет. Попробуйте еще раз.")
         return
     if age > 120:
         await message.reply(

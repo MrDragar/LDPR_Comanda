@@ -37,6 +37,7 @@ async def start(
     except:
         ...
     if await user_service.is_user_exists(message.from_id):
+        return await message.answer("Бот находится на этапе разрабоки")  # УДАЛИТЬ СТРОКУ
         try:
             role = await user_service.get_user_role(message.from_id, Sources.VK)
         except Exception:
@@ -50,9 +51,11 @@ async def start(
                 parsed_ref[0], parsed_ref[1],
                 message.peer_id, Sources.VK
             )
-
-    photo = await photo_uploader.upload('docs/sokol_stay.webp', peer_id=message.peer_id)
-    await message.answer(attachment=photo)
+    try:
+        photo = await photo_uploader.upload('docs/sokol_stay.webp', peer_id=message.peer_id)
+        await message.answer(attachment=photo)
+    except:
+        ...
     await message.answer(
         "Здравствуйте!\nЯ — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"
         "Вы на шаг ближе к тому, чтобы стать частью большой команды, "

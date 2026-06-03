@@ -10,7 +10,7 @@ class IUserService(ABC):
             self, user_id: int, username: str | None,
             surname: str, name: str, is_member: bool,
             patronymic: str | None, birth_date: date,
-            phone_number: str, region: str, email: str,
+            phone_number: str, region: str, email: str | None,
             gender: str, city: str, wish_to_join: bool, home_address: str | None,
             news_subscription: bool
     ) -> User:
@@ -25,7 +25,7 @@ class IUserService(ABC):
         ...
 
     @abstractmethod
-    async def validate_email(self, email: str) -> str:
+    async def validate_email(self, email: str | None) -> str | None:
         ...
 
     @abstractmethod

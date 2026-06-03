@@ -20,7 +20,7 @@ class UserORM(Base):
     birth_date: Mapped[date] = mapped_column("birth_date", Date, nullable=False)
     phone_number: Mapped[str] = mapped_column("phone_number", nullable=False, unique=True)
     region: Mapped[str] = mapped_column("region", nullable=False)
-    email: Mapped[str] = mapped_column("email", nullable=False)
+    email: Mapped[str] = mapped_column("email", nullable=True)
     gender: Mapped[str] = mapped_column("gender", nullable=False)
     city: Mapped[str] = mapped_column("city", nullable=False)
     wish_to_join: Mapped[bool] = mapped_column("wish_to_join", nullable=False)

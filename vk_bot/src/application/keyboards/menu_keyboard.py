@@ -1,11 +1,12 @@
 from vkbottle import Keyboard, Text
 from src.domain.entities.user import UserRole
+import random
 
 
 def get_role_menu_keyboard(role: UserRole | None) -> str:
     """Генерирует главное меню в зависимости от роли пользователя."""
     kb = Keyboard(one_time=False)
-    kb.add(Text("Выполнить задание")).row()
+    kb.add(Text("Выполнить задание", payload=f"{random.randint(0,1000000)}")).row()
     kb.add(Text("Мои задания")).row()
     kb.add(Text("Личный кабинет")).row()
     kb.add(Text("Обучение")).row()
@@ -27,5 +28,6 @@ def get_role_menu_keyboard(role: UserRole | None) -> str:
         kb.add(Text("Создать онлайн задачу"))
         kb.add(Text("Добавить товар"))
         kb.add(Text("Скрыть товар")).row()
+        kb.add(Text("Рассылка координаторам РО")).row()
 
     return kb.get_json()

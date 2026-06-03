@@ -28,6 +28,7 @@ async def get_phone_number(message: types.Message, state: FSMContext, user_servi
     except:
         return message.reply("Произошла неизвестная ошибка")
     await state.update_data(phone=phone)
-    await message.reply("Введите адрес вашей электронной почты")
+    await message.reply("Введите адрес вашей электронной почты (если нет почты, отправьте прочерк '-' или слово 'нет')")
+
     await state.set_state(RegistrationStates.email)
 

@@ -1,6 +1,4 @@
 import logging
-from aiogram import Bot as TgBot
-from aiogram.client.session.aiohttp import AiohttpSession
 from vkbottle import Bot, DocMessagesUploader, PhotoMessageUploader
 from src.application.handlers import full_labeler as root_labeler
 from src.application.middlewares import DIProvideMiddleware

@@ -49,16 +49,18 @@ async def finish_registration(
             home_address=state_payload.get('home_address'),
             news_subscription=state_payload['news_subscription']
         )
-
-        photo = await photo_uploader.upload(
-            'docs/sokol_like.webp',
-            peer_id=peer_id
-        )
-        await ctx_api.messages.send(
-            peer_id=peer_id,
-            attachment=photo,
-            random_id=0
-        )
+        try:
+            photo = await photo_uploader.upload(
+                'docs/sokol_like.webp',
+                peer_id=peer_id
+            )
+            await ctx_api.messages.send(
+                peer_id=peer_id,
+                attachment=photo,
+                random_id=0
+            )
+        except:
+            ...
 
         await ctx_api.messages.send(
             peer_id=peer_id,

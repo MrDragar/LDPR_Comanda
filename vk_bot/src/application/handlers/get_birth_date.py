@@ -18,8 +18,8 @@ async def get_birth_date(message: Message, state_dispenser: BuiltinStateDispense
 
         if birth_date > now:
             return "Дата рождения не может быть в будущем."
-        if age < 18:
-            return "Регистрация доступна только лицам старше 18 лет."
+        if age < 14:
+            return "Регистрация доступна только лицам старше 14 лет."
         if age > 120:
             return "Введите корректную дату рождения."
 

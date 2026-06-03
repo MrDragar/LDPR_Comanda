@@ -32,7 +32,7 @@ class User:
     is_member: bool
     username: str | None
     surname: str
-    name: str
+    name: str | None
     patronymic: str
     birth_date: date
     phone_number: str

@@ -88,7 +88,9 @@ class UserService(IUserService):
                 raise PhoneAlreadyExistsError
         return phone_number
 
-    async def validate_email(self, email: str) -> str:
+    async def validate_email(self, email: str | None) -> str | None:
+        if email is None:
+            return email
         pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(pattern, email.strip()):
             raise EmailBadFormatError()

@@ -23,6 +23,8 @@ class RegistrationStates(BaseStateGroup):
 class PostsStates(BaseStateGroup):
     GET_MESSAGE = "get_message"
     CONFIRM = "confirm"
+    GET_COORD_MESSAGE = "get_coord_message"
+    CONFIRM_COORD = "confirm_coord"
 
 
 class AdminCAStates(BaseStateGroup):

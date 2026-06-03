@@ -11,9 +11,13 @@ router = BotLabeler()
 async def get_email(message: Message, user_service: IUserService,
                     state_dispenser: BuiltinStateDispenser):
     if not message.text: return
-
+    email = message.text.lower()
+    if email in ['-', 'нет', 'нету', 'отсутствует', '']:
+        email = None
+    else:
+        email = email.strip()
     try:
-        email = await user_service.validate_email(message.text.strip())
+        email = await user_service.validate_email(email)
         state = await state_dispenser.get(message.from_id)
         await state_dispenser.set(message.from_id,
                                   RegistrationStates.REGION_BY_TEXT,
