@@ -75,3 +75,8 @@ class IReferralRepository(ABC):
     @abstractmethod
     async def get_count_invitees(self, inviter_id: int, inviter_source: Sources) -> int:
         ...
+
+
+class IActiveUserRepository(ABC):
+    @abstractmethod
+    async def save_if_not_exists(self, user_id: int, user_source: Sources) -> None: ...

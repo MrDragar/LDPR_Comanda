@@ -270,3 +270,8 @@ class IEventRegistrationRepository(ABC):
     @abstractmethod
     async def get_participants(self, event_id: int, skip: int, limit: int) -> tuple[
         list[EventRegistration], int]: ...
+
+
+class IActiveUserRepository(ABC):
+    @abstractmethod
+    async def save_if_not_exists(self, user_id: int, user_source: Sources) -> None: ...

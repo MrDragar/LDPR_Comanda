@@ -9,7 +9,7 @@ from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources
-from src.services.interfaces import IUserService, IReferralService
+from src.services.interfaces import IUserService, IReferralService, IActiveUserService
 
 router = BotLabeler()
 start_command_router = BotLabeler()
@@ -33,7 +33,7 @@ async def hello_handler(message: Message):
 async def start(
         message: Message, user_service: IUserService, 
         state_dispenser: BuiltinStateDispenser, photo_uploader: PhotoMessageUploader,
-        referral_service: IReferralService
+        referral_service: IReferralService, active_user_service: IActiveUserService
 ):
     if message.peer_id < 0:
         return
@@ -41,8 +41,9 @@ async def start(
         await state_dispenser.delete(message.from_id)
     except:
         ...
+    await active_user_service.log_active_user(message.from_user.id, Sources.VK)
     if await user_service.is_user_exists(message.from_id):
-        return await message.answer("Бот находится на этапе разрабоки")  # УДАЛИТЬ СТРОКУ
+        # return await message.answer("Бот находится на этапе разрабоки")  # УДАЛИТЬ СТРОКУ
         try:
             role = await user_service.get_user_role(message.from_id, Sources.VK)
         except Exception:

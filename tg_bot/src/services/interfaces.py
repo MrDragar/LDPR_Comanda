@@ -88,3 +88,8 @@ class IReferralLinkService(ABC):
     @abstractmethod
     def generate_post(self, user_id: int) -> Repost:
         ...
+
+
+class IActiveUserService(ABC):
+    @abstractmethod
+    async def log_active_user(self, user_id: int, user_source: Sources) -> None: ...

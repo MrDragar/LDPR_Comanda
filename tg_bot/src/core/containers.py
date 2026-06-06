@@ -1,17 +1,19 @@
 from src.core.di import DeclarativeContainer, providers
 from src.domain.entities import Sources
 from src.domain.interfaces import IUnitOfWork, IUserRepository, IStringSorterRepository, \
-    IParticipationRepository, IReferralRepository
+    IParticipationRepository, IReferralRepository, IActiveUserRepository
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import UserRepository, \
-    FuzzywuzzyRepository, ParticipationRepository, ReferralRepository
+    FuzzywuzzyRepository, ParticipationRepository, ReferralRepository, ActiveUserRepository
 from src.services import UserService
+from src.services.active_user_service import ActiveUserService
 from src.services.interfaces import IUserService
 from src.core import config
 from src.services.participation_service import ParticipationService
 from src.services.referral_link_service import ReferralLinkService
 from src.services.referral_service import ReferralService
+from vk_bot.src.services.interfaces import IActiveUserService
 
 
 class Container(DeclarativeContainer):
@@ -30,6 +32,9 @@ class Container(DeclarativeContainer):
         ReferralRepository, uow=uow)
     string_sorter: providers.Factory[IStringSorterRepository] = providers.Factory(
         FuzzywuzzyRepository
+    )
+    active_user_repository: providers.Factory[IActiveUserRepository] = providers.Factory(
+        ActiveUserRepository, uow=uow
     )
     user_service: providers.Factory[IUserService] = providers.Factory(
         UserService, user_repo=user_repository, uow=uow, string_sorter_repo=string_sorter, source=Sources.TG
@@ -53,6 +58,8 @@ class Container(DeclarativeContainer):
         source=Sources.TG,
         image_path="docs/gifts.png"
     )
-
+    active_user_service: providers.Factory[IActiveUserService] = providers.Factory(
+        ActiveUserService, uow=uow, repo=active_user_repository
+    )
     log_chat: providers.Object[str] = providers.Object(config.log_chat)
     admin_ids: providers.Object[list[int]] = providers.Object(config.admin_ids)

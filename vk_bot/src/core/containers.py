@@ -10,7 +10,7 @@ from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRe
                                    ITransactionRepository, ILearningRepository,
                                    IVKTaskVerificationRepository, IS3Storage, IProductRepository,
                                    IOrderRepository, IClosedEventRepository,
-                                   IEventRegistrationRepository)
+                                   IEventRegistrationRepository, IActiveUserRepository)
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepository,
@@ -18,13 +18,16 @@ from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepositor
                                              AcceptedTaskRepository, OfflineTaskRepository,
                                              OnlineTaskRepository, LearningRepository,
                                              VKTaskVerificationRepository,
-                                             EventRegistrationRepository, ClosedEventRepository)
+                                             EventRegistrationRepository, ClosedEventRepository,
+                                             ActiveUserRepository)
 from src.infrastructure.repositories.s3_storage import S3Storage
 from src.infrastructure.repositories.shop_repo import OrderRepository, ProductRepository
 from src.services import UserService, BalanceService, OnlineTaskService, OfflineTaskService
+from src.services.active_user_service import ActiveUserService
 from src.services.closed_event_service import ClosedEventService
 from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTaskService, \
-    IBalanceService, ILearningService, IProductService, IOrderService, IClosedEventService
+    IBalanceService, ILearningService, IProductService, IOrderService, IClosedEventService, \
+    IActiveUserService
 from src.core import config
 from src.services.learning_service import LearningService
 from src.services.notification_service import NotificationService
@@ -71,6 +74,10 @@ class Container(DeclarativeContainer):
     product_repository: providers.Factory[IProductRepository] = providers.Factory(ProductRepository,
                                                                                   uow=uow)
     order_repository: providers.Factory[IOrderRepository] = providers.Factory(OrderRepository, uow=uow)
+    
+    active_user_repository: providers.Factory[IActiveUserRepository] = providers.Factory(
+        ActiveUserRepository, uow=uow
+    )
     notification_service = providers.Factory(
         NotificationService,
         vk_bot=bot,
@@ -127,4 +134,7 @@ class Container(DeclarativeContainer):
     )
     closed_event_service: providers.Factory[IClosedEventService] = providers.Factory(
         ClosedEventService, uow=uow, event_repo=event_repository, reg_repo=reg_repository, user_repo=user_repository
+    )
+    active_user_service: providers.Factory[IActiveUserService] = providers.Factory(
+        ActiveUserService, uow=uow, repo=active_user_repository
     )
