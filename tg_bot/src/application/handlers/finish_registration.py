@@ -34,8 +34,6 @@ async def finish_registration(
         gender, city, wish_to_join, home_address, news_subscription
     )
 
-    number = await participation_service.activate_participation(user.id, user.source)
-
     await message.answer_sticker(
         types.FSInputFile('docs/sokol_like.webp')
     )

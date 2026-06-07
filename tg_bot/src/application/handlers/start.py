@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 @router.message(IsRegisteredFilter())
 @start_command_router.message(filters.CommandStart(), IsRegisteredFilter())
-@start_command_router.message(F.text == 'Отмена', IsParticipantFilter())
+@start_command_router.message(F.text == 'Отмена', IsRegisteredFilter())
 async def participant_start(
         message: types.Message,
 ):
