@@ -8,12 +8,11 @@ from src.infrastructure.repositories import UserRepository, \
     FuzzywuzzyRepository, ParticipationRepository, ReferralRepository, ActiveUserRepository
 from src.services import UserService
 from src.services.active_user_service import ActiveUserService
-from src.services.interfaces import IUserService
+from src.services.interfaces import IUserService, IActiveUserService
 from src.core import config
 from src.services.participation_service import ParticipationService
 from src.services.referral_link_service import ReferralLinkService
 from src.services.referral_service import ReferralService
-from vk_bot.src.services.interfaces import IActiveUserService
 
 
 class Container(DeclarativeContainer):
