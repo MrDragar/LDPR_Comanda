@@ -51,7 +51,7 @@ async def finish_lottery(
 
         await message.answer(
             f"🎉 Поздравляем! Вы успешно зарегистрированы для участия в розыгрыше!\n\n"
-            f"Ваш уникальный номер: {p_id}\n\n"
+            f"Ваш уникальный номер: {p_id}Д\n\n"
             f"Сохраните его для проверки результатов.",
             keyboard=get_menu_kb()
         )
@@ -73,7 +73,7 @@ async def lottery_intro(message: Message, participation_service: IParticipationS
         is_participant = True
     if is_participant:
         ids = await participation_service.get_all_participation_ids(message.from_id, Sources.VK)
-        nums = "\n".join([f"- {i}" for i in ids])
+        nums = "\n".join([f"- {i}Д" for i in ids])
         return await message.answer(
             f"✅ Вы уже участвуете в розыгрыше!\n\nВаши уникальные номера:\n{nums}",
             keyboard=get_menu_kb()
