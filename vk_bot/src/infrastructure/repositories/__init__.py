@@ -8,11 +8,13 @@ from .learning import LearningRepository
 from .vk_verification import VKTaskVerificationRepository 
 from .closed_event_repo import ClosedEventRepository, EventRegistrationRepository
 from .active_user import ActiveUserRepository
+from .participation import ParticipationRepository
 
 
 __all__ = [
     'UserRepository', 'LevenshteinRepository', 'FuzzywuzzyRepository', 'ReferralRepository',
     'OnlineTaskRepository', 'OfflineTaskRepository', 'AcceptedTaskRepository',
     'TransactionRepository', 'LearningRepository', 'VKTaskVerificationRepository',
-    'ClosedEventRepository', 'EventRegistrationRepository', 'ActiveUserRepository'
+    'ClosedEventRepository', 'EventRegistrationRepository', 'ActiveUserRepository',
+    'ParticipationRepository'
 ]

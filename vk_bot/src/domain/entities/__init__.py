@@ -5,6 +5,7 @@ from .learning import LearningTestAttempt
 from .shop import Product, Order, OrderStatus
 from .closed_event import ClosedEvent, EventRegistration
 from .active_user import ActiveUser
+from .participation import Participation
 
 
 __all__ = [

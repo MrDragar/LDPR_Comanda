@@ -27,6 +27,22 @@ class UserRepository(IUserRepository):
         await session.refresh(user_orm)
         return await user_orm.to_domain()
 
+    async def update_user_profile(self, user_id: int, source: Sources, **kwargs) -> User:
+        session = self.__uow.get_session()
+        stmt = select(UserORM).where(UserORM.id == user_id, UserORM.source == source)
+        user_orm = await session.scalar(stmt)
+        if user_orm is None:
+            raise exceptions.UserNotFoundError()
+
+        for field, value in kwargs.items():
+            if hasattr(user_orm, field):
+                setattr(user_orm, field, value)
+
+        await session.commit()
+        await session.refresh(user_orm)
+        logger.info(f"Updated profile for user {user_id}: {list(kwargs.keys())}")
+        return await user_orm.to_domain()
+
     async def get_user(self, user_id: int, source: Sources) -> User:
         logger.debug(f"Getting user by id={user_id}")
         session = self.__uow.get_session()

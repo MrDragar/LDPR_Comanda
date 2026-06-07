@@ -1,29 +1,26 @@
 from datetime import date, datetime, UTC
-
 from sqlalchemy import Date, DateTime, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
-
 from src.domain.entities.user import User, Sources, UserRole, UserGrade
 from src.infrastructure.database import Base
 
 
 class UserORM(Base):
     __tablename__ = "users"
-
     id: Mapped[int] = mapped_column("id", primary_key=True)
     source: Mapped[Sources] = mapped_column(SQLEnum(Sources), name="source", primary_key=True)
-    is_member: Mapped[bool] = mapped_column("is_member", nullable=False)
+    is_member: Mapped[bool] = mapped_column("is_member", nullable=True)
     username: Mapped[str] = mapped_column("username", nullable=True)
     surname: Mapped[str] = mapped_column("surname", nullable=False)
-    name: Mapped[str] = mapped_column("name", nullable=False)
+    name: Mapped[str] = mapped_column("name", nullable=True)
     patronymic: Mapped[str] = mapped_column("patronymic", nullable=True)
-    birth_date: Mapped[date] = mapped_column("birth_date", Date, nullable=False)
+    birth_date: Mapped[date] = mapped_column("birth_date", Date, nullable=True)
     phone_number: Mapped[str] = mapped_column("phone_number", nullable=False, unique=True)
-    region: Mapped[str] = mapped_column("region", nullable=False)
+    region: Mapped[str] = mapped_column("region", nullable=True)
     email: Mapped[str] = mapped_column("email", nullable=True)
-    gender: Mapped[str] = mapped_column("gender", nullable=False)
-    city: Mapped[str] = mapped_column("city", nullable=False)
-    wish_to_join: Mapped[bool] = mapped_column("wish_to_join", nullable=False)
+    gender: Mapped[str] = mapped_column("gender", nullable=True)
+    city: Mapped[str] = mapped_column("city", nullable=True)
+    wish_to_join: Mapped[bool] = mapped_column("wish_to_join", nullable=True)
     home_address: Mapped[str] = mapped_column("home_address", nullable=True)
     news_subscription: Mapped[bool] = mapped_column("news_subscription", nullable=False)
     balance: Mapped[int] = mapped_column("balance", nullable=False, default=0)
@@ -56,4 +53,3 @@ class UserORM(Base):
             home_address=user.home_address, news_subscription=user.news_subscription,
             balance=user.balance, role=user.role, grade=user.grade, created_at=user.created_at
         )
-

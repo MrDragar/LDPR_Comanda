@@ -31,24 +31,41 @@ class UserService(IUserService):
         self.__source = source
 
     async def create_user(
-            self, user_id: int, username: str | None,
-            surname: str, name: str, is_member: bool,
-            patronymic: str | None, birth_date: date,
-            phone_number: str, region: str, email: str | None,
-            gender: str, city: str, wish_to_join: bool, home_address: str | None,
-            news_subscription: bool
+        self, user_id: int, username: str | None, surname: str, name: str | None,
+        patronymic: str | None, phone_number: str, region: str | None,
+        news_subscription: bool
     ) -> User:
         user = User(
-            id=user_id, source=self.__source, username=username, phone_number=phone_number,
+            id=user_id, source=self.__source, username=username,
             surname=surname, name=name, patronymic=patronymic,
-            birth_date=birth_date, region=region, email=email,
-            gender=gender, city=city, wish_to_join=wish_to_join,
-            home_address=home_address, is_member=is_member, news_subscription=news_subscription
+            phone_number=phone_number, region=region,
+            news_subscription=news_subscription
         )
         async with self.__uow.atomic():
-            await self.__user_repo.create_user(user)
-        return user
-    
+            return await self.__user_repo.create_user(user)
+
+    async def update_user_profile(
+        self, user_id: int, source: Sources,
+        birth_date: date | None = None,
+        email: str | None = None,
+        gender: str | None = None,
+        city: str | None = None,
+        wish_to_join: bool | None = None,
+        is_member: bool | None = None, 
+        home_address: str | None = None
+    ) -> User:
+        updates = {
+            'birth_date': birth_date,
+            'email': email,
+            'gender': gender,
+            'city': city,
+            'wish_to_join': wish_to_join,
+            'is_member': is_member,
+            'home_address': home_address
+        }
+        async with self.__uow.atomic():
+            return await self.__user_repo.update_user_profile(user_id, source, **updates)
+
     async def get_user_region(self, user_id: int) -> str:
         async with self.__uow.atomic():
             try:

@@ -68,16 +68,10 @@ async def select_region_callback(
     region_full = await user_service.get_region_by_prefix(payload["region"])
     current_payload = state_peer.payload or {}
 
-    await state_dispenser.set(
-        event.object.peer_id,
-        RegistrationStates.CITY,
-        **current_payload,
-        region=region_full
-    )
-
+    await state_dispenser.set(event.object.peer_id, RegistrationStates.NEWS_SUBSCRIPTION, **current_payload, region=region_full)
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
-        message=f"Вы выбрали: {region_full}\nТеперь укажите ваш город или населённый пункт:",
+        message=f"Вы выбрали: {region_full}\nХотели бы вы получать информацию о инициативах и мероприятиях ЛДПР? (Да/Нет)",
         random_id=0
     )
 

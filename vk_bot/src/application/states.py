@@ -3,21 +3,25 @@ from vkbottle import BaseStateGroup
 
 class RegistrationStates(BaseStateGroup):
     PERSONAL_DATA = "personal_data"
-    MEMBERSHIP = "membership"
     SURNAME = "surname"
     NAME = "name"
-    GENDER = "gender"
     PATRONYMIC = "patronymic"
-    BIRTH_DATE = "birth_date"
     PHONE = "phone"
-    EMAIL = "email"
     REGION_BY_TEXT = "region_by_text"
     REGION_BY_BUTTON = "region_by_button"
-    CITY = "city"
-    WISH_TO_JOIN = "wish_to_join"
-    HOME_ADDRESS = "home_address"
     NEWS_SUBSCRIPTION = "news_subscription"
     CHECK_SUBSCRIPTION = "check_subscription"
+
+
+class LotteryStates(BaseStateGroup):
+    INTRO = "lottery_intro"
+    IS_MEMBER = "lottery_is_member"
+    BIRTH_DATE = "lottery_birth_date"
+    EMAIL = "lottery_email"
+    GENDER = "lottery_gender"
+    CITY = "lottery_city"
+    WISH_TO_JOIN = "lottery_wish_to_join"
+    HOME_ADDRESS = "lottery_home_address"
 
 
 class PostsStates(BaseStateGroup):

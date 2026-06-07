@@ -36,18 +36,11 @@ async def finish_registration(
             user_id=peer_id,
             username=None,
             surname=state_payload['surname'],
-            name=state_payload['name'],
-            is_member=state_payload['is_member'],
+            name=state_payload.get('name'),
             patronymic=state_payload.get('patronymic'),
-            birth_date=state_payload['birth_date'],
-            phone_number=state_payload['phone'],
-            region=state_payload['region'],
-            email=state_payload['email'],
-            gender=state_payload['gender'],
-            city=state_payload['city'],
-            wish_to_join=state_payload.get('wish_to_join', False),
-            home_address=state_payload.get('home_address'),
-            news_subscription=state_payload['news_subscription']
+            phone_number=state_payload.get('phone'),
+            region=state_payload.get('region'),
+            news_subscription=state_payload.get('news_subscription', False)
         )
         try:
             photo = await photo_uploader.upload(
@@ -72,13 +65,6 @@ async def finish_registration(
 
         await ctx_api.messages.send(
             peer_id=peer_id,
-            message=(
-                "Приглашай друзей и получай дополнительные баллы"
-            ),
-            random_id=0
-        )
-        await ctx_api.messages.send(
-            peer_id=peer_id,
             message="Меню",
             keyboard=get_role_menu_keyboard(user.role),
             random_id=0
@@ -88,14 +74,8 @@ async def finish_registration(
             f"Источник: ВК\n"
             f"Является членом партии: {'Да' if user.is_member else 'Нет'}\n"
             f"ФИО: {user.surname} {user.name} {user.patronymic or ''}\n"
-            f"Пол: {user.gender}\n"
-            f"Дата рождения: {user.birth_date.strftime('%d.%m.%Y')}\n"
-            f"Почта: {user.email}\n"
             f"Номер телефона: {user.phone_number}\n"
             f"Регион: {user.region}\n"
-            f"Город: {user.city}\n"
-            f"Хочет вступить в партию ЛДПР: {'Да' if user.wish_to_join else 'Нет'}\n"
-            f"Домашний адрес: {user.home_address or ''}\n"
             f"Подписка на новости: {'Есть' if user.news_subscription else 'Нет'}\n\n"
             
             f"ID участника: {user.id}\n"

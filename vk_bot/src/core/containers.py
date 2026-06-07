@@ -10,7 +10,8 @@ from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRe
                                    ITransactionRepository, ILearningRepository,
                                    IVKTaskVerificationRepository, IS3Storage, IProductRepository,
                                    IOrderRepository, IClosedEventRepository,
-                                   IEventRegistrationRepository, IActiveUserRepository)
+                                   IEventRegistrationRepository, IActiveUserRepository,
+                                   IParticipationRepository)
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepository,
@@ -19,7 +20,7 @@ from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepositor
                                              OnlineTaskRepository, LearningRepository,
                                              VKTaskVerificationRepository,
                                              EventRegistrationRepository, ClosedEventRepository,
-                                             ActiveUserRepository)
+                                             ActiveUserRepository, ParticipationRepository)
 from src.infrastructure.repositories.s3_storage import S3Storage
 from src.infrastructure.repositories.shop_repo import OrderRepository, ProductRepository
 from src.services import UserService, BalanceService, OnlineTaskService, OfflineTaskService
@@ -31,6 +32,7 @@ from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTa
 from src.core import config
 from src.services.learning_service import LearningService
 from src.services.notification_service import NotificationService
+from src.services.participation_service import ParticipationService
 from src.services.referral_link_service import ReferralLinkService
 from src.services.referral_service import ReferralService
 from src.services.shop_services import ProductService, OrderService
@@ -53,6 +55,8 @@ class Container(DeclarativeContainer):
     learning_repository: providers.Factory[ILearningRepository] = providers.Factory(
         LearningRepository, uow=uow
     )
+    participation_repository: providers.Factory[IParticipationRepository]\
+        = providers.Factory(ParticipationRepository, uow=uow)
     user_repository: providers.Factory[IUserRepository] = providers.Factory(
         UserRepository, uow=uow
     )
@@ -131,6 +135,11 @@ class Container(DeclarativeContainer):
     order_service: providers.Factory[IOrderService] = providers.Factory(
         OrderService, uow=uow, repo=order_repository, prod_repo=product_repository,
         balance_svc=balance_service, user_svc=user_service, notif_svc=notification_service
+    )
+    participation_service = providers.Factory(
+        ParticipationService,
+        uow=uow,
+        participation_repo=participation_repository
     )
     closed_event_service: providers.Factory[IClosedEventService] = providers.Factory(
         ClosedEventService, uow=uow, event_repo=event_repository, reg_repo=reg_repository, user_repo=user_repository

@@ -4,6 +4,7 @@ from .task import OnlineTaskORM, OfflineTaskORM, AcceptedOnlineTaskORM, Accepted
 from .learning import LearningTestAttemptORM
 from .closed_event import ClosedEventORM, EventRegistrationORM
 from .active_user import ActiveUserORM
+from .participation import ParticipationORM
 
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "OnlineTaskORM", "OfflineTaskORM", 
     "AcceptedOnlineTaskORM", "AcceptedOfflineTaskORM", 
     "TransactionORM", "LearningTestAttemptORM",
-    "ClosedEventORM", "EventRegistrationORM", "ActiveUserORM"
+    "ClosedEventORM", "EventRegistrationORM", "ActiveUserORM",
+    "ParticipationORM"
 ]

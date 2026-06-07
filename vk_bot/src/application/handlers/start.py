@@ -41,7 +41,7 @@ async def start(
         await state_dispenser.delete(message.from_id)
     except:
         ...
-    await active_user_service.log_active_user(message.from_user.id, Sources.VK)
+    await active_user_service.log_active_user(message.from_id, Sources.VK)
     if await user_service.is_user_exists(message.from_id):
         # return await message.answer("Бот находится на этапе разрабоки")  # УДАЛИТЬ СТРОКУ
         try:

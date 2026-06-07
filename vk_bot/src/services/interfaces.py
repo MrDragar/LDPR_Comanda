@@ -9,10 +9,24 @@ from src.domain.entities.user import UserRole
 
 class IUserService(ABC):
     @abstractmethod
-    async def create_user(self, user_id: int, username: str | None, surname: str, name: str,
-                          is_member: bool, patronymic: str | None, birth_date: date,
-                          phone_number: str, region: str, email: str | None, gender: str, city: str,
-                          wish_to_join: bool, home_address: str | None, news_subscription: bool) -> User: ...
+    async def create_user(
+            self, user_id: int, username: str | None, surname: str, name: str | None,
+            patronymic: str | None, phone_number: str, region: str | None,
+            news_subscription: bool
+    ) -> User: ...
+
+    @abstractmethod
+    async def update_user_profile(
+            self, user_id: int, source: Sources,
+            birth_date: date | None = None,
+            email: str | None = None,
+            gender: str | None = None,
+            city: str | None = None,
+            wish_to_join: bool | None = None,
+            is_member: bool | None = None,
+            home_address: str | None = None
+    ) -> User: ...
+
     @abstractmethod
     async def is_user_exists(self, user_id: int, inviter_source: Sources | None = None) -> bool: ...
     @abstractmethod
@@ -188,3 +202,17 @@ class IClosedEventService(ABC):
 class IActiveUserService(ABC):
     @abstractmethod
     async def log_active_user(self, user_id: int, user_source: Sources) -> None: ...
+
+
+class IParticipationService(ABC):
+    @abstractmethod
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def activate_participation(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        ...

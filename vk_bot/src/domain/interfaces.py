@@ -20,6 +20,10 @@ class IUserRepository(ABC):
         ...
 
     @abstractmethod
+    async def update_user_profile(self, user_id: int, source: Sources, **kwargs) -> User:
+        ...
+
+    @abstractmethod
     async def get_user(self, user_id: int, source: Sources) -> User:
         ...
 
@@ -275,3 +279,17 @@ class IEventRegistrationRepository(ABC):
 class IActiveUserRepository(ABC):
     @abstractmethod
     async def save_if_not_exists(self, user_id: int, user_source: Sources) -> None: ...
+
+
+class IParticipationRepository(ABC):
+    @abstractmethod
+    async def add(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        ...

@@ -15,10 +15,8 @@ async def get_phone(message: Message, user_service: IUserService,
     try:
         phone = await user_service.validate_phone(message.text.strip())
         state = await state_dispenser.get(message.from_id)
-        await state_dispenser.set(message.from_id,
-                                  RegistrationStates.EMAIL,
-                                  **state.payload, phone=phone)
-        await message.answer("Введите адрес вашей электронной почты (если нет почты, отправьте прочерк '-' или слово 'нет')")
+        await state_dispenser.set(message.from_id, RegistrationStates.REGION_BY_TEXT, **state.payload, phone=phone)
+        await message.answer("Укажите регион вашего проживания (начните вводить название):")
     except exceptions.PhoneBadFormatError:
         return "Некорректный формат. Пример: +79991234567"
     except exceptions.PhoneBadCountryError:
