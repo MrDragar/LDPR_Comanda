@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 from maxapi import Router, F
 from maxapi.types import MessageCreated, MessageButton
 from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
@@ -34,7 +33,7 @@ async def finish_lottery(
     try:
         await user_service.update_user_profile(
             user_id=event.from_user.user_id, source=Sources.MAX,
-            birth_date=state_payload.get('birth_date'), email=state_payload.get('email'),
+            email=state_payload.get('email'),
             gender=state_payload.get('gender'), city=state_payload.get('city'),
             wish_to_join=state_payload.get('wish_to_join', False),
             is_member=state_payload.get('is_member', False), home_address=home_address
@@ -97,27 +96,8 @@ async def get_is_member(event: MessageCreated, context: MemoryContext):
     if text not in ['да', 'нет']:
         return await event.message.answer("Пожалуйста, выберите вариант на клавиатуре:", attachments=[get_boolean_keyboard().as_markup()])
     await context.update_data(is_member=(text == 'да'))
-    await context.set_state(LotteryStates.BIRTH_DATE)
-    await event.message.answer("Введите вашу дату рождения в формате ДД.ММ.ГГГГ:", attachments=[get_cancel_kb().as_markup()])
-
-
-@router.message_created(LotteryStates.BIRTH_DATE)
-async def get_birth_date(event: MessageCreated, context: MemoryContext):
-    if not event.message.body.text: return
-    if event.message.body.text.strip().lower() == "на главную":
-        await context.clear()
-        return await event.message.answer("Главное меню", attachments=[get_menu_kb().as_markup()])
-    try:
-        birth_date = datetime.strptime(event.message.body.text.strip(), "%d.%m.%Y").date()
-        now = datetime.now().date()
-        age = now.year - birth_date.year - ((now.month, now.day) < (birth_date.month, birth_date.day))
-        if birth_date > now: return await event.message.answer("Дата рождения не может быть в будущем.")
-        if age > 120: return await event.message.answer("Введите корректную дату рождения.")
-        await context.update_data(birth_date=birth_date)
-        await context.set_state(LotteryStates.EMAIL)
-        await event.message.answer("Введите адрес электронной почты (или '-' если нет):", attachments=[get_cancel_kb().as_markup()])
-    except ValueError:
-        await event.message.answer("Неверный формат. Используйте ДД.ММ.ГГГГ", attachments=[get_cancel_kb().as_markup()])
+    await context.set_state(LotteryStates.EMAIL)
+    await event.message.answer("Введите адрес электронной почты (или '-' если нет):", attachments=[get_cancel_kb().as_markup()])
 
 
 @router.message_created(LotteryStates.EMAIL)

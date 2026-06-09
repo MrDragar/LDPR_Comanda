@@ -6,6 +6,7 @@ class RegistrationStates(StatesGroup):
     SURNAME = State()
     NAME = State()
     PATRONYMIC = State()
+    BIRTH_DATE = State()
     PHONE = State()
     REGION_BY_TEXT = State()
     REGION_BY_BUTTON = State()
@@ -14,7 +15,6 @@ class RegistrationStates(StatesGroup):
 
 class LotteryStates(StatesGroup):
     IS_MEMBER = State()
-    BIRTH_DATE = State()
     EMAIL = State()
     GENDER = State()
     CITY = State()

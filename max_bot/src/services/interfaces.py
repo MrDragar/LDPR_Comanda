@@ -12,7 +12,8 @@ class IUserService(ABC):
     async def create_user(
             self, user_id: int, username: str | None, surname: str, name: str | None,
             patronymic: str | None, phone_number: str, region: str | None,
-            news_subscription: bool
+            news_subscription: bool,
+            birth_date: date | None = None
     ) -> User: ...
 
     @abstractmethod

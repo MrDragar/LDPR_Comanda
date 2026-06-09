@@ -42,9 +42,10 @@ async def get_patronymic(event: MessageCreated, context: MemoryContext, user_ser
     val = event.message.body.text.strip()
     patronymic = None if val.lower() in ['-', 'нет', 'нету'] else val
     try:
-        if patronymic: patronymic = await user_service.validate_fio_part(patronymic, 'Отчество')
+        if patronymic:
+            patronymic = await user_service.validate_fio_part(patronymic, 'Отчество')
         await context.update_data(patronymic=patronymic)
-        await context.set_state(RegistrationStates.PHONE)
-        await event.message.answer("Введите ваш номер телефона (например, +79001234567):")
+        await context.set_state(RegistrationStates.BIRTH_DATE)
+        await event.message.answer("Введите вашу дату рождения в формате ДД.ММ.ГГГГ:")
     except exceptions.FioFormatError as e:
         await event.message.answer(str(e))

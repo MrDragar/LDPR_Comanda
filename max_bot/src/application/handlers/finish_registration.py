@@ -33,10 +33,10 @@ async def finish_registration(
             patronymic=state_data.get('patronymic'),
             phone_number=state_data.get('phone'),
             region=state_data.get('region'),
-            news_subscription=state_data.get('news_subscription', False)
+            news_subscription=state_data.get('news_subscription', False),
+            birth_date=state_data.get('birth_date', None)
         )
 
-        # Отправка приветственной картинки
         try:
             media = InputMedia("docs/sokol_like.webp")
             attachment = await bot.upload_media(media)
@@ -48,12 +48,12 @@ async def finish_registration(
         await event.message.answer("Меню",
                                    attachments=[get_role_menu_keyboard(user.role).as_markup()])
 
-        # === ЛОГИРОВАНИЕ В TELEGRAM ===
         log_text = (
             f"Новый пользователь зарегистрировался\n"
             f"Источник: MAX\n"
             f"Является членом партии: {'Да' if user.is_member else 'Нет'}\n"
             f"ФИО: {user.surname} {user.name} {user.patronymic or ''}\n"
+            f"Дата рождения: {user.birth_date.strftime('%d.%m.%Y')}\n"
             f"Номер телефона: {user.phone_number}\n"
             f"Регион: {user.region}\n"
             f"Подписка на новости: {'Есть' if user.news_subscription else 'Нет'}\n"

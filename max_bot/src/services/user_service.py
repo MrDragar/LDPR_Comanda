@@ -33,13 +33,14 @@ class UserService(IUserService):
     async def create_user(
         self, user_id: int, username: str | None, surname: str, name: str | None,
         patronymic: str | None, phone_number: str, region: str | None,
-        news_subscription: bool
+        news_subscription: bool,
+        birth_date: date | None = None,
     ) -> User:
         user = User(
             id=user_id, source=self.__source, username=username,
             surname=surname, name=name, patronymic=patronymic,
             phone_number=phone_number, region=region,
-            news_subscription=news_subscription
+            news_subscription=news_subscription, birth_date=birth_date
         )
         async with self.__uow.atomic():
             return await self.__user_repo.create_user(user)
@@ -55,7 +56,6 @@ class UserService(IUserService):
         home_address: str | None = None
     ) -> User:
         updates = {
-            'birth_date': birth_date,
             'email': email,
             'gender': gender,
             'city': city,
@@ -63,6 +63,8 @@ class UserService(IUserService):
             'is_member': is_member,
             'home_address': home_address
         }
+        if birth_date is not None:
+            updates['birth_date'] = birth_date
         async with self.__uow.atomic():
             return await self.__user_repo.update_user_profile(user_id, source, **updates)
 
