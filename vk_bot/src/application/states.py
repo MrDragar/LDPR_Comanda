@@ -6,6 +6,7 @@ class RegistrationStates(BaseStateGroup):
     SURNAME = "surname"
     NAME = "name"
     PATRONYMIC = "patronymic"
+    BIRTH_DATE = "birth_date"
     PHONE = "phone"
     REGION_BY_TEXT = "region_by_text"
     REGION_BY_BUTTON = "region_by_button"
@@ -16,7 +17,6 @@ class RegistrationStates(BaseStateGroup):
 class LotteryStates(BaseStateGroup):
     INTRO = "lottery_intro"
     IS_MEMBER = "lottery_is_member"
-    BIRTH_DATE = "lottery_birth_date"
     EMAIL = "lottery_email"
     GENDER = "lottery_gender"
     CITY = "lottery_city"

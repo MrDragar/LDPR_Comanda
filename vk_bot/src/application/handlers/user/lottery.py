@@ -113,35 +113,9 @@ async def get_is_member(message: Message, state_dispenser: BuiltinStateDispenser
                                     keyboard=get_boolean_keyboard())
 
     is_member = (text == 'да')
-    await state_dispenser.set(message.from_id, LotteryStates.BIRTH_DATE, is_member=is_member)
-    await message.answer("Введите вашу дату рождения в формате ДД.ММ.ГГГГ:",
+    await state_dispenser.set(message.from_id, LotteryStates.EMAIL, is_member=is_member)
+    await message.answer("Введите адрес электронной почты (или '-' если нет):",
                          keyboard=get_cancel_kb())
-
-
-@router.message(state=LotteryStates.BIRTH_DATE)
-async def get_birth_date(message: Message, state_dispenser: BuiltinStateDispenser):
-    if not message.text: return
-    if message.text.strip().lower() == "на главную":
-        await state_dispenser.delete(message.from_id)
-        return await message.answer("Главное меню", keyboard=get_menu_kb())
-
-    try:
-        birth_date = datetime.strptime(message.text.strip(), "%d.%m.%Y").date()
-        now = datetime.now().date()
-        age = now.year - birth_date.year - (
-                (now.month, now.day) < (birth_date.month, birth_date.day)
-        )
-        if birth_date > now:
-            return await message.answer("Дата рождения не может быть в будущем.")
-        if age > 120:
-            return await message.answer("Введите корректную дату рождения.")
-        state = await state_dispenser.get(message.from_id)
-        await state_dispenser.set(message.from_id, LotteryStates.EMAIL, **state.payload,
-                                  birth_date=birth_date)
-        await message.answer("Введите адрес электронной почты (или '-' если нет):",
-                             keyboard=get_cancel_kb())
-    except ValueError:
-        await message.answer("Неверный формат. Используйте ДД.ММ.ГГГГ", keyboard=get_cancel_kb())
 
 
 @router.message(state=LotteryStates.EMAIL)

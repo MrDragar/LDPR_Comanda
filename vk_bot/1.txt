@@ -262,35 +262,63 @@ logger = logging.getLogger(__name__)
 router = BotLabeler()
 PAGE_LIMIT = 5
 
-
 def _admin_ce_kb(events, page, total, admin_region=None):
+    """Клавиатура для списка мероприятий (админ)"""
     kb = Keyboard(inline=True)
     for e in events:
-        kb.add(Callback(f"📅 {e.title[:20]} ({e.region})", {"cmd": "view_ce_admin", "eid": e.id}))
+        kb.add(Callback(f"📅 {e.title[:30]} ({e.region})"[:40], {"cmd": "view_ce_admin",
+                                                               "eid": e.id}))
         kb.row()
     kb.row()
     if total > 1:
-        if page > 1: kb.add(Callback("⬅️", {"cmd": "prev_ce_admin"}))
-        if page < total: kb.add(Callback("➡️", {"cmd": "next_ce_admin"}))
+        if page > 1:
+            kb.add(Callback("⬅️", {"cmd": "prev_ce_admin"}))
+        if page < total:
+            kb.add(Callback("➡️", {"cmd": "next_ce_admin"}))
     kb.add(Callback("🔙 В меню", {"cmd": "back_to_menu"}))
     return kb.get_json()
 
+def _participants_kb(regs, page, total, event_id, user_service: IUserService = None):
+    """Клавиатура для списка участников (генерируется с подгрузкой ФИО через сервис)"""
+    kb = Keyboard(inline=True)
+    for r in regs:
+        # ✅ ИСПРАВЛЕНО: используем user_service вместо прямого API-вызова
+        if user_service:
+            try:
+                participant = user_service.get_user(r.user_id, r.user_source)
+                name_text = f"{participant.surname} {participant.name}"
+            except:
+                name_text = f"Участник #{r.user_id}"
+        else:
+            name_text = f"Участник #{r.user_id}"
+        kb.add(Callback(name_text[:40], {"cmd": "view_part", "uid": r.user_id}))
+        kb.row()
+    kb.row()
+    if total > 1:
+        if page > 1:
+            kb.add(Callback("⬅️", {"cmd": "prev_part", "eid": event_id}))
+        if page < total:
+            kb.add(Callback("➡️", {"cmd": "next_part", "eid": event_id}))
+    kb.add(Callback("🔙 Назад к мероприятиям", {"cmd": "back_ce_admin"}))
+    return kb.get_json()
+
+# ==================== СОЗДАНИЕ МЕРОПРИЯТИЯ ====================
 
 @router.message(text=["Создать закрытое мероприятие"])
-async def start_create_ce(message: Message, user_svc: IUserService,
-                          state_dispenser: BuiltinStateDispenser):
-    if not await check_role(user_svc, message.from_id,
-                            [UserRole.STAFF_CA, UserRole.COORDINATOR_RO]):
+async def start_create_ce(message: Message, user_service: IUserService,
+                         state_dispenser: BuiltinStateDispenser):
+    if not await check_role(user_service, message.from_id,
+                           [UserRole.STAFF_CA, UserRole.COORDINATOR_RO]):
         return await message.answer("Недостаточно прав")
-    u = await user_svc.get_user(message.from_id, Sources.VK)
+    u = await user_service.get_user(message.from_id, Sources.VK)
     await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, step="title",
-                              region=u.region if u.role == UserRole.COORDINATOR_RO else None)
+                             region=u.region if u.role == UserRole.COORDINATOR_RO else None)
     await message.answer("📝 Введите название мероприятия:")
 
-
 @router.message(state=ClosedEventStates.CREATE)
-async def create_ce_steps(message: Message, event_svc: IClosedEventService, user_svc: IUserService,
-                          state_dispenser: BuiltinStateDispenser):
+async def create_ce_steps(message: Message, closed_event_service: IClosedEventService, 
+                         user_service: IUserService,
+                         state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(message.from_id)
     if not state: return
     step = state.payload.get("step")
@@ -299,98 +327,330 @@ async def create_ce_steps(message: Message, event_svc: IClosedEventService, user
 
     if step == "title":
         await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p, title=txt,
-                                  step="desc")
+                                 step="desc")
         return await message.answer("📄 Введите описание:")
     elif step == "desc":
         await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p, desc=txt,
-                                  step="loc")
+                                 step="loc")
         return await message.answer("📍 Введите место проведения:")
     elif step == "loc":
         await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p, loc=txt,
-                                  step="dt")
+                                 step="dt")
         return await message.answer("📅 Введите дату и время (формат: ДД.ММ.ГГГГ ЧЧ:ММ):")
     elif step == "dt":
         try:
             dt = datetime.strptime(txt, "%d.%m.%Y %H:%M")
             await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p,
-                                      date=dt.date(), time=dt.time(), step="region")
+                                     date=dt.date(), time=dt.time(), step="region")
             if p.get("region"):  # Координатор
-                await _finish_create_ce(message, event_svc, p["region"], dt.date(), dt.time(), p,
-                                        state_dispenser)
+                region_to_check = p["region"]
+                similar = await user_service.get_similar_regions(region_to_check)
+                if region_to_check not in similar or similar[0] != region_to_check:
+                    hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден."
+                    return await message.answer(f"⚠️ {hint}\nВведите название региона точно как в списке субъектов РФ:")
+                await _finish_create_ce(message, closed_event_service, region_to_check, 
+                                       dt.date(), dt.time(), p, state_dispenser)
                 return
             return await message.answer("🌍 Введите регион проведения:")
         except ValueError:
             return await message.answer("⚠️ Неверный формат. Используйте ДД.ММ.ГГГГ ЧЧ:ММ")
     elif step == "region":
-        await _finish_create_ce(message, event_svc, txt, state.payload.get("date"),
-                                state.payload.get("time"), p, state_dispenser)
-
+        region_input = txt.strip()
+        similar = await user_service.get_similar_regions(region_input)
+        if region_input not in similar or similar[0] != region_input:
+            hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден."
+            return await message.answer(f"⚠️ {hint}\nВведите название региона точно как в списке субъектов РФ:")
+        await _finish_create_ce(message, closed_event_service, region_input, 
+                               state.payload.get("date"), state.payload.get("time"), 
+                               p, state_dispenser)
 
 async def _finish_create_ce(msg, svc, region, date, time, payload, sd):
     try:
-        ev = await svc.create_event(payload["title"], payload["desc"], payload["loc"], date, time,
-                                    region)
+        ev = await svc.create_event(payload["title"], payload["desc"], payload["loc"], 
+                                   date, time, region)
         await sd.delete(msg.from_id)
         await msg.answer(f"✅ Мероприятие '{ev.title}' успешно создано!")
     except Exception as e:
         await msg.answer(f"❌ Ошибка: {e}")
 
+# ==================== СПИСОК УЧАСТНИКОВ (ВХОД) ====================
 
 @router.message(text=["Список участников мероприятия"])
-async def start_list_ce(message: Message, user_svc: IUserService, event_svc: IClosedEventService,
-                        state_dispenser: BuiltinStateDispenser):
-    u = await user_svc.get_user(message.from_id, Sources.VK)
+async def start_list_ce(message: Message, user_service: IUserService, 
+                       closed_event_service: IClosedEventService, 
+                       state_dispenser: BuiltinStateDispenser):
+    u = await user_service.get_user(message.from_id, Sources.VK)
     if u.role not in [UserRole.STAFF_CA, UserRole.COORDINATOR_RO, UserRole.STAFF_RO]:
         return await message.answer("Недостаточно прав")
-    reg = u.region if u.role != UserRole.STAFF_CA else None
-    evs, total = await event_svc.list_events(reg, 1)
+    # ✅ РЕГИОН БЕРЁМ ИЗ USER_SERVICE, НЕ ИЗ СТЕЙТА
+    admin_region = u.region if u.role != UserRole.STAFF_CA else None
+    evs, total_count = await closed_event_service.list_events(admin_region, page=1)
     if not evs: return await message.answer("Нет активных мероприятий.")
-    pages = (total + PAGE_LIMIT - 1) // PAGE_LIMIT
-    await state_dispenser.set(message.from_id, ClosedEventStates.BROWSE_ADMIN, page=1, region=reg,
-                              total=pages)
+    pages = (total_count + PAGE_LIMIT - 1) // PAGE_LIMIT
+    await state_dispenser.set(message.from_id, ClosedEventStates.BROWSE_ADMIN, page=1, 
+                             region=admin_region, total=pages)
     await message.answer(f"📅 Выберите мероприятие (стр. 1/{pages}):",
-                         keyboard=_admin_ce_kb(evs, 1, pages, reg))
+                        keyboard=_admin_ce_kb(evs, 1, pages, admin_region))
 
+# ==================== ПАГИНАЦИЯ МЕРОПРИЯТИЙ ====================
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_ce_admin"))
+async def next_ce_admin(event: GroupTypes.MessageEvent, user_service: IUserService,
+                       closed_event_service: IClosedEventService, 
+                       state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(event.object.peer_id)
+    if not state: return
+    # ✅ РЕГИОН ВСЕГДА БЕРЁМ ИЗ USER_SERVICE
+    u = await user_service.get_user(event.object.user_id, Sources.VK)
+    admin_region = u.region if u.role != UserRole.STAFF_CA else None
+    current_page = state.payload.get("page", 1)
+    total_pages = state.payload.get("total", 1)
+    new_page = min(current_page + 1, total_pages)
+    evs, total_count = await closed_event_service.list_events(admin_region, page=new_page)
+    await state_dispenser.set(event.object.peer_id, ClosedEventStates.BROWSE_ADMIN, 
+                             page=new_page, region=admin_region, total=total_pages)
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"📅 Выберите мероприятие (стр. {new_page}/{total_pages}):",
+        keyboard=_admin_ce_kb(evs, new_page, total_pages, admin_region),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("prev_ce_admin"))
+async def prev_ce_admin(event: GroupTypes.MessageEvent, user_service: IUserService,
+                       closed_event_service: IClosedEventService, 
+                       state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(event.object.peer_id)
+    if not state: return
+    u = await user_service.get_user(event.object.user_id, Sources.VK)
+    admin_region = u.region if u.role != UserRole.STAFF_CA else None
+    current_page = state.payload.get("page", 1)
+    total_pages = state.payload.get("total", 1)
+    new_page = max(1, current_page - 1)
+    evs, total_count = await closed_event_service.list_events(admin_region, page=new_page)
+    await state_dispenser.set(event.object.peer_id, ClosedEventStates.BROWSE_ADMIN, 
+                             page=new_page, region=admin_region, total=total_pages)
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"📅 Выберите мероприятие (стр. {new_page}/{total_pages}):",
+        keyboard=_admin_ce_kb(evs, new_page, total_pages, admin_region),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+# ==================== ПРОСМОТР МЕРОПРИЯТИЯ -> УЧАСТНИКИ ====================
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_ce_admin"))
-async def view_ce_admin(event: GroupTypes.MessageEvent, event_svc: IClosedEventService,
-                        user_svc: IUserService, state_dispenser: BuiltinStateDispenser):
+async def view_ce_admin(event: GroupTypes.MessageEvent, user_service: IUserService,
+                       closed_event_service: IClosedEventService, 
+                       state_dispenser: BuiltinStateDispenser):
     eid = event.object.payload["eid"]
-    regs, total = await event_svc.list_participants(eid, 1)
-    if not regs: return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                                          message="Участников пока нет.",
-                                                          random_id=0)
-    pages = (total + PAGE_LIMIT - 1) // PAGE_LIMIT
-    await state_dispenser.set(event.object.peer_id, ClosedEventStates.PART_LIST, eid=eid, page=1,
-                              total=pages)
-
+    regs, total_count = await closed_event_service.list_participants(eid, page=1)
+    if not regs:
+        return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                                message="Участников пока нет.",
+                                                random_id=0)
+    pages = (total_count + PAGE_LIMIT - 1) // PAGE_LIMIT
+    await state_dispenser.set(event.object.peer_id, ClosedEventStates.PART_LIST, 
+                             eid=eid, page=1, total=pages)
+    # ✅ Генерируем клавиатуру с подгрузкой ФИО через user_service
     kb = Keyboard(inline=True)
     for r in regs:
-        u = await user_svc.get_user(r.user_id, r.user_source)
-        kb.add(Callback(f"{u.surname} {u.name}", {"cmd": "view_part", "uid": u.id}))
+        participant = await user_service.get_user(r.user_id, r.user_source)
+        kb.add(Callback(f"{participant.surname} {participant.name}", 
+                       {"cmd": "view_part", "uid": participant.id}))
         kb.row()
     kb.row()
-    if pages > 1: kb.add(Callback("Вперёд ➡️", {"cmd": "next_part"}))
+    if pages > 1:
+        kb.add(Callback("➡️", {"cmd": "next_part", "eid": eid}))
     kb.add(Callback("🔙 Назад к мероприятиям", {"cmd": "back_ce_admin"}))
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, 
+                                     message="👥 Список участников:",
+                                     keyboard=kb.get_json(), random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
 
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="👥 Список участников:",
-                                      keyboard=kb.get_json(), random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
-                                                           user_id=event.object.user_id,
-                                                           peer_id=event.object.peer_id)
+# ==================== ПАГИНАЦИЯ УЧАСТНИКОВ ====================
 
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_part"))
+async def next_part(event: GroupTypes.MessageEvent, user_service: IUserService,
+                   closed_event_service: IClosedEventService, 
+                   state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(event.object.peer_id)
+    if not state: return
+    eid = state.payload.get("eid")
+    if not eid: return
+    current_page = state.payload.get("page", 1)
+    total_pages = state.payload.get("total", 1)
+    new_page = min(current_page + 1, total_pages)
+    regs, total_count = await closed_event_service.list_participants(eid, page=new_page)
+    await state_dispenser.set(event.object.peer_id, ClosedEventStates.PART_LIST, 
+                             eid=eid, page=new_page, total=total_pages)
+    kb = Keyboard(inline=True)
+    for r in regs:
+        participant = await user_service.get_user(r.user_id, r.user_source)
+        kb.add(Callback(f"{participant.surname} {participant.name}", 
+                       {"cmd": "view_part", "uid": participant.id}))
+        kb.row()
+    kb.row()
+    if new_page > 1:
+        kb.add(Callback("⬅️", {"cmd": "prev_part", "eid": eid}))
+    if new_page < total_pages:
+        kb.add(Callback("➡️", {"cmd": "next_part", "eid": eid}))
+    kb.add(Callback("🔙 Назад к мероприятиям", {"cmd": "back_ce_admin"}))
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"👥 Участники (стр. {new_page}/{total_pages}):",
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("prev_part"))
+async def prev_part(event: GroupTypes.MessageEvent, user_service: IUserService,
+                   closed_event_service: IClosedEventService, 
+                   state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(event.object.peer_id)
+    if not state: return
+    eid = state.payload.get("eid")
+    if not eid: return
+    current_page = state.payload.get("page", 1)
+    total_pages = state.payload.get("total", 1)
+    new_page = max(1, current_page - 1)
+    regs, total_count = await closed_event_service.list_participants(eid, page=new_page)
+    await state_dispenser.set(event.object.peer_id, ClosedEventStates.PART_LIST, 
+                             eid=eid, page=new_page, total=total_pages)
+    kb = Keyboard(inline=True)
+    for r in regs:
+        participant = await user_service.get_user(r.user_id, r.user_source)
+        kb.add(Callback(f"{participant.surname} {participant.name}", 
+                       {"cmd": "view_part", "uid": participant.id}))
+        kb.row()
+    kb.row()
+    if new_page > 1:
+        kb.add(Callback("⬅️", {"cmd": "prev_part", "eid": eid}))
+    if new_page < total_pages:
+        kb.add(Callback("➡️", {"cmd": "next_part", "eid": eid}))
+    kb.add(Callback("🔙 Назад к мероприятиям", {"cmd": "back_ce_admin"}))
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"👥 Участники (стр. {new_page}/{total_pages}):",
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+# ==================== ПРОСМОТР УЧАСТНИКА ====================
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_part"))
-async def view_part(event: GroupTypes.MessageEvent, user_svc: IUserService):
-    u = await user_svc.get_user(event.object.payload["uid"], Sources.VK)
-    txt = f"👤 {u.surname} {u.name} {u.patronymic or ''}\n📞 {u.phone_number}\n📧 {u.email}\n🌍 {u.region}, {u.city}"
+async def view_part(event: GroupTypes.MessageEvent, user_service: IUserService):
+    uid = event.object.payload["uid"]
+    u = await user_service.get_user(uid, Sources.VK)
+    txt = (f"👤 {u.surname} {u.name} {u.patronymic or ''}\n"
+           f"📞 {u.phone_number}\n"
+           f"📧 {u.email}\n"
+           f"🌍 {u.region}, {u.city}")
     kb = Keyboard(inline=True).add(Callback("🔙 Назад", {"cmd": "back_parts"}))
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=txt,
-                                      keyboard=kb.get_json(), random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
-                                                           user_id=event.object.user_id,
-                                                           peer_id=event.object.peer_id)
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=txt,
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
 
+# ==================== НАВИГАЦИЯ НАЗАД ====================
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_ce_admin"))
+async def back_ce_admin(event: GroupTypes.MessageEvent, user_service: IUserService,
+                       closed_event_service: IClosedEventService, 
+                       state_dispenser: BuiltinStateDispenser):
+    """Возврат к списку мероприятий из просмотра участников"""
+    # ✅ РЕГИОН БЕРЁМ ИЗ USER_SERVICE
+    u = await user_service.get_user(event.object.user_id, Sources.VK)
+    admin_region = u.region if u.role != UserRole.STAFF_CA else None
+    evs, total_count = await closed_event_service.list_events(admin_region, page=1)
+    if not evs:
+        return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                                message="Нет активных мероприятий.",
+                                                random_id=0)
+    total_pages = (total_count + PAGE_LIMIT - 1) // PAGE_LIMIT
+    await state_dispenser.set(event.object.peer_id, ClosedEventStates.BROWSE_ADMIN, 
+                             page=1, region=admin_region, total=total_pages)
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"📅 Выберите мероприятие (стр. 1/{total_pages}):",
+        keyboard=_admin_ce_kb(evs, 1, total_pages, admin_region),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_parts"))
+async def back_parts(event: GroupTypes.MessageEvent, user_service: IUserService,
+                    closed_event_service: IClosedEventService,
+                    state_dispenser: BuiltinStateDispenser):
+    """Возврат к списку участников из просмотра конкретного участника"""
+    state = await state_dispenser.get(event.object.peer_id)
+    if not state:
+        return await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="Ошибка: состояние не найдено",
+            random_id=0
+        )
+    eid = state.payload.get("eid")
+    if not eid:
+        return await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="Ошибка: мероприятие не найдено",
+            random_id=0
+        )
+    page = state.payload.get("page", 1)
+    total_pages = state.payload.get("total", 1)
+    regs, total_count = await closed_event_service.list_participants(eid, page=page)
+    # ✅ ИСПРАВЛЕНО: используем user_service вместо event.ctx_api.users.get
+    kb = Keyboard(inline=True)
+    for r in regs:
+        participant = await user_service.get_user(r.user_id, r.user_source)
+        kb.add(Callback(f"{participant.surname} {participant.name}", 
+                       {"cmd": "view_part", "uid": participant.id}))
+        kb.row()
+    kb.row()
+    if page > 1:
+        kb.add(Callback("⬅️", {"cmd": "prev_part", "eid": eid}))
+    if page < total_pages:
+        kb.add(Callback("➡️", {"cmd": "next_part", "eid": eid}))
+    kb.add(Callback("🔙 Назад к мероприятиям", {"cmd": "back_ce_admin"}))
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"👥 Участники (стр. {page}/{total_pages}):",
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
 
 =========================================
 ФАЙЛ: src/application/handlers/admin/__init__.py
@@ -565,51 +825,244 @@ async def process_decline(message: Message, order_service: IOrderService,
 =========================================
 
 import asyncio
+import logging
 from vkbottle.bot import BotLabeler, Message
+from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import PostsStates
-from src.application.filters import AdminFilter
+from src.application.filters import AdminFilter, check_role
 from src.services.interfaces import IUserService
+from src.domain.entities.user import UserRole
 
+logger = logging.getLogger(__name__)
 router = BotLabeler()
+# Фильтр применяется ко всем хендлерам в этом роутере (только для админов)
 router.auto_rules = [AdminFilter()]
 
 
-@router.message(text="/post")
-async def cmd_post(message: Message):
-    await message.state_dispenser.set(message.from_id, PostsStates.GET_MESSAGE)
+def parse_attachments(message: Message) -> str | None:
+    """Безопасный парсер вложений с учетом access_key и багов owner_id"""
+    attachment_strings = []
+    if not message.attachments:
+        return None
+
+    for att in message.attachments:
+        try:
+            # Определяем тип (в vkbottle это может быть Enum или строка)
+            att_type = att.type.value if hasattr(att.type, 'value') else str(att.type)
+
+            # 1. Фото
+            if att_type == 'photo':
+                photo = att.photo
+                owner_id = photo.owner_id
+                # Защита: если вдруг owner_id оказался равен peer_id (> 2 млрд)
+                if owner_id > 2000000000:
+                    owner_id = message.from_id
+
+                access_key = getattr(photo, 'access_key', '')
+                att_str = f"photo{owner_id}_{photo.id}"
+                if access_key:
+                    att_str += f"_{access_key}"
+                attachment_strings.append(att_str)
+
+            # 2. Документы
+            elif att_type == 'doc':
+                doc = att.doc
+                owner_id = doc.owner_id
+                if owner_id > 2000000000:
+                    owner_id = message.from_id
+
+                access_key = getattr(doc, 'access_key', '')
+                att_str = f"doc{owner_id}_{doc.id}"
+                if access_key:
+                    att_str += f"_{access_key}"
+                attachment_strings.append(att_str)
+
+            # 3. Видео
+            elif att_type == 'video':
+                video = att.video
+                owner_id = video.owner_id
+                if owner_id > 2000000000:
+                    owner_id = message.from_id
+
+                access_key = getattr(video, 'access_key', '')
+                att_str = f"video{owner_id}_{video.id}"
+                if access_key:
+                    att_str += f"_{access_key}"
+                attachment_strings.append(att_str)
+
+            # 4. Голосовые сообщения
+            elif att_type == 'audio_message':
+                am = att.audio_message
+                owner_id = am.owner_id
+                if owner_id > 2000000000:
+                    owner_id = message.from_id
+
+                access_key = getattr(am, 'access_key', '')
+                att_str = f"audio_message{owner_id}_{am.id}"
+                if access_key:
+                    att_str += f"_{access_key}"
+                attachment_strings.append(att_str)
+
+            # 5. Аудио
+            elif att_type == 'audio':
+                audio = att.audio
+                attachment_strings.append(f"audio{audio.owner_id}_{audio.id}")
+
+            # 6. Посты со стены
+            elif att_type == 'wall':
+                wall = att.wall
+                attachment_strings.append(f"wall{wall.owner_id}_{wall.id}")
+
+        except Exception as e:
+            logger.warning(f"Failed to parse attachment: {e}")
+
+    return ",".join(attachment_strings) if attachment_strings else None
+
+
+# ==================== РАССЫЛКА ВСЕМ ПОЛЬЗОВАТЕЛЯМ ====================
+
+@router.message(text=["/post", "Рассылка всем"])
+async def cmd_post(message: Message, state_dispenser: BuiltinStateDispenser):
+    await state_dispenser.set(message.from_id, PostsStates.GET_MESSAGE)
     await message.answer(
-        "Отправьте сообщение (текст), которое нужно разослать всем пользователям:")
+        "Отправьте сообщение (текст и/или вложения), которое нужно разослать всем пользователям:"
+    )
 
 
 @router.message(state=PostsStates.GET_MESSAGE)
-async def confirm_post(message: Message):
-    await message.state_dispenser.set(message.from_id, PostsStates.CONFIRM,
-                                      msg_text=message.text)
+async def confirm_post(message: Message, state_dispenser: BuiltinStateDispenser):
+    attachments_str = parse_attachments(message)
+    await state_dispenser.set(
+        message.from_id, 
+        PostsStates.CONFIRM,
+        msg_text=message.text or "",
+        attachments=attachments_str
+    )
+    att_count = len(attachments_str.split(',')) if attachments_str else 0
     await message.answer(
-        f"Вы уверены, что хотите разослать это сообщение?\n\n{message.text}\n\nОтправьте 'Да' для подтверждения.")
+        f"Вы уверены, что хотите разослать это сообщение?\n"
+        f"Текст: {message.text or '(нет)'}\nВложений: {att_count}\n\nОтправьте 'Да'."
+    )
 
 
-@router.message(state=PostsStates.CONFIRM, text="Да")
-async def start_mailing(message: Message, user_service: IUserService):
-    state = await message.state_dispenser.get(message.from_id)
-    msg_text = state.payload['msg_text']
+@router.message(state=PostsStates.CONFIRM, text=["Да", "да"])
+async def start_mailing(message: Message, user_service: IUserService,
+                        state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(message.from_id)
+    if not state: return
+
+    msg_text = state.payload.get('msg_text', '')
+    attachments = state.payload.get('attachments')
+
     users = await user_service.get_all_users()
-
     await message.answer(f"Начинаю рассылку на {len(users)} пользователей...")
 
     count = 0
     for u in users:
         try:
-            await message.ctx_api.messages.send(peer_id=u.id, message=msg_text,
-                                                random_id=0)
+            kwargs = {"peer_id": u.id, "random_id": 0}
+            if msg_text: kwargs["message"] = msg_text
+            if attachments: kwargs["attachment"] = attachments
+
+            if not msg_text and not attachments: continue
+
+            await message.ctx_api.messages.send(**kwargs)
+            count += 1
+            await asyncio.sleep(0.05)  # Защита от rate limit VK API
+        except Exception as e:
+            logger.debug(f"Failed to send to {u.id}: {e}")
+
+    await state_dispenser.delete(message.from_id)
+    await message.answer(f"Рассылка всем завершена. Успешно отправлено: {count} из {len(users)}")
+
+
+@router.message(state=PostsStates.CONFIRM)
+async def cancel_mailing(message: Message, state_dispenser: BuiltinStateDispenser):
+    await state_dispenser.delete(message.from_id)
+    await message.answer("Рассылка отменена.")
+
+
+# ==================== РАССЫЛКА КООРДИНАТОРАМ РО ====================
+
+@router.message(text=["Рассылка координаторам РО"])
+async def cmd_post_coord(message: Message, user_service: IUserService,
+                         state_dispenser: BuiltinStateDispenser):
+    # Дополнительная проверка роли (AdminFilter пропустил всех админов, но эта кнопка только для ЦА)
+    if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]):
+        return await message.answer("Недостаточно прав. Эта функция доступна только сотруднику ЦА.")
+
+    await state_dispenser.set(message.from_id, PostsStates.GET_COORD_MESSAGE)
+    await message.answer(
+        "Отправьте сообщение для рассылки координаторам РО.\n"
+        "Можно прикрепить фото, видео или документы."
+    )
+
+
+@router.message(state=PostsStates.GET_COORD_MESSAGE)
+async def confirm_post_coord(message: Message, state_dispenser: BuiltinStateDispenser):
+    attachments_str = parse_attachments(message)
+
+    await state_dispenser.set(
+        message.from_id,
+        PostsStates.CONFIRM_COORD,
+        msg_text=message.text or "",
+        attachments=attachments_str
+    )
+
+    text_preview = message.text or "(без текста)"
+    att_count = len(attachments_str.split(',')) if attachments_str else 0
+
+    await message.answer(
+        f"Вы уверены, что хотите разослать это сообщение координаторам РО?\n\n"
+        f"Текст: {text_preview}\n"
+        f"Вложений: {att_count}\n\n"
+        f"Отправьте 'Да' для подтверждения."
+    )
+
+
+@router.message(state=PostsStates.CONFIRM_COORD, text=["Да", "да"])
+async def start_mailing_coord(message: Message, user_service: IUserService,
+                              state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(message.from_id)
+    if not state: return
+
+    msg_text = state.payload.get('msg_text', '')
+    attachments = state.payload.get('attachments')
+
+    # Получаем всех пользователей и фильтруем координаторов РО
+    all_users = await user_service.get_all_users()
+    coord_users = [u for u in all_users if u.role == UserRole.COORDINATOR_RO]
+
+    if not coord_users:
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Координаторы РО не найдены в системе.")
+
+    await message.answer(f"Начинаю рассылку на {len(coord_users)} координаторов РО...")
+
+    count = 0
+    for u in coord_users:
+        try:
+            kwargs = {"peer_id": u.id, "random_id": 0}
+            if msg_text: kwargs["message"] = msg_text
+            if attachments: kwargs["attachment"] = attachments
+
+            if not msg_text and not attachments: continue
+
+            await message.ctx_api.messages.send(**kwargs)
             count += 1
             await asyncio.sleep(0.05)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to send to coord {u.id}: {e}")
 
-    await message.state_dispenser.delete(message.from_id)
-    await message.answer(f"Рассылка завершена. Успешно отправлено: {count}")
+    await state_dispenser.delete(message.from_id)
+    await message.answer(
+        f"Рассылка координаторам завершена. Успешно отправлено: {count} из {len(coord_users)}")
 
+
+@router.message(state=PostsStates.CONFIRM_COORD)
+async def cancel_mailing_coord(message: Message, state_dispenser: BuiltinStateDispenser):
+    await state_dispenser.delete(message.from_id)
+    await message.answer("Рассылка координаторам отменена.")
 
 =========================================
 ФАЙЛ: src/application/handlers/admin/shop.py
@@ -788,7 +1241,8 @@ async def execute_hide(event: GroupTypes.MessageEvent, product_service: IProduct
 =========================================
 
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, date
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
@@ -804,63 +1258,78 @@ router = BotLabeler()
 PAGE_LIMIT = 5
 
 
-# --- СОЗДАНИЕ ОНЛАЙН ЗАДАЧИ ---
 @router.message(text=["Создать онлайн задачу"])
 async def start_create_online(message: Message, user_service: IUserService,
-                              state_dispenser: BuiltinStateDispenser):
+                             state_dispenser: BuiltinStateDispenser):
     if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]):
         return await message.answer("Недостаточно прав")
-    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="post_id")
-    await message.answer("Введите ID поста ВК (число из ссылки):")
+    # Сразу переходим к шагу ввода URL
+    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="url")
+    await message.answer("🔗 Введите ссылку на задание (URL поста ВК, например: https://vk.com/wall-123_456):")
 
 
 @router.message(state=AdminTaskStates.CREATE_ONLINE)
 async def process_online_fields(message: Message, state_dispenser: BuiltinStateDispenser,
-                                online_task_service: IOnlineTaskService, group_id: int):
+                                online_task_service: IOnlineTaskService):
     state = await state_dispenser.get(message.from_id)
     if not state: return
     step = state.payload.get("step")
     payload = {k: v for k, v in state.payload.items() if k != 'step'}
+    text = message.text.strip()
 
-    if step == "post_id":
-        try:
-            pid = int(message.text.strip())
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
-                                      post_id=pid, step="type")
+    try:
+        if step == "url":
+            pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
+            if not pattern.match(text):
+                return await message.answer(
+                    "⚠️ Ссылка должна быть валидной ссылкой на пост ВК (начинаться с https://vk.com/wall-...). Попробуйте снова.")
+
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
+                                      **payload, url=text, step="type")
+
             kb = Keyboard(inline=True)
-            for t in TaskType: kb.add(
-                Callback(t.value, {"cmd": "set_type", "type": t.value})); kb.row()
-            return await message.answer("Выберите тип задания:", keyboard=kb.get_json())
-        except ValueError:
-            return await message.answer("Введите корректное число ID поста.")
-    if step == "date":
-        try:
-            d = datetime.strptime(message.text.strip(), "%d.%m.%Y").date()
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
-                                      date=d, step="duration")
-            return await message.answer("Введите количество дней активности (число):")
-        except ValueError:
-            return await message.answer("Формат: ДД.ММ.ГГГГ")
-    if step == "duration":
-        try:
-            dur = int(message.text.strip())
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
-                                      duration=dur, step="reward")
+            for t in TaskType:
+                kb.add(Callback(t.value, {"cmd": "set_type", "type": t.value}))
+                kb.row()
+            return await message.answer("📌 Выберите тип задания:", keyboard=kb.get_json())
+
+        elif step == "date":
+            d = datetime.strptime(text, "%d.%m.%Y").date()
+            if d < date.today():
+                return await message.answer(
+                    "⚠️ Дата начала не может быть в прошлом. Укажите сегодняшнюю или будущую дату.")
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
+                                      **payload, date=d, step="duration")
+            return await message.answer("⏱ Введите количество дней активности (число):")
+
+        elif step == "duration":
+            dur = int(text)
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
+                                      **payload, duration=dur, step="reward")
             return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):")
-        except ValueError:
-            return await message.answer("Введите корректное число дней.")
-    if step == "reward":
-        try:
-            reward = int(message.text.strip())
+
+        elif step == "reward":
+            reward = int(text)
             if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.")
-            await online_task_service.create_task(date=payload["date"],
-                                                  duration=payload["duration"],
-                                                  type=payload["type"], reward=reward,
-                                                  post_id=payload["post_id"], group_id=group_id)
+
+            await online_task_service.create_task(
+                date=payload["date"],
+                duration=payload["duration"],
+                type=payload["type"],
+                reward=reward,
+                url=payload["url"]
+            )
             await state_dispenser.delete(message.from_id)
             return await message.answer("✅ Онлайн задача успешно создана!")
-        except ValueError:
-            return await message.answer("Введите целое число баллов.")
+
+        else:
+            return await message.answer("Неизвестный шаг создания задачи. Начните заново.")
+
+    except ValueError:
+        return await message.answer("⚠️ Неверный формат данных. Попробуйте снова.")
+    except Exception as e:
+        logger.error(f"Error creating online task: {e}")
+        return await message.answer(f"❌ Произошла ошибка: {e}")
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("set_type"))
@@ -877,7 +1346,6 @@ async def set_online_type(event: GroupTypes.MessageEvent, state_dispenser: Built
 
 
 # --- СОЗДАНИЕ ОФФЛАЙН ЗАДАЧИ ---
-
 @router.message(text=["Создать офлайн задачу"])
 async def start_create_offline(
         message: Message,
@@ -940,21 +1408,33 @@ async def process_offline_fields(
         # --- ШАГ 4: Контакты ---
         elif step == "contacts":
             await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                      **payload, contacts=text, step="date")
-            return await message.answer("📅 Введите дату проведения задачи (ДД.ММ.ГГГГ):")
+                                      **payload, contacts=text, step="start_date")
+            return await message.answer("📅 Введите дату начала проведения задачи (ДД.ММ.ГГГГ):")
 
         # --- ШАГ 5: Дата ---
-        elif step == "date":
+        elif step == "start_date":
             try:
-                task_date = datetime.strptime(text, "%d.%m.%Y").date()
+                start_date = datetime.strptime(text, "%d.%m.%Y").date()
+                if start_date < date.today():
+                    return await message.answer("⚠️ Дата начала не может быть в прошлом. Укажите сегодняшнюю или будущую дату.")
                 await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                          **payload, date=task_date, step="reward")
+                                          **payload, start_date=start_date, step="duration")
+                return await message.answer("⏱ Введите продолжительность задачи в днях (число):")
+            except ValueError:
+                return await message.answer("⚠️ Неверный формат даты. Используйте ДД.ММ.ГГГГ")
+
+        # --- ШАГ 6: Продолжительность ---
+        elif step == "duration":
+            try:
+                duration = int(text)
+                if duration <= 0:
+                    return await message.answer("⚠️ Продолжительность должна быть больше 0.")
+                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                          **payload, duration=duration, step="reward")
                 return await message.answer("💰 Введите количество баллов за выполнение:")
             except ValueError:
-                return await message.answer(
-                    "⚠️ Неверный формат даты. Пожалуйста, используйте ДД.ММ.ГГГГ (например, 25.12.2024)")
-
-        # --- ШАГ 6: Баллы -> Регион или Подтверждение ---
+                return await message.answer("⚠️ Введите целое число дней.")
+        # --- ШАГ 7: Баллы -> Регион или Подтверждение ---
         elif step == "reward":
             try:
                 reward = int(text)
@@ -1014,16 +1494,18 @@ async def process_offline_fields(
 
             if role == UserRole.STAFF_CA:
                 # Вызов сервиса с явным указанием региона
-                task = await offline_task_service.create_task_by_admin(
-                    region=p["region"], date=p["date"], reward=p["reward"],
-                    title=p["title"], description=p["description"],
-                    location=p["location"], contacts=p["contacts"]
-                )
+                if role == UserRole.STAFF_CA:
+                    task = await offline_task_service.create_task_by_admin(
+                        region=p["region"], start_date=p["start_date"], duration=p["duration"],
+                        reward=p["reward"],
+                        title=p["title"], description=p["description"],
+                        location=p["location"], contacts=p["contacts"]
+                    )
             else:
                 # Вызов сервиса с авто-определением региона по user_id
                 task = await offline_task_service.create_task_by_personal(
-                    user_id=message.from_id, user_source=Sources.VK, date=p["date"],
-                    reward=p["reward"],
+                    user_id=message.from_id, user_source=Sources.VK, start_date=p["start_date"], 
+                    duration=p["duration"], reward=p["reward"],
                     title=p["title"], description=p["description"],
                     location=p["location"], contacts=p["contacts"]
                 )
@@ -1138,7 +1620,8 @@ async def view_task(event: GroupTypes.MessageEvent, offline_task_service: IOffli
     tid = event.object.payload["tid"]
     task = await offline_task_service.get_task(tid)
     if not task: return
-    text = f"📋 {task.title}\n📍 {task.location}\n📅 {task.date.strftime('%d.%m.%Y')}\n💰 {task.reward} баллов"
+    period_str = f"{task.start_date.strftime('%d.%m.%Y')} - {task.end_date.strftime('%d.%m.%Y')}"
+    text = f"📋 {task.title}\n📍 {task.location}\n📅 Период: {period_str}\n🏆 {task.reward} баллов"
     kb = Keyboard(inline=True).add(Callback("Список участников", {"cmd": "list_users", "tid": tid, "page": 1})).row().add(Callback("Назад к списку задач", {"cmd": "back_to_verify"}))
     await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_USERS, tid=tid, page=1)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text, keyboard=kb.get_json(), random_id=0)
@@ -1146,22 +1629,56 @@ async def view_task(event: GroupTypes.MessageEvent, offline_task_service: IOffli
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("list_users"))
-async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService, state_dispenser: BuiltinStateDispenser):
+async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService,
+                     user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     tid = event.object.payload["tid"]
     page = event.object.payload.get("page", 1)
+
     tasks_list, total = await offline_task_service.get_users_for_task(tid, page, PAGE_LIMIT)
     if not tasks_list:
-        return await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Нет пользователей в статусе 'in_progress'", random_id=0)
+        return await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="Нет пользователей в статусе 'in_progress'",
+            random_id=0
+        )
+
     kb = Keyboard(inline=True)
-    for t in tasks_list: kb.add(Callback(f"{t.user_id} ({t.status.value})", {"cmd": "check_user",
-                                                                             "tid": tid, "uid": t.user_id})); kb.row()
+    for t in tasks_list:
+        # Получаем пользователя для отображения ФИО
+        try:
+            u = await user_service.get_user(t.user_id, Sources.VK)
+            fio = f"{u.surname} {u.name}"
+        except Exception:
+            fio = f"Пользователь {t.user_id}"
+
+        # Ограничение VK API: текст Callback кнопки не может превышать 40 символов
+        if len(fio) > 40:
+            fio = fio[:37] + "..."
+
+        kb.add(Callback(fio, {"cmd": "check_user", "tid": tid, "uid": t.user_id}))
+        kb.row()
+
     kb.row()
-    if page > 1: kb.add(Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": page - 1}))
-    if len(tasks_list) == PAGE_LIMIT: kb.add(Callback("Вперёд ➡️", {"cmd": "list_users", "tid": tid, "page": page + 1}))
+    if page > 1:
+        kb.add(Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": page - 1}))
+    if len(tasks_list) == PAGE_LIMIT:
+        kb.add(Callback("Вперёд ➡️", {"cmd": "list_users", "tid": tid, "page": page + 1}))
+
     kb.add(Callback("К задаче", {"cmd": "view_task", "tid": tid}))
-    await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_USERS, tid=tid, page=page)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Участники со статусом IN_PROGRESS:", keyboard=kb.get_json(), random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
+
+    await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_USERS, tid=tid,
+                              page=page)
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message="Участники со статусом IN_PROGRESS:",
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id,
+        user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("check_user"))
@@ -1187,20 +1704,79 @@ async def verify_action(event: GroupTypes.MessageEvent, offline_task_service: IO
     await list_users(event, offline_task_service=offline_task_service, state_dispenser=state_dispenser)
 
 
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_to_tasks"))
+async def back_to_tasks(event: GroupTypes.MessageEvent, user_service: IUserService,
+                        offline_task_service: IOfflineTaskService,
+                        state_dispenser: BuiltinStateDispenser):
+    """Возврат к списку задач на проверку из просмотра конкретной задачи"""
+    u = await user_service.get_user(event.object.user_id, Sources.VK)
+
+    # Загружаем задачи и фильтруем по региону (как в start_verify)
+    tasks, total_pages = await offline_task_service.search_tasks(event.object.user_id, Sources.VK,
+                                                                 page=1)
+    region_filter = u.region if u.role != UserRole.STAFF_CA else None
+    tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
+
+    if not tasks:
+        await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="Нет активных задач для проверки.",
+            random_id=0
+        )
+    else:
+        kb = Keyboard(inline=True)
+        for t in tasks:
+            kb.add(Callback(f"#{t.id} {t.title[:15]}...", {"cmd": "view_task", "tid": t.id}))
+            kb.row()
+
+        kb.row()
+        if total_pages > 1:
+            kb.add(Callback("Вперёд ➡️", {"cmd": "next_verify"}))
+        kb.add(Callback("🔙 В меню", {"cmd": "back_to_menu"}))
+
+        # Восстанавливаем состояние списка задач
+        await state_dispenser.set(
+            event.object.peer_id,
+            AdminTaskStates.VERIFY_TASK_LIST,
+            page=1,
+            region=region_filter,
+            total_pages=total_pages
+        )
+        await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message=f"Выберите задачу для проверки (стр. 1/{total_pages}):",
+            keyboard=kb.get_json(),
+            random_id=0
+        )
+
+    # Обязательно отвечаем на callback, чтобы убрать "часики" на кнопке
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id,
+        user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+
 =========================================
 ФАЙЛ: src/application/handlers/check_subscription.py
 =========================================
 
+import logging
+
 from aiogram import Bot as TgBot
-from vkbottle import PhotoMessageUploader
+from vkbottle import PhotoMessageUploader, API, Keyboard, Text
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch import BuiltinStateDispenser
+from vkbottle_types import GroupTypes
+from vkbottle_types.events import GroupEventType
 
 from src.application.handlers.finish_registration import finish_registration
 from src.application.keyboards.check_keyboard import get_check_keyboard
 from src.application.states import RegistrationStates
 from src.services.interfaces import IUserService
 
+
+logger = logging.getLogger(__name__)
 router = BotLabeler()
 
 
@@ -1211,25 +1787,32 @@ async def check_sub(
         photo_uploader: PhotoMessageUploader,
         log_chat: str,
         tg_bot: TgBot,
-        group_id: int
+        group_id: int,
+        service_token: str
 ):
     text = message.text.lower().strip() if message.text else ""
-    if text == 'проверить':
+    if text == 'проверить' or text:
+        try:
+            api = API(token=service_token)
+            await api.groups.approve_request(group_id=group_id, user_id=message.from_id)
+        except:
+            ...
         if not await message.ctx_api.groups.is_member(group_id=group_id, user_id=message.from_id):
             await message.answer(
-                "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
+                "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР\n"
                 f"https://vk.com/club{group_id}\n"
             )
-            await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
+            await message.answer('Нажмите кнопку "Проверить", когда отправите заявку на '
+                                 'вступление в сообщество.\nБот автоматически её одобрит',
                                  keyboard=get_check_keyboard())
             return
-
     else:
         await message.answer(
-            "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
+            "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР\n"
             f"https://vk.com/club{group_id}\n"
         )
-        await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
+        await message.answer('Напишите "Проверить", когда отправите заявку на '
+                             'вступление в сообщество.\nБот автоматически её одобрит',
                              keyboard=get_check_keyboard())
         return 
     state = await state_dispenser.get(message.from_id)
@@ -1244,6 +1827,61 @@ async def check_sub(
         photo_uploader=photo_uploader
     )
     await state_dispenser.delete(message.from_id)
+
+
+@router.raw_event(GroupEventType.GROUP_JOIN, GroupTypes.GroupJoin)
+async def handle_group_join(
+        event: GroupTypes.GroupJoin,
+        user_service: IUserService,
+        state_dispenser: BuiltinStateDispenser,
+        photo_uploader: PhotoMessageUploader,
+        log_chat: str,
+        tg_bot: TgBot,
+        group_id: int,
+        service_token: str
+):
+    if event.object.join_type != "request":
+        return
+
+    user_id = event.object.user_id
+    state = await state_dispenser.get(user_id)
+
+    if state and state.state == str(RegistrationStates.CHECK_SUBSCRIPTION):
+        try:
+            api = API(token=service_token)
+            await api.groups.approve_request(group_id=group_id, user_id=user_id)
+            logger.info(f"Auto-approved group join request for user {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to approve request for {user_id}: {e}")
+            return
+        try:
+            await finish_registration(
+                user_service=user_service,
+                peer_id=user_id,
+                state_payload=state.payload,
+                ctx_api=event.ctx_api,
+                log_chat=log_chat,
+                state_dispenser=state_dispenser,
+                tg_bot=tg_bot,
+                photo_uploader=photo_uploader
+            )
+            await state_dispenser.delete(user_id)
+        except Exception as e:
+            logger.error(f"Error finishing registration for user {user_id}: {e}")
+    else:
+        kb = Keyboard(one_time=True).add(Text("Начать"))
+        try:
+            await event.ctx_api.messages.send(
+                user_id=user_id,
+                message=(
+                    "Для вступления в группу необходимо пройти регистрацию в боте.\n"
+                    "Нажмите кнопку ниже, чтобы начать."
+                ),
+                keyboard=kb.get_json(),
+                random_id=0
+            )
+        except Exception as e:
+            logger.error(f"Failed to send registration prompt to user {user_id}: {e}")
 
 
 =========================================
@@ -1288,45 +1926,33 @@ async def finish_registration(
             user_id=peer_id,
             username=None,
             surname=state_payload['surname'],
-            name=state_payload['name'],
-            is_member=state_payload['is_member'],
+            name=state_payload.get('name'),
             patronymic=state_payload.get('patronymic'),
-            birth_date=state_payload['birth_date'],
-            phone_number=state_payload['phone'],
-            region=state_payload['region'],
-            email=state_payload['email'],
-            gender=state_payload['gender'],
-            city=state_payload['city'],
-            wish_to_join=state_payload.get('wish_to_join', False),
-            home_address=state_payload.get('home_address'),
-            news_subscription=state_payload['news_subscription']
+            phone_number=state_payload.get('phone'),
+            region=state_payload.get('region'),
+            news_subscription=state_payload.get('news_subscription', False)
         )
-
-        photo = await photo_uploader.upload(
-            'docs/sokol_like.webp',
-            peer_id=peer_id
-        )
-        await ctx_api.messages.send(
-            peer_id=peer_id,
-            attachment=photo,
-            random_id=0
-        )
+        try:
+            photo = await photo_uploader.upload(
+                'docs/sokol_like.webp',
+                peer_id=peer_id
+            )
+            await ctx_api.messages.send(
+                peer_id=peer_id,
+                attachment=photo,
+                random_id=0
+            )
+        except:
+            ...
 
         await ctx_api.messages.send(
             peer_id=peer_id,
             message=(
-                f"Поздравляем, вы успешно зарегистрированы.\n"
+                f"Поздравляем!\nВы успешно зарегистрированы.\n"
             ),
             random_id=0
         )
 
-        await ctx_api.messages.send(
-            peer_id=peer_id,
-            message=(
-                "Приглашай друзей и получай дополнительные баллы"
-            ),
-            random_id=0
-        )
         await ctx_api.messages.send(
             peer_id=peer_id,
             message="Меню",
@@ -1338,14 +1964,8 @@ async def finish_registration(
             f"Источник: ВК\n"
             f"Является членом партии: {'Да' if user.is_member else 'Нет'}\n"
             f"ФИО: {user.surname} {user.name} {user.patronymic or ''}\n"
-            f"Пол: {user.gender}\n"
-            f"Дата рождения: {user.birth_date.strftime('%d.%m.%Y')}\n"
-            f"Почта: {user.email}\n"
             f"Номер телефона: {user.phone_number}\n"
             f"Регион: {user.region}\n"
-            f"Город: {user.city}\n"
-            f"Хочет вступить в партию ЛДПР: {'Да' if user.wish_to_join else 'Нет'}\n"
-            f"Домашний адрес: {user.home_address or ''}\n"
             f"Подписка на новости: {'Есть' if user.news_subscription else 'Нет'}\n\n"
             
             f"ID участника: {user.id}\n"
@@ -1363,122 +1983,6 @@ async def finish_registration(
             message="Произошла ошибка при сохранении данных. Пожалуйста, попробуйте позже.",
             random_id=0
         )
-
-
-=========================================
-ФАЙЛ: src/application/handlers/get_birth_date.py
-=========================================
-
-from datetime import datetime
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
-from src.application.states import RegistrationStates
-
-router = BotLabeler()
-
-
-@router.message(state=RegistrationStates.BIRTH_DATE)
-async def get_birth_date(message: Message, state_dispenser: BuiltinStateDispenser):
-    if not message.text: return
-
-    try:
-        birth_date = datetime.strptime(message.text.strip(), "%d.%m.%Y").date()
-        now = datetime.now().date()
-        age = now.year - birth_date.year - (
-                    (now.month, now.day) < (birth_date.month, birth_date.day))
-
-        if birth_date > now:
-            return "Дата рождения не может быть в будущем."
-        if age < 18:
-            return "Регистрация доступна только лицам старше 18 лет."
-        if age > 120:
-            return "Введите корректную дату рождения."
-
-        state = await state_dispenser.get(message.from_id)
-        await state_dispenser.set(message.from_id,
-                                          RegistrationStates.PHONE,
-                                          **state.payload,
-                                          birth_date=birth_date)
-        await message.answer(
-            "Введите ваш номер телефона (например, +79001234567):")
-    except ValueError:
-        return "Неверный формат. Пожалуйста, используйте ДД.ММ.ГГГГ"
-
-
-=========================================
-ФАЙЛ: src/application/handlers/get_city.py
-=========================================
-
-import logging
-
-from aiogram import Bot as TgBot
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
-
-from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
-from src.application.states import RegistrationStates
-
-router = BotLabeler()
-
-
-@router.message(state=RegistrationStates.CITY)
-async def get_city(
-        message: Message, state_dispenser: BuiltinStateDispenser,
-):
-    city = message.text.strip() if message.text else ""
-    if len(city) < 2:
-        return "Введите корректное название города."
-
-    state = await state_dispenser.get(message.from_id)
-    new_payload = {**state.payload, "city": city}
-    logging.debug(new_payload)
-    if new_payload['is_member']:
-        await state_dispenser.set(message.from_id,
-                                  RegistrationStates.HOME_ADDRESS,
-                                  **new_payload)
-        await message.answer(
-            "Укажите ваш домашний адрес:"
-        )
-    else:
-        await state_dispenser.set(message.from_id,
-                                  RegistrationStates.WISH_TO_JOIN,
-                                  **new_payload)
-        await message.answer("Хотите ли Вы вступить в партию ЛДПР?",
-                             keyboard=get_boolean_keyboard())
-
-
-=========================================
-ФАЙЛ: src/application/handlers/get_email.py
-=========================================
-
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
-from src.application.states import RegistrationStates
-from src.services.interfaces import IUserService
-from src.domain import exceptions
-
-router = BotLabeler()
-
-
-@router.message(state=RegistrationStates.EMAIL)
-async def get_email(message: Message, user_service: IUserService,
-                    state_dispenser: BuiltinStateDispenser):
-    if not message.text: return
-
-    try:
-        email = await user_service.validate_email(message.text.strip())
-        state = await state_dispenser.get(message.from_id)
-        await state_dispenser.set(message.from_id,
-                                  RegistrationStates.REGION_BY_TEXT,
-                                  **state.payload, email=email)
-        await message.answer(
-            "Укажите регион вашего проживания (начните вводить название):")
-    except exceptions.EmailBadFormatError:
-        return "Некорректный формат email. Введите почту заново"
-    except exceptions.EmailAlreadyExistsError:
-        return "Данный почтовый адрес уже зарегистрирован в системе"
-    except:
-        return "Неизвестная ошибка"
 
 
 =========================================
@@ -1536,100 +2040,10 @@ async def get_patronymic(message: Message, user_service: IUserService,
                                                               'Отчество')
 
         state = await state_dispenser.get(message.from_id)
-        await state_dispenser.set(message.from_id,
-                                  RegistrationStates.GENDER,
-                                  **state.payload,
-                                  patronymic=patronymic)
-        await message.answer("Укажите ваш пол:", keyboard=get_gender_keyboard())
+        await state_dispenser.set(message.from_id, RegistrationStates.PHONE, **state.payload, patronymic=patronymic)
+        await message.answer("Введите ваш номер телефона (например, +79001234567):")
     except exceptions.FioFormatError as e:
         await message.answer(str(e))
-
-
-=========================================
-ФАЙЛ: src/application/handlers/get_gender.py
-=========================================
-
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
-from src.application.keyboards.gender_keyboard import get_gender_keyboard
-from src.application.states import RegistrationStates
-
-router = BotLabeler()
-
-
-@router.message(state=RegistrationStates.GENDER)
-async def get_gender(message: Message, state_dispenser: BuiltinStateDispenser):
-    gender = message.text.strip().lower() if message.text else ""
-    if gender not in ["мужской", "женский"]:
-        await message.answer("Пожалуйста, выберите пол на клавиатуре:",
-                             keyboard=get_gender_keyboard())
-        return
-
-    state = await state_dispenser.get(message.from_id)
-    await state_dispenser.set(message.from_id,
-                              RegistrationStates.BIRTH_DATE,
-                              **state.payload, gender=message.text)
-    await message.answer(
-        "Введите вашу дату рождения в формате ДД.ММ.ГГГГ (например, 15.05.1995):")
-
-
-=========================================
-ФАЙЛ: src/application/handlers/get_home_address.py
-=========================================
-
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
-
-from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
-from src.application.states import RegistrationStates
-
-router = BotLabeler()
-
-
-@router.message(state=RegistrationStates.HOME_ADDRESS)
-async def get_home_address(
-        message: Message,
-        state_dispenser: BuiltinStateDispenser
-):
-    if not message.text: return
-
-    state = await state_dispenser.get(message.from_id)
-    new_payload = {**state.payload, "home_address": message.text.strip()}
-
-    await message.answer(
-        message="Хотели бы вы получать информацию о инициативах и мероприятиях ЛДПР?",
-        keyboard=get_boolean_keyboard(),
-    )
-    await state_dispenser.set(message.peer_id, RegistrationStates.NEWS_SUBSCRIPTION, **new_payload)
-
-
-=========================================
-ФАЙЛ: src/application/handlers/get_membership.py
-=========================================
-
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
-from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
-from src.application.states import RegistrationStates
-
-router = BotLabeler()
-
-
-@router.message(state=RegistrationStates.MEMBERSHIP)
-async def get_membership(message: Message,
-                         state_dispenser: BuiltinStateDispenser):
-    text = message.text.lower().strip() if message.text else ""
-
-    if text not in ['да', 'нет']:
-        await message.answer("Пожалуйста, выберите вариант на клавиатуре:",
-                             keyboard=get_boolean_keyboard())
-        return
-
-    is_member = (text == 'да')
-    await state_dispenser.set(message.from_id,
-                              RegistrationStates.SURNAME,
-                              is_member=is_member)
-    await message.answer("Введите вашу фамилию:")
 
 
 =========================================
@@ -1663,10 +2077,11 @@ async def get_news_sub(
         **new_payload
     )
     await message.answer(
-        "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР"
+        "Для завершения регистрации подпишитесь на сообщество Большой команды ЛДПР\n"
         f"https://vk.com/club{group_id}\n"
     )
-    await message.answer('Нажмите кнопку "ПРОВЕРИТЬ", когда подпишитесь на сообщество',
+    await message.answer('Нажмите кнопку "Проверить", когда отправите заявку на '
+                         'вступление в сообщество. Бот автоматически её одобрит',
                          keyboard=get_check_keyboard())
 
 =========================================
@@ -1690,10 +2105,8 @@ async def get_phone(message: Message, user_service: IUserService,
     try:
         phone = await user_service.validate_phone(message.text.strip())
         state = await state_dispenser.get(message.from_id)
-        await state_dispenser.set(message.from_id,
-                                  RegistrationStates.EMAIL,
-                                  **state.payload, phone=phone)
-        await message.answer("Введите адрес вашей электронной почты:")
+        await state_dispenser.set(message.from_id, RegistrationStates.REGION_BY_TEXT, **state.payload, phone=phone)
+        await message.answer("Укажите регион вашего проживания (начните вводить название):")
     except exceptions.PhoneBadFormatError:
         return "Некорректный формат. Пример: +79991234567"
     except exceptions.PhoneBadCountryError:
@@ -1778,66 +2191,16 @@ async def select_region_callback(
     region_full = await user_service.get_region_by_prefix(payload["region"])
     current_payload = state_peer.payload or {}
 
-    await state_dispenser.set(
-        event.object.peer_id,
-        RegistrationStates.CITY,
-        **current_payload,
-        region=region_full
-    )
-
+    await state_dispenser.set(event.object.peer_id, RegistrationStates.NEWS_SUBSCRIPTION, **current_payload, region=region_full)
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
-        message=f"Вы выбрали: {region_full}\nТеперь укажите ваш город или населённый пункт:",
+        message=f"Вы выбрали: {region_full}\nХотели бы вы получать информацию о инициативах и мероприятиях ЛДПР? (Да/Нет)",
         random_id=0
     )
 
     await event.ctx_api.messages.send_message_event_answer(
         event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id
     )
-
-=========================================
-ФАЙЛ: src/application/handlers/get_wish_to_join.py
-=========================================
-
-from vkbottle.bot import BotLabeler, Message
-from vkbottle.dispatch import BuiltinStateDispenser
-
-from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
-from src.application.states import RegistrationStates
-
-router = BotLabeler()
-
-
-@router.message(state=RegistrationStates.WISH_TO_JOIN)
-async def get_wish(
-        message: Message,
-        state_dispenser: BuiltinStateDispenser,
-):
-    text = message.text.lower().strip() if message.text else ""
-    if text not in ['да', 'нет']:
-        await message.answer("Выберите вариант 'Да' или 'Нет':",
-                             keyboard=get_boolean_keyboard())
-        return
-
-    state = await state_dispenser.get(message.from_id)
-    new_payload = {**state.payload, "wish_to_join": (text == 'да')}
-
-    if text == 'нет':
-        await message.answer(
-            message="Хотели бы вы получать информацию о инициативах и мероприятиях ЛДПР?",
-            keyboard=get_boolean_keyboard(),
-        )
-        await state_dispenser.set(message.peer_id, RegistrationStates.NEWS_SUBSCRIPTION, **new_payload)
-
-    else:
-        await state_dispenser.set(
-            message.from_id,
-            RegistrationStates.HOME_ADDRESS,
-            **new_payload
-        )
-        await message.answer(
-            "Для возможности направления документов укажите свой домашний адрес")
-
 
 =========================================
 ФАЙЛ: src/application/handlers/__init__.py
@@ -1852,22 +2215,16 @@ from .user.tasks import router as user_tasks_router
 from .user.profile import router as user_profile_router
 from .user.learning import router as user_learning_router
 from .personal_data import router as pd_router
-from .get_membership import router as membership_router
 from .get_fio import router as fio_router
-from .get_gender import router as gender_router
-from .get_birth_date import router as birth_router
 from .get_phone import router as phone_router
-from .get_email import router as email_router
 from .get_region import router as region_router
-from .get_city import router as city_router
-from .get_wish_to_join import router as wish_router
-from .get_home_address import router as home_router
 from .get_news_subscription import router as news_router
 from .check_subscription import router as check_router
 from .user.shop import router as user_shop_router
 from .admin.shop import router as admin_shop_router
 from .admin.orders import router as admin_orders_router
 from .user.closed_events import router as user_ce_router
+from .user.lottery import router as lottery_router
 from .admin.closed_events import router as admin_ce_router
 from .admin.post import router as admin_router
 
@@ -1875,31 +2232,24 @@ full_labeler = BotLabeler()
 
 full_labeler.load(start_command_router)
 full_labeler.load(admin_router)
-full_labeler.load(ca_router)
-full_labeler.load(admin_tasks_router)
-full_labeler.load(user_menu_router)
-full_labeler.load(user_tasks_router)
-full_labeler.load(user_profile_router)
-full_labeler.load(user_learning_router)
+# full_labeler.load(ca_router)
+# full_labeler.load(admin_tasks_router)
+# full_labeler.load(user_menu_router)
+# full_labeler.load(user_tasks_router)
+# full_labeler.load(user_profile_router)
+# full_labeler.load(user_learning_router)
 full_labeler.load(pd_router)
-full_labeler.load(pd_router)
-full_labeler.load(membership_router)
 full_labeler.load(fio_router)
-full_labeler.load(gender_router)
-full_labeler.load(birth_router)
 full_labeler.load(phone_router)
-full_labeler.load(email_router)
 full_labeler.load(region_router)
-full_labeler.load(city_router)
-full_labeler.load(wish_router)
-full_labeler.load(home_router)
 full_labeler.load(news_router)
 full_labeler.load(check_router)
-full_labeler.load(user_shop_router)
-full_labeler.load(admin_shop_router)
-full_labeler.load(admin_orders_router)
-full_labeler.load(user_ce_router)
-full_labeler.load(admin_ce_router)
+full_labeler.load(lottery_router)
+# full_labeler.load(user_shop_router)
+# full_labeler.load(admin_shop_router)
+# full_labeler.load(admin_orders_router)
+# full_labeler.load(user_ce_router)
+# full_labeler.load(admin_ce_router)
 full_labeler.load(start_router)
 
 
@@ -1931,14 +2281,10 @@ async def handle_pd_agree(event: GroupTypes.MessageEvent,
             RegistrationStates.PERSONAL_DATA):
         return
 
-    # Переводим в следующий стейт
-    await state_dispenser.set(event.object.peer_id,
-                              RegistrationStates.MEMBERSHIP)
-
+    await state_dispenser.set(event.object.peer_id, RegistrationStates.SURNAME)
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
-        message='Вы являетесь членом ЛДПР?',
-        keyboard=get_boolean_keyboard(),
+        message='Введите вашу фамилию:',
         random_id=0
     )
 
@@ -2026,7 +2372,7 @@ from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources
-from src.services.interfaces import IUserService, IReferralService
+from src.services.interfaces import IUserService, IReferralService, IActiveUserService
 
 router = BotLabeler()
 start_command_router = BotLabeler()
@@ -2040,16 +2386,27 @@ def parse_ref(ref: str) -> tuple[int, Sources] | None:
         return int(match.group(1)), Sources(match.group(2))
 
 
+@router.message(from_chat=True)
+async def hello_handler(message: Message):
+    ...
+
+
 @router.message()
 @start_command_router.message(text=["Начать", "/start", "start", "начать", "Заново", "заново"])
 async def start(
         message: Message, user_service: IUserService, 
         state_dispenser: BuiltinStateDispenser, photo_uploader: PhotoMessageUploader,
-        referral_service: IReferralService
+        referral_service: IReferralService, active_user_service: IActiveUserService
 ):
     if message.peer_id < 0:
         return
+    try:
+        await state_dispenser.delete(message.from_id)
+    except:
+        ...
+    await active_user_service.log_active_user(message.from_id, Sources.VK)
     if await user_service.is_user_exists(message.from_id):
+        # return await message.answer("Бот находится на этапе разрабоки")  # УДАЛИТЬ СТРОКУ
         try:
             role = await user_service.get_user_role(message.from_id, Sources.VK)
         except Exception:
@@ -2063,11 +2420,13 @@ async def start(
                 parsed_ref[0], parsed_ref[1],
                 message.peer_id, Sources.VK
             )
-
-    photo = await photo_uploader.upload('docs/sokol_stay.webp', peer_id=message.peer_id)
-    await message.answer(attachment=photo)
+    try:
+        photo = await photo_uploader.upload('docs/sokol_stay.webp', peer_id=message.peer_id)
+        await message.answer(attachment=photo)
+    except:
+        ...
     await message.answer(
-        "Здравствуйте! Я — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"
+        "Здравствуйте!\nЯ — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"
         "Вы на шаг ближе к тому, чтобы стать частью большой команды, "
         "которая меняет страну к лучшему.\n\n"
         "Чтобы начать путь активиста, получать баллы за задания и "
@@ -2110,7 +2469,8 @@ PAGE_LIMIT = 5
 def _event_kb(events, page, total, prefix="user"):
     kb = Keyboard(inline=True)
     for e in events:
-        kb.add(Callback(f"📅 {e.title[:20]} ({e.date.strftime('%d.%m')})", {"cmd": f"view_{prefix}", "eid": e.id}))
+        kb.add(Callback(f"📅 {e.title[:20]} ({e.date.strftime('%d.%m')})"[:40], {"cmd": f"view"
+                                                                                   f"_{prefix}", "eid": e.id}))
         kb.row()
     kb.row()
     if total > 1:
@@ -2121,13 +2481,13 @@ def _event_kb(events, page, total, prefix="user"):
 
 
 @router.message(text=["Закрытые мероприятия"])
-async def open_ce(message: Message, user_service: IUserService, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+async def open_ce(message: Message, user_service: IUserService, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
     if u.grade != UserGrade.RESERVE:
         kb = Keyboard(one_time=True).add(Text("На главную"))
-        return await message.answer("Для разблокировки этого раздела необходим ранг \"Кадровый резерв ЛДПР\". Для его достижения выполните 40 оффлайн заданий", keyboard=kb.get_json())
+        return await message.answer("Для разблокировки этого раздела необходим ранг \"Кадровый резерв ЛДПР\". Для его достижения выполните 40 офлайн заданий", keyboard=kb.get_json())
 
-    evs, total = await event_service.list_events(u.region, 1)
+    evs, total = await closed_event_service.list_events(u.region, 1)
     if not evs: return await message.answer("В вашем регионе пока нет закрытых мероприятий.")
     pages = (total + PAGE_LIMIT - 1) // PAGE_LIMIT
     await state_dispenser.set(message.from_id, ClosedEventStates.BROWSE_USER, page=1, region=u.region, total=pages)
@@ -2135,28 +2495,56 @@ async def open_ce(message: Message, user_service: IUserService, event_service: I
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_user"))
-async def next_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
-    await _navigate_ce(event, 1, user_service, event_service, state_dispenser)
+async def next_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+    await _navigate_ce(event, 1, user_service, closed_event_service, state_dispenser)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("prev_user"))
-async def prev_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
-    await _navigate_ce(event, -1, user_service, event_service, state_dispenser)
+async def prev_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+    await _navigate_ce(event, -1, user_service, closed_event_service, state_dispenser)
 
 
-async def _navigate_ce(event, delta, user_service, event_service, state_dispenser):
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_ce_user"))
+async def back_to_user_ce(event: GroupTypes.MessageEvent, user_service: IUserService,
+                          closed_event_service: IClosedEventService):
+    u = await user_service.get_user(event.object.user_id, Sources.VK)
+    evs, total_count = await closed_event_service.list_events(u.region, page=1)
+
+    if not evs:
+        return await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="В вашем регионе пока нет закрытых мероприятий.",
+            random_id=0
+        )
+    pages = (total_count + PAGE_LIMIT - 1) // PAGE_LIMIT
+    kb = _event_kb(evs, page=1, total=pages, prefix="user")
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=f"📍 Актуальные мероприятия в {u.region} (стр. 1/{pages}):",
+        keyboard=kb,
+        random_id=0
+    )
+
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id,
+        user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+
+
+async def _navigate_ce(event, delta, user_service, closed_event_service, state_dispenser):
     state = await state_dispenser.get(event.object.peer_id)
     np = max(1, min(state.payload.get("page", 1) + delta, state.payload.get("total", 1)))
-    evs, total = await event_service.list_events(state.payload.get("region"), np)
+    evs, total = await closed_event_service.list_events(state.payload.get("region"), np)
     await state_dispenser.set(event.object.peer_id, ClosedEventStates.BROWSE_USER, page=np, **state.payload)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"📍 Мероприятия (стр. {np}/{state.payload['total']}):", keyboard=_event_kb(evs, np, state.payload['total']), random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_user"))
-async def view_user_ce(event: GroupTypes.MessageEvent, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+async def view_user_ce(event: GroupTypes.MessageEvent, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
     eid = event.object.payload["eid"]
-    ev = await event_service.get_event(eid)
+    ev = await closed_event_service.get_event(eid)
     if not ev: 
         return await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Мероприятие не найдено", random_id=0)
     kb = Keyboard(inline=True).add(Callback("✅ Записаться", {"cmd": "register_ce", "eid": eid})).row().add(Callback("🔙 Назад", {"cmd": "back_ce_user"}))
@@ -2167,9 +2555,9 @@ async def view_user_ce(event: GroupTypes.MessageEvent, event_service: IClosedEve
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("register_ce"))
-async def register_ce(event: GroupTypes.MessageEvent, event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
+async def register_ce(event: GroupTypes.MessageEvent, closed_event_service: IClosedEventService, state_dispenser: BuiltinStateDispenser):
     try:
-        await event_service.register(event.object.user_id, Sources.VK, event.object.payload["eid"])
+        await closed_event_service.register(event.object.user_id, Sources.VK, event.object.payload["eid"])
         await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="✅ Вы успешно записались на мероприятие!", random_id=0)
     except Exception as e:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"❌ {e}", random_id=0)
@@ -2293,6 +2681,281 @@ async def retry_quiz(message: Message, learning_service: ILearningService,
 
 
 =========================================
+ФАЙЛ: src/application/handlers/user/lottery.py
+=========================================
+
+import logging
+from datetime import datetime
+from vkbottle.bot import BotLabeler, Message
+from vkbottle import Keyboard, Text
+from vkbottle.dispatch import BuiltinStateDispenser
+from src.application.states import LotteryStates
+from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
+from src.application.keyboards.gender_keyboard import get_gender_keyboard
+from src.domain.entities.user import Sources
+from src.domain import exceptions
+from src.services.interfaces import IUserService, IParticipationService
+
+logger = logging.getLogger(__name__)
+router = BotLabeler()
+
+
+def get_cancel_kb():
+    return Keyboard(one_time=True).add(Text("На главную")).get_json()
+
+
+def get_menu_kb():
+    return Keyboard(one_time=True).add(Text("Меню")).get_json()
+
+
+async def finish_lottery(
+        message: Message,
+        state_payload: dict,
+        home_address: str | None,
+        state_dispenser: BuiltinStateDispenser,
+        user_service: IUserService,
+        participation_service: IParticipationService
+):
+    """Завершает анкету, обновляет профиль и регистрирует в розыгрыше."""
+    try:
+        # Обновляем профиль пользователя недостающими данными
+        await user_service.update_user_profile(
+            user_id=message.from_id,
+            source=Sources.VK,
+            birth_date=state_payload.get('birth_date'),
+            email=state_payload.get('email'),
+            gender=state_payload.get('gender'),
+            city=state_payload.get('city'),
+            wish_to_join=state_payload.get('wish_to_join', False),
+            is_member=state_payload.get('is_member', False),
+            home_address=home_address
+        )
+
+        # Активируем участие и получаем уникальный номер
+        p_id = await participation_service.activate_participation(message.from_id, Sources.VK)
+        await state_dispenser.delete(message.from_id)
+
+        await message.answer(
+            f"🎉 Поздравляем! Вы успешно зарегистрированы для участия в розыгрыше!\n\n"
+            f"Ваш уникальный номер: {p_id}Д\n\n"
+            f"Сохраните его для проверки результатов.",
+            keyboard=get_menu_kb()
+        )
+    except Exception as e:
+        logger.error(f"Lottery finish error: {e}", exc_info=True)
+        await message.answer(
+            "❌ Произошла ошибка при сохранении данных. Пожалуйста, попробуйте позже.",
+            keyboard=get_menu_kb()
+        )
+
+
+@router.message(text=["Участие в розыгрыше"])
+async def lottery_intro(message: Message, participation_service: IParticipationService,
+                        user_service: IUserService):
+    user = await user_service.get_user(message.from_id, Sources.VK)
+    is_participant = await participation_service.is_participant(message.from_id, Sources.VK)
+    if user.city and not is_participant:
+        await participation_service.activate_participation(message.from_id, Sources.VK)
+        is_participant = True
+    if is_participant:
+        ids = await participation_service.get_all_participation_ids(message.from_id, Sources.VK)
+        nums = "\n".join([f"- {i}Д" for i in ids])
+        return await message.answer(
+            f"✅ Вы уже участвуете в розыгрыше!\n\nВаши уникальные номера:\n{nums}",
+            keyboard=get_menu_kb()
+        )
+
+    kb = Keyboard(one_time=True).add(Text("Пройти анкету")).add(Text("На главную")).get_json()
+    await message.answer(
+        "🎁 Хотите принять участие в розыгрыше призов?\n\n"
+        "Для этого нужно ответить на несколько дополнительных вопросов.\n"
+        "Это займёт не больше минуты.",
+        keyboard=kb
+    )
+
+
+@router.message(text=["Пройти анкету"])
+async def start_lottery(message: Message, state_dispenser: BuiltinStateDispenser,
+                        participation_service: IParticipationService):
+    is_participant = await participation_service.is_participant(message.from_id, Sources.VK)
+    if is_participant:
+        return await message.answer("Вы уже приняли участие в розыгрыше", keyboard=get_menu_kb())
+
+    await state_dispenser.set(message.from_id, LotteryStates.IS_MEMBER)
+    await message.answer("Вы являетесь членом ЛДПР?", keyboard=get_boolean_keyboard())
+
+
+# ==================== ШАГИ АНКЕТЫ ====================
+
+@router.message(state=LotteryStates.IS_MEMBER)
+async def get_is_member(message: Message, state_dispenser: BuiltinStateDispenser):
+    text = message.text.lower().strip() if message.text else ""
+    if text == "на главную":
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Главное меню", keyboard=get_menu_kb())
+
+    if text not in ['да', 'нет']:
+        return await message.answer("Пожалуйста, выберите вариант на клавиатуре:",
+                                    keyboard=get_boolean_keyboard())
+
+    is_member = (text == 'да')
+    await state_dispenser.set(message.from_id, LotteryStates.BIRTH_DATE, is_member=is_member)
+    await message.answer("Введите вашу дату рождения в формате ДД.ММ.ГГГГ:",
+                         keyboard=get_cancel_kb())
+
+
+@router.message(state=LotteryStates.BIRTH_DATE)
+async def get_birth_date(message: Message, state_dispenser: BuiltinStateDispenser):
+    if not message.text: return
+    if message.text.strip().lower() == "на главную":
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Главное меню", keyboard=get_menu_kb())
+
+    try:
+        birth_date = datetime.strptime(message.text.strip(), "%d.%m.%Y").date()
+        now = datetime.now().date()
+        age = now.year - birth_date.year - (
+                (now.month, now.day) < (birth_date.month, birth_date.day)
+        )
+        if birth_date > now:
+            return await message.answer("Дата рождения не может быть в будущем.")
+        if age > 120:
+            return await message.answer("Введите корректную дату рождения.")
+        state = await state_dispenser.get(message.from_id)
+        await state_dispenser.set(message.from_id, LotteryStates.EMAIL, **state.payload,
+                                  birth_date=birth_date)
+        await message.answer("Введите адрес электронной почты (или '-' если нет):",
+                             keyboard=get_cancel_kb())
+    except ValueError:
+        await message.answer("Неверный формат. Используйте ДД.ММ.ГГГГ", keyboard=get_cancel_kb())
+
+
+@router.message(state=LotteryStates.EMAIL)
+async def get_email(message: Message, user_service: IUserService,
+                    state_dispenser: BuiltinStateDispenser):
+    if not message.text: return
+    val = message.text.strip()
+    if val.lower() == "на главную":
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Главное меню", keyboard=get_menu_kb())
+
+    email = None
+    if val.lower() not in ['-', 'нет', 'нету', 'отсутствует']:
+        try:
+            email = await user_service.validate_email(val)
+        except exceptions.EmailBadFormatError:
+            return await message.answer("Некорректный формат email.", keyboard=get_cancel_kb())
+        except exceptions.EmailAlreadyExistsError:
+            return await message.answer("Почта уже зарегистрирована в системе.",
+                                        keyboard=get_cancel_kb())
+
+    state = await state_dispenser.get(message.from_id)
+    await state_dispenser.set(message.from_id, LotteryStates.GENDER, **state.payload, email=email)
+    await message.answer("Укажите ваш пол:", keyboard=get_gender_keyboard())
+
+
+@router.message(state=LotteryStates.GENDER)
+async def get_gender(message: Message, state_dispenser: BuiltinStateDispenser):
+    gender = message.text.strip().lower() if message.text else ""
+    if gender == "на главную":
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Главное меню", keyboard=get_menu_kb())
+
+    if gender not in ["мужской", "женский"]:
+        return await message.answer("Выберите пол на клавиатуре:", keyboard=get_gender_keyboard())
+
+    state = await state_dispenser.get(message.from_id)
+    await state_dispenser.set(message.from_id, LotteryStates.CITY, **state.payload,
+                              gender=message.text)
+    await message.answer("Укажите ваш город или населённый пункт:", keyboard=get_cancel_kb())
+
+
+@router.message(state=LotteryStates.CITY)
+async def get_city(message: Message, state_dispenser: BuiltinStateDispenser):
+    if not message.text: return
+    if message.text.strip().lower() == "на главную":
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Главное меню", keyboard=get_menu_kb())
+
+    city = message.text.strip()
+    if len(city) < 2:
+        return await message.answer("Введите корректное название города.", keyboard=get_cancel_kb())
+
+    state = await state_dispenser.get(message.from_id)
+    p = state.payload
+
+    if p.get('is_member'):
+        await state_dispenser.set(message.from_id, LotteryStates.HOME_ADDRESS, **p, city=city,
+                                  wish_to_join=False)
+        await message.answer("Укажите свой домашний адрес:", keyboard=get_cancel_kb())
+    else:
+        await state_dispenser.set(message.from_id, LotteryStates.WISH_TO_JOIN, **p, city=city)
+        await message.answer("Хотите ли Вы вступить в партию ЛДПР?",
+                             keyboard=get_boolean_keyboard())
+
+
+@router.message(state=LotteryStates.WISH_TO_JOIN)
+async def get_wish(
+        message: Message,
+        state_dispenser: BuiltinStateDispenser,
+        user_service: IUserService,
+        participation_service: IParticipationService
+):
+    text = message.text.lower().strip() if message.text else ""
+    if text == "на главную":
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Главное меню", keyboard=get_menu_kb())
+
+    if text not in ['да', 'нет']:
+        return await message.answer("Выберите вариант 'Да' или 'Нет':",
+                                    keyboard=get_boolean_keyboard())
+
+    wish_to_join = (text == 'да')
+    state = await state_dispenser.get(message.from_id)
+    p = state.payload
+
+    if wish_to_join:
+        await state_dispenser.set(message.from_id, LotteryStates.HOME_ADDRESS, **p,
+                                  wish_to_join=wish_to_join)
+        await message.answer("Для возможности направления документов укажите свой домашний адрес:",
+                             keyboard=get_cancel_kb())
+    else:
+        await finish_lottery(
+            message=message,
+            state_payload={**p, 'wish_to_join': wish_to_join},
+            home_address=None,
+            state_dispenser=state_dispenser,
+            user_service=user_service,
+            participation_service=participation_service
+        )
+
+
+@router.message(state=LotteryStates.HOME_ADDRESS)
+async def get_home_address(
+        message: Message,
+        state_dispenser: BuiltinStateDispenser,
+        user_service: IUserService,
+        participation_service: IParticipationService
+):
+    if not message.text: return
+    if message.text.strip().lower() == "на главную":
+        await state_dispenser.delete(message.from_id)
+        return await message.answer("Главное меню", keyboard=get_menu_kb())
+
+    state = await state_dispenser.get(message.from_id)
+    p = state.payload
+
+    # Завершаем анкету с передачей всех сервисов
+    await finish_lottery(
+        message=message,
+        state_payload=p,
+        home_address=message.text.strip(),
+        state_dispenser=state_dispenser,
+        user_service=user_service,
+        participation_service=participation_service
+    )
+
+=========================================
 ФАЙЛ: src/application/handlers/user/menu.py
 =========================================
 
@@ -2311,10 +2974,6 @@ from src.services.interfaces import IUserService
 
 logger = logging.getLogger(__name__)
 router = BotLabeler()
-
-
-def get_main_menu_kb():
-    return Keyboard(one_time=False).add(Text("Выполнить задание")).row().add(Text("Мои задания")).row().add(Text("Личный кабинет")).get_json()
 
 
 @router.message(text=["Меню", "На главную", "Вернуться на главную страницу"])
@@ -2428,36 +3087,157 @@ async def back_to_my_tasks(event: GroupTypes.MessageEvent, offline_task_service,
 
 import logging
 from vkbottle.bot import BotLabeler, Message
-from vkbottle import Keyboard, Text
-from src.services.interfaces import IUserService, IReferralService, IBalanceService
+from vkbottle import Keyboard, Text, PhotoMessageUploader
+from src.services.interfaces import (IUserService, IReferralService, IBalanceService,
+                                     ILearningService, IOrderService, IClosedEventService,
+                                     IReferralLinkService)
 from src.domain.entities.user import Sources
 
 logger = logging.getLogger(__name__)
 router = BotLabeler()
 
 
+def get_profile_kb():
+    return (Keyboard(one_time=False)
+            .add(Text("Реферальная ссылка")).row()
+            .add(Text("Список покупок")).row()
+            .add(Text("Список мероприятий")).row()
+            .add(Text("Посмотреть рейтинг")).row()
+            .add(Text("На главную")).get_json())
+
+
+def get_back_kb():
+    return (Keyboard(one_time=False)
+            .add(Text("Назад")).row()
+            .add(Text("На главную")).get_json())
+
+
 @router.message(text=["Личный кабинет"])
 async def profile(message: Message, user_service: IUserService, referral_service: IReferralService,
-                  balance_service: IBalanceService):
+                  balance_service: IBalanceService, learning_service: ILearningService):
     try:
         u = await user_service.get_user(message.from_id, Sources.VK)
         balance = await balance_service.get_balance(u.id, u.source)
         refs = await referral_service.get_count_invitees(u.id, u.source)
         on_count = await user_service.get_completed_tasks_count(u.id, u.source, True)
         off_count = await user_service.get_completed_tasks_count(u.id, u.source, False)
+        is_passed = await learning_service.is_learning_passed(u.id, u.source)
 
-        text = (f"👤 {u.surname} {u.name}\n"
-                f"Роль: {u.role.value}\n"
-                f"Баланс: {balance} баллов\n"
-                f"Рефералов: {refs}\n"
-                f"Выполнено онлайн: {on_count}\n"
-                f"Выполнено оффлайн: {off_count}")
-        kb = Keyboard(one_time=True).add(Text("Вернуться на главную страницу"))
-        await message.answer(text, keyboard=kb.get_json())
+        text = (
+            f"Ваш ранг - {u.grade.value}\n"
+            f"Ваш регион - {u.region}\n"
+            f"Количество баллов - {balance}\n"
+            f"Количество приглашённых людей - {refs}\n"
+            f"Количество выполненных офлайн заданий - {off_count}\n"
+            f"Количество выполненных онлайн заданий - {on_count}\n"
+            f"Обучение пройдено - {'да' if is_passed else 'нет'}\n"
+            f"Дата регистрации - {u.created_at.strftime('%d.%m.%Y')}"
+        )
+        await message.answer(text, keyboard=get_profile_kb())
     except Exception as e:
-        logger.error(f"Profile error: {e}")
+        logger.error(f"Profile error: {e}", exc_info=True)
         await message.answer("Ошибка загрузки профиля")
 
+
+@router.message(text=["Реферальная ссылка"])
+async def referral_link(message: Message, referral_link_service: IReferralLinkService,
+                        photo_uploader: PhotoMessageUploader):
+    repost_data = referral_link_service.generate_post(message.from_id)
+
+    # 1️⃣ Сообщение с прямыми ссылками для копирования
+    vk_ref = f"{referral_link_service.vk_bot_link}?ref={message.from_id}_{referral_link_service.source.value}"
+    tg_ref = f"{referral_link_service.tg_bot_link}?start={message.from_id}_{referral_link_service.source.value}"
+
+    links_text = (
+        "🔗 Ваши реферальные ссылки:\n\n"
+        f"🔹 ВКонтакте: {vk_ref}\n"
+        f"🔹 Telegram: {tg_ref}\n\n"
+        "Копируйте и отправляйте друзьям!"
+    )
+    await message.answer(links_text, keyboard=get_back_kb())
+
+    # 2️⃣ Сообщение для репоста с картинкой
+    photo = await photo_uploader.upload(repost_data.image_path, peer_id=message.peer_id)
+    await message.answer(
+        message=repost_data.text,
+        attachment=photo,
+        keyboard=get_back_kb()
+    )
+
+
+@router.message(text=["Список покупок"])
+async def orders_history(message: Message, order_service: IOrderService):
+    orders = await order_service.get_user_orders_history(message.from_id, Sources.VK)
+    if not orders:
+        return await message.answer("У вас пока нет покупок.", keyboard=get_back_kb())
+
+    lines = ["🛍 Ваши покупки:"]
+    for o in orders:
+        status_map = {"pending": "Ожидает", "completed": "Получен", "cancelled": "Отменен"}
+        status_text = status_map.get(o.status.value, o.status.value)
+        lines.append(f"- {o.product_name} | {status_text} | {o.created_at.strftime('%d.%m.%Y')}")
+
+    await message.answer("\n".join(lines), keyboard=get_back_kb())
+
+
+@router.message(text=["Список мероприятий"])
+async def events_history(message: Message, closed_event_service: IClosedEventService):
+    events = await closed_event_service.get_user_events(message.from_id, Sources.VK)
+    if not events:
+        return await message.answer("Вы пока не записаны ни на одно мероприятие.",
+                                    keyboard=get_back_kb())
+
+    lines = ["📅 Ваши мероприятия:"]
+    for e in events:
+        lines.append(
+            f"- {e.title} | {e.date.strftime('%d.%m.%Y')} {e.time.strftime('%H:%M')} | {e.location}")
+
+    await message.answer("\n".join(lines), keyboard=get_back_kb())
+
+
+@router.message(text=["Посмотреть рейтинг"])
+async def show_rating(message: Message, user_service: IUserService):
+    u = await user_service.get_user(message.from_id, Sources.VK)
+    user_score = await user_service.get_user_rating(u.id, u.source)
+
+    global_top = await user_service.get_global_top(10)
+    local_top = await user_service.get_local_top(u.region, 10)
+
+    text = f"🏆 Ваш рейтинг: {user_score} баллов\n\n"
+
+    text += "🌍 Глобальный рейтинг (Топ-10):\n"
+    if not global_top:
+        text += "Пока нет данных.\n"
+    else:
+        user_in_global = False
+        for i, entry in enumerate(global_top, 1):
+            marker = " 👈 (Это вы!)" if entry["uid"] == u.id else ""
+            text += f"{i}. {entry['name']} - {entry['score']}{marker}\n"
+            if entry["uid"] == u.id: user_in_global = True
+        if not user_in_global:
+            text += f"... Вы не в топ-10.\n"
+
+    text += f"\n📍 Локальный рейтинг ({u.region}, Топ-10):\n"
+    if not local_top:
+        text += "Пока нет данных.\n"
+    else:
+        user_in_local = False
+        for i, entry in enumerate(local_top, 1):
+            marker = " 👈 (Это вы!)" if entry["uid"] == u.id else ""
+            text += f"{i}. {entry['name']} - {entry['score']}{marker}\n"
+            if entry["uid"] == u.id: user_in_local = True
+        if not user_in_local:
+            text += f"... Вы не в топ-10.\n"
+
+    await message.answer(text, keyboard=get_back_kb())
+
+
+@router.message(text=["Назад"])
+async def back_to_profile(message: Message, user_service: IUserService,
+                          referral_service: IReferralService,
+                          balance_service: IBalanceService, learning_service: ILearningService):
+    # Возврат в личный кабинет
+    await profile(message, user_service, referral_service, balance_service, learning_service)
 
 =========================================
 ФАЙЛ: src/application/handlers/user/shop.py
@@ -2784,15 +3564,14 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     if not task:
         return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                                  message="Ошибка: задание не найдено", random_id=0)
-    vk_link = f"https://vk.com/wall-{task.group_id}_{task.post_id}"
     kb = Keyboard(inline=True)
     kb.add(Callback("Проверить", {"cmd": "check_online", "tid": tid}))
     kb.row().add(Callback("Назад к списку", {"cmd": "back_online_list"}))
 
     text = (f"📋 Задание #{task.id}\n"
             f"📌 Тип: {task.type.value}\n"
-            f"💰 Награда: {task.reward}\n"
-            f"🔗 Ссылка на задание: {vk_link}")
+            f"🏆 Награда: {task.reward} баллов\n"
+            f"🔗 Ссылка на задание: {task.url}")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_VIEW, tid=tid)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text,
                                       keyboard=kb.get_json(), random_id=0)
@@ -2817,13 +3596,13 @@ async def view_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
             event_id=event.object.event_id, user_id=event.object.user_id,
             peer_id=event.object.peer_id)
 
-    task_date = task.date.strftime("%d.%m.%Y") if hasattr(task.date, "strftime") else str(task.date)
+    period_str = f"{task.start_date.strftime('%d.%m.%Y')} - {task.end_date.strftime('%d.%m.%Y')}"
     text = (f"📋 {task.title}\n"
-            f"📅 Дата: {task_date}\n"
+            f"📅 Период: {period_str}\n"
             f"📝 {task.description}\n"
             f"📍 {task.location}\n"
             f"📞 {task.contacts}\n"
-            f"💰 {task.reward} баллов")
+            f"🏆 {task.reward} баллов")
     kb = Keyboard(inline=True)
     kb.add(Callback("Принять", {"cmd": "accept_offline", "tid": tid}))
     kb.row().add(Callback("Назад к списку", {"cmd": "back_offline_list"}))
@@ -2982,34 +3761,37 @@ def get_gender_keyboard():
 
 from vkbottle import Keyboard, Text
 from src.domain.entities.user import UserRole
+import random
 
 
 def get_role_menu_keyboard(role: UserRole | None) -> str:
     """Генерирует главное меню в зависимости от роли пользователя."""
     kb = Keyboard(one_time=False)
-    kb.add(Text("Выполнить задание")).row()
-    kb.add(Text("Мои задания")).row()
-    kb.add(Text("Личный кабинет")).row()
-    kb.add(Text("Обучение")).row()
-    kb.add(Text("Магазин")).row()
-    kb.add(Text("Закрытые мероприятия")).row()
+    # kb.add(Text("Выполнить задание", payload=f"{random.randint(0,1000000)}")).row()
+    # kb.add(Text("Мои задания")).row()
+    # kb.add(Text("Личный кабинет")).row()
+    # kb.add(Text("Обучение")).row()
+    # kb.add(Text("Магазин"))
+    kb.add(Text("Участие в розыгрыше")).row()
+    # kb.add(Text("Закрытые мероприятия")).row()
 
-    if role in (UserRole.STAFF_RO,
-                UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
-        kb.add(Text("Проверить офлайн задачи"))
-        kb.add(Text("Управление заказами"))
-        kb.add(Text("Список участников мероприятия")).row()
-
-    if role in (UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
-        kb.add(Text("Создать офлайн задачу"))
-        kb.add(Text("Управление пользователями"))
-        kb.add(Text("Создать закрытое мероприятие")).row()
-
-    if role == UserRole.STAFF_CA:
-        kb.add(Text("Создать онлайн задачу"))
-        kb.add(Text("Добавить товар"))
-        kb.add(Text("Скрыть товар")).row()
-
+    # if role in (UserRole.STAFF_RO,
+    #             UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
+    #     kb.add(Text("Проверить офлайн задачи"))
+    #     kb.add(Text("Управление заказами"))
+    #     kb.add(Text("Список участников мероприятия")).row()
+    #
+    # if role in (UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
+    #     kb.add(Text("Создать офлайн задачу"))
+    #     kb.add(Text("Управление пользователями"))
+    #     kb.add(Text("Создать закрытое мероприятие")).row()
+    #
+    # if role == UserRole.STAFF_CA:
+    #     kb.add(Text("Создать онлайн задачу"))
+    #     kb.add(Text("Добавить товар"))
+    #     kb.add(Text("Скрыть товар")).row()
+    #     kb.add(Text("Рассылка координаторам РО")).row()
+    #
     return kb.get_json()
 
 
@@ -3098,26 +3880,32 @@ from vkbottle import BaseStateGroup
 
 class RegistrationStates(BaseStateGroup):
     PERSONAL_DATA = "personal_data"
-    MEMBERSHIP = "membership"
     SURNAME = "surname"
     NAME = "name"
-    GENDER = "gender"
     PATRONYMIC = "patronymic"
-    BIRTH_DATE = "birth_date"
     PHONE = "phone"
-    EMAIL = "email"
     REGION_BY_TEXT = "region_by_text"
     REGION_BY_BUTTON = "region_by_button"
-    CITY = "city"
-    WISH_TO_JOIN = "wish_to_join"
-    HOME_ADDRESS = "home_address"
     NEWS_SUBSCRIPTION = "news_subscription"
     CHECK_SUBSCRIPTION = "check_subscription"
+
+
+class LotteryStates(BaseStateGroup):
+    INTRO = "lottery_intro"
+    IS_MEMBER = "lottery_is_member"
+    BIRTH_DATE = "lottery_birth_date"
+    EMAIL = "lottery_email"
+    GENDER = "lottery_gender"
+    CITY = "lottery_city"
+    WISH_TO_JOIN = "lottery_wish_to_join"
+    HOME_ADDRESS = "lottery_home_address"
 
 
 class PostsStates(BaseStateGroup):
     GET_MESSAGE = "get_message"
     CONFIRM = "confirm"
+    GET_COORD_MESSAGE = "get_coord_message"
+    CONFIRM_COORD = "confirm_coord"
 
 
 class AdminCAStates(BaseStateGroup):
@@ -3224,7 +4012,8 @@ from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRe
                                    ITransactionRepository, ILearningRepository,
                                    IVKTaskVerificationRepository, IS3Storage, IProductRepository,
                                    IOrderRepository, IClosedEventRepository,
-                                   IEventRegistrationRepository)
+                                   IEventRegistrationRepository, IActiveUserRepository,
+                                   IParticipationRepository)
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepository,
@@ -3232,16 +4021,20 @@ from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepositor
                                              AcceptedTaskRepository, OfflineTaskRepository,
                                              OnlineTaskRepository, LearningRepository,
                                              VKTaskVerificationRepository,
-                                             EventRegistrationRepository, ClosedEventRepository)
+                                             EventRegistrationRepository, ClosedEventRepository,
+                                             ActiveUserRepository, ParticipationRepository)
 from src.infrastructure.repositories.s3_storage import S3Storage
 from src.infrastructure.repositories.shop_repo import OrderRepository, ProductRepository
 from src.services import UserService, BalanceService, OnlineTaskService, OfflineTaskService
+from src.services.active_user_service import ActiveUserService
 from src.services.closed_event_service import ClosedEventService
 from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTaskService, \
-    IBalanceService, ILearningService, IProductService, IOrderService, IClosedEventService
+    IBalanceService, ILearningService, IProductService, IOrderService, IClosedEventService, \
+    IActiveUserService
 from src.core import config
 from src.services.learning_service import LearningService
 from src.services.notification_service import NotificationService
+from src.services.participation_service import ParticipationService
 from src.services.referral_link_service import ReferralLinkService
 from src.services.referral_service import ReferralService
 from src.services.shop_services import ProductService, OrderService
@@ -3264,6 +4057,8 @@ class Container(DeclarativeContainer):
     learning_repository: providers.Factory[ILearningRepository] = providers.Factory(
         LearningRepository, uow=uow
     )
+    participation_repository: providers.Factory[IParticipationRepository]\
+        = providers.Factory(ParticipationRepository, uow=uow)
     user_repository: providers.Factory[IUserRepository] = providers.Factory(
         UserRepository, uow=uow
     )
@@ -3285,13 +4080,18 @@ class Container(DeclarativeContainer):
     product_repository: providers.Factory[IProductRepository] = providers.Factory(ProductRepository,
                                                                                   uow=uow)
     order_repository: providers.Factory[IOrderRepository] = providers.Factory(OrderRepository, uow=uow)
+    
+    active_user_repository: providers.Factory[IActiveUserRepository] = providers.Factory(
+        ActiveUserRepository, uow=uow
+    )
     notification_service = providers.Factory(
         NotificationService,
         vk_bot=bot,
         tg_bot=tg_bot
     )
     user_service: providers.Factory[IUserService] = providers.Factory(
-        UserService, user_repo=user_repository, uow=uow, string_sorter_repo=string_sorter, source=Sources.VK
+        UserService, user_repo=user_repository, uow=uow, string_sorter_repo=string_sorter, 
+        source=Sources.VK, transaction_repo=transaction_repository
     )
     balance_service: providers.Factory[IBalanceService] = providers.Factory(
         BalanceService, uow=uow, user_repo=user_repository, transaction_repo=transaction_repository
@@ -3318,11 +4118,12 @@ class Container(DeclarativeContainer):
         vk_bot_link=config.VK_BOT_LINK,
         tg_bot_link=config.TG_BOT_LINK,
         source=Sources.VK,
-        image_path="docs/gifts.png"
+        image_path="docs/image.jpg"
     )
     log_chat: providers.Object[str] = providers.Object(config.log_chat)
     admin_ids: providers.Object[list[int]] = providers.Object(config.admin_ids)
     group_id: providers.Object[int] = providers.Object(config.group_id)
+    service_token: providers.Object[str] = providers.Object(config.SERVICE_TOKEN)
 
     learning_service: providers.Factory[ILearningService] = providers.Factory(
         LearningService, uow=uow, repo=learning_repository, 
@@ -3337,8 +4138,16 @@ class Container(DeclarativeContainer):
         OrderService, uow=uow, repo=order_repository, prod_repo=product_repository,
         balance_svc=balance_service, user_svc=user_service, notif_svc=notification_service
     )
+    participation_service = providers.Factory(
+        ParticipationService,
+        uow=uow,
+        participation_repo=participation_repository
+    )
     closed_event_service: providers.Factory[IClosedEventService] = providers.Factory(
         ClosedEventService, uow=uow, event_repo=event_repository, reg_repo=reg_repository, user_repo=user_repository
+    )
+    active_user_service: providers.Factory[IActiveUserService] = providers.Factory(
+        ActiveUserService, uow=uow, repo=active_user_repository
     )
 
 
@@ -3596,6 +4405,20 @@ class Singleton(Provider[T]):
 
 
 =========================================
+ФАЙЛ: src/domain/entities/active_user.py
+=========================================
+
+from dataclasses import dataclass
+from .user import Sources
+
+
+@dataclass
+class ActiveUser:
+    user_id: int
+    user_source: Sources
+
+
+=========================================
 ФАЙЛ: src/domain/entities/closed_event.py
 =========================================
 
@@ -3633,6 +4456,8 @@ from .repost import Repost
 from .learning import LearningTestAttempt
 from .shop import Product, Order, OrderStatus
 from .closed_event import ClosedEvent, EventRegistration
+from .active_user import ActiveUser
+from .participation import Participation
 
 
 __all__ = [
@@ -3645,7 +4470,8 @@ __all__ = [
     'Order',
     'OrderStatus',
     'ClosedEvent',
-    'EventRegistration'
+    'EventRegistration',
+    'ActiveUser'
 ]
 
 
@@ -3665,6 +4491,21 @@ class LearningTestAttempt:
     score: int
     passed_at: datetime
     is_passed: bool
+
+
+=========================================
+ФАЙЛ: src/domain/entities/participation.py
+=========================================
+
+from dataclasses import dataclass
+from .user import Sources
+
+
+@dataclass
+class Participation:
+    id: int
+    user_id: int
+    user_source: Sources
 
 
 =========================================
@@ -3708,9 +4549,9 @@ from src.domain.entities.user import Sources
 
 
 class OrderStatus(Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
+    PENDING = "ожидание"
+    COMPLETED = "завершено"
+    CANCELLED = "отклонено"
 
 
 @dataclass
@@ -3751,15 +4592,15 @@ from .user import Sources
 
 
 class TaskType(enum.Enum):
-    REPOST = "repost"
-    COMMENT = "comment"
-    LIKE = "like"
+    REPOST = "репост"
+    COMMENT = "комментарий"
+    LIKE = "лайк"
 
 
 class TaskStatus(enum.Enum):
-    IN_PROGRESS = "in_progress"
-    DECLINED = "declined"
-    ACCEPTED = "accepted"
+    IN_PROGRESS = "в процессе"
+    DECLINED = "отклонено"
+    ACCEPTED = "принято"
 
 
 @dataclass
@@ -3769,15 +4610,15 @@ class OnlineTask:
     duration: int
     type: TaskType
     reward: int
-    post_id: int
-    group_id: int
+    url: str 
 
 
 @dataclass
 class OfflineTask:
     id: int
     region: str
-    date: date
+    start_date: date
+    end_date: date
     reward: int
     title: str
     description: str
@@ -3846,19 +4687,19 @@ class UserGrade(enum.Enum):
 class User:
     id: int
     source: Sources
-    is_member: bool
     username: str | None
     surname: str
-    name: str
-    patronymic: str
-    birth_date: date
     phone_number: str
-    region: str
-    email: str
-    gender: str
-    city: str
-    wish_to_join: bool
-    home_address: str | None
+    name: str | None = None  # nullable
+    is_member: bool | None = None
+    patronymic: str | None = None  # nullable
+    birth_date: date | None = None  # nullable
+    region: str | None = None  # nullable
+    email: str | None = None  # nullable
+    gender: str | None = None  # nullable
+    city: str | None = None  # nullable
+    wish_to_join: bool | None = None  # nullable
+    home_address: str | None = None
     news_subscription: bool = field(default=False)
     created_at: datetime = field(default_factory=lambda: datetime.now())
     balance: int = field(default=0)
@@ -3962,13 +4803,17 @@ class IUserRepository(ABC):
         ...
 
     @abstractmethod
+    async def update_user_profile(self, user_id: int, source: Sources, **kwargs) -> User:
+        ...
+
+    @abstractmethod
     async def get_user(self, user_id: int, source: Sources) -> User:
         ...
 
     @abstractmethod
     async def is_phone_number_existing(self, phone_number: str) -> bool:
         ...
-    
+
     @abstractmethod
     async def is_email_existing(self, email: str) -> bool:
         ...
@@ -3980,19 +4825,21 @@ class IUserRepository(ABC):
     @abstractmethod
     async def update_user_role(self, user_id: int, source: Sources, role) -> None:
         ...
-    
-    @abstractmethod
-    async def search_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]: ...
 
     @abstractmethod
-    async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int: ...
+    async def search_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int,
+                            limit: int) -> list[User]: ...
+
+    @abstractmethod
+    async def get_completed_tasks_count(self, user_id: int, source: Sources,
+                                        is_online: bool) -> int: ...
 
     @abstractmethod
     async def get_users(
-        self, 
-        skip: int = 0, 
-        limit: int = 100,
-        **filters
+            self,
+            skip: int = 0,
+            limit: int = 100,
+            **filters
     ) -> list[User]:
         ...
 
@@ -4015,7 +4862,8 @@ class IStringSorterRepository(ABC):
 
 class IReferralRepository(ABC):
     @abstractmethod
-    async def add(self, inviter_id: int, inviter_source: Sources, invitee_id: int, invitee_source: Sources) -> None:
+    async def add(self, inviter_id: int, inviter_source: Sources, invitee_id: int,
+                  invitee_source: Sources) -> None:
         ...
 
     @abstractmethod
@@ -4029,24 +4877,38 @@ class IReferralRepository(ABC):
 
 class IOnlineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int) -> tuple[list[OnlineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
+                                        skip: int, limit: int) -> tuple[list[OnlineTask], int]: ...
+
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OnlineTask | None: ...
+
     @abstractmethod
     async def create_task(self, task: OnlineTask) -> OnlineTask: ...
+
     @abstractmethod
-    async def is_task_accepted_by_user(self, user_id: int, user_source: Sources, task_id: int) -> bool: ...
+    async def is_task_accepted_by_user(self, user_id: int, user_source: Sources,
+                                       task_id: int) -> bool: ...
+
+    @staticmethod
+    @abstractmethod
+    def _parse_vk_url(url: str) -> tuple[int, int]: ...
 
 
 class IOfflineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int) -> tuple[list[OfflineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
+                                        skip: int, limit: int) -> tuple[list[OfflineTask], int]: ...
+
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OfflineTask | None: ...
+
     @abstractmethod
     async def create_task(self, task: OfflineTask) -> OfflineTask: ...
+
     @abstractmethod
-    async def is_task_accepted_by_user(self, user_id: int, user_source: Sources, task_id: int) -> bool: ...
+    async def is_task_accepted_by_user(self, user_id: int, user_source: Sources,
+                                       task_id: int) -> bool: ...
 
 
 class IAcceptedTaskRepository(ABC):
@@ -4055,15 +4917,18 @@ class IAcceptedTaskRepository(ABC):
         ...
 
     @abstractmethod
-    async def update_offline_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
+    async def update_offline_task_status(self, user_id: int, user_source: Sources, task_id: int,
+                                         status: TaskStatus) -> None:
         ...
 
     @abstractmethod
-    async def get_user_accepted_offline_tasks(self, user_id: int, user_source: Sources, skip: int, limit: int) -> tuple[list[AcceptedOfflineTask], int]:
+    async def get_user_accepted_offline_tasks(self, user_id: int, user_source: Sources, skip: int,
+                                              limit: int) -> tuple[list[AcceptedOfflineTask], int]:
         ...
 
     @abstractmethod
-    async def cancel_accepted_task(self, user_id: int, user_source: Sources, task_id: int, is_online: bool) -> None:
+    async def cancel_accepted_task(self, user_id: int, user_source: Sources, task_id: int,
+                                   is_online: bool) -> None:
         ...
 
     @abstractmethod
@@ -4075,7 +4940,8 @@ class IAcceptedTaskRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_in_progress_users_for_task(self, task_id: int, skip: int, limit: int) -> tuple[list[AcceptedOfflineTask], int]:
+    async def get_in_progress_users_for_task(self, task_id: int, skip: int, limit: int) -> tuple[
+        list[AcceptedOfflineTask], int]:
         ...
 
     @abstractmethod
@@ -4085,20 +4951,33 @@ class IAcceptedTaskRepository(ABC):
 
 class ITransactionRepository(ABC):
     @abstractmethod
-    async def add_transaction(self, transaction: Transaction) -> Transaction:
-        ...
+    async def add_transaction(self, transaction: Transaction) -> Transaction: ...
+    @abstractmethod
+    async def get_user_rating(self, user_id: int, user_source: Sources) -> int: ...
+
+    @abstractmethod
+    async def get_global_top(self, limit: int = 10) -> list[tuple[int, int]]: ...
+
+    @abstractmethod
+    async def get_local_top(self, region: str, limit: int = 10) -> list[tuple[int, int]]: ...
 
 
 class ILearningRepository(ABC):
     @abstractmethod
-    async def get_attempt(self, user_id: int, user_source: Sources) -> LearningTestAttempt | None: ...
+    async def get_attempt(self, user_id: int,
+                          user_source: Sources) -> LearningTestAttempt | None: ...
+
     @abstractmethod
     async def save_attempt(self, attempt: LearningTestAttempt) -> None: ...
+
+    @abstractmethod
+    async def is_passed(self, user_id: int, user_source: Sources) -> bool: ...
 
 
 class IVKTaskVerificationRepository(ABC):
     @abstractmethod
-    async def verify_task(self, task_type: TaskType, user_id: int, group_id: int, post_id: int) -> bool:
+    async def verify_task(self, task_type: TaskType, user_id: int, group_id: int,
+                          post_id: int) -> bool:
         """Проверяет выполнение действия пользователя над постом сообщества"""
         ...
 
@@ -4106,12 +4985,16 @@ class IVKTaskVerificationRepository(ABC):
 class IProductRepository(ABC):
     @abstractmethod
     async def get_active_products(self, skip: int, limit: int) -> tuple[list[Product], int]: ...
+
     @abstractmethod
     async def get_by_id(self, product_id: int) -> Product | None: ...
+
     @abstractmethod
     async def create(self, product: Product) -> Product: ...
+
     @abstractmethod
     async def update_quantity(self, product_id: int, new_quantity: int) -> None: ...
+
     @abstractmethod
     async def toggle_active(self, product_id: int, is_active: bool) -> None: ...
 
@@ -4119,16 +5002,28 @@ class IProductRepository(ABC):
 class IOrderRepository(ABC):
     @abstractmethod
     async def create(self, order: Order) -> Order: ...
+
     @abstractmethod
-    async def get_pending_by_user(self, user_id: int, user_source: Sources, skip: int, limit: int) -> tuple[list[Order], int]: ...
+    async def get_pending_by_user(self, user_id: int, user_source: Sources, skip: int,
+                                  limit: int) -> tuple[list[Order], int]: ...
+
     @abstractmethod
-    async def get_pending_by_admin(self, admin_region: str | None, skip: int, limit: int) -> tuple[list[Order], int]: ...
+    async def get_pending_by_admin(self, admin_region: str | None, skip: int, limit: int) -> tuple[
+        list[Order], int]: ...
+
     @abstractmethod
-    async def update_status(self, order_id: int, status: OrderStatus, reason: str | None = None) -> Order: ...
+    async def update_status(self, order_id: int, status: OrderStatus,
+                            reason: str | None = None) -> Order: ...
+
     @abstractmethod
     async def get_by_id(self, order_id: int) -> Order | None: ...
+
     @abstractmethod
-    async def has_user_ordered_product(self, user_id: int, user_source: Sources, product_id: int) -> bool: ...
+    async def has_user_ordered_product(self, user_id: int, user_source: Sources,
+                                       product_id: int) -> bool: ...
+
+    @abstractmethod
+    async def get_all_by_user(self, user_id: int, user_source: Sources) -> list[Order]: ...
 
 
 class IS3Storage(ABC):
@@ -4139,19 +5034,48 @@ class IS3Storage(ABC):
 class IClosedEventRepository(ABC):
     @abstractmethod
     async def create(self, event: ClosedEvent) -> ClosedEvent: ...
+
     @abstractmethod
     async def get_by_id(self, event_id: int) -> ClosedEvent | None: ...
+
     @abstractmethod
-    async def get_active_by_region(self, region: str | None, skip: int, limit: int) -> tuple[list[ClosedEvent], int]: ...
+    async def get_active_by_region(self, region: str | None, skip: int, limit: int) -> tuple[
+        list[ClosedEvent], int]: ...
+
+    @abstractmethod
+    async def get_user_events(self, user_id: int, user_source: Sources) -> list[ClosedEvent]: ...
 
 
 class IEventRegistrationRepository(ABC):
     @abstractmethod
-    async def register_user(self, user_id: int, user_source: Sources, event_id: int) -> EventRegistration: ...
+    async def register_user(self, user_id: int, user_source: Sources,
+                            event_id: int) -> EventRegistration: ...
+
     @abstractmethod
     async def is_registered(self, user_id: int, user_source: Sources, event_id: int) -> bool: ...
+
     @abstractmethod
-    async def get_participants(self, event_id: int, skip: int, limit: int) -> tuple[list[EventRegistration], int]: ...
+    async def get_participants(self, event_id: int, skip: int, limit: int) -> tuple[
+        list[EventRegistration], int]: ...
+
+
+class IActiveUserRepository(ABC):
+    @abstractmethod
+    async def save_if_not_exists(self, user_id: int, user_source: Sources) -> None: ...
+
+
+class IParticipationRepository(ABC):
+    @abstractmethod
+    async def add(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        ...
 
 
 =========================================
@@ -4246,6 +5170,27 @@ class IDatabase(ABC):
 
 
 =========================================
+ФАЙЛ: src/infrastructure/models/active_user.py
+=========================================
+
+from sqlalchemy import Index
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Enum as SQLEnum
+from src.domain.entities.user import Sources
+from src.infrastructure.database import Base
+
+
+class ActiveUserORM(Base):
+    __tablename__ = "active_users"
+    user_id: Mapped[int] = mapped_column(primary_key=True)
+    user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), primary_key=True)
+
+    __table_args__ = (
+        Index('idx_active_users_pk', 'user_id', 'user_source', unique=True),
+    )
+
+
+=========================================
 ФАЙЛ: src/infrastructure/models/closed_event.py
 =========================================
 
@@ -4288,6 +5233,8 @@ from .referral import ReferralORM
 from .task import OnlineTaskORM, OfflineTaskORM, AcceptedOnlineTaskORM, AcceptedOfflineTaskORM, TransactionORM
 from .learning import LearningTestAttemptORM
 from .closed_event import ClosedEventORM, EventRegistrationORM
+from .active_user import ActiveUserORM
+from .participation import ParticipationORM
 
 
 __all__ = [
@@ -4295,7 +5242,8 @@ __all__ = [
     "OnlineTaskORM", "OfflineTaskORM", 
     "AcceptedOnlineTaskORM", "AcceptedOfflineTaskORM", 
     "TransactionORM", "LearningTestAttemptORM",
-    "ClosedEventORM", "EventRegistrationORM"
+    "ClosedEventORM", "EventRegistrationORM", "ActiveUserORM",
+    "ParticipationORM"
 ]
 
 
@@ -4317,6 +5265,33 @@ class LearningTestAttemptORM(Base):
     score: Mapped[int] = mapped_column(nullable=False)
     passed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     is_passed: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+=========================================
+ФАЙЛ: src/infrastructure/models/participation.py
+=========================================
+
+from sqlalchemy import ForeignKeyConstraint, Index, Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column
+from src.domain.entities.user import Sources
+from src.infrastructure.database import Base
+
+
+class ParticipationORM(Base):
+    __tablename__ = "participations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['user_id', 'user_source'],
+            ['users.id', 'users.source'],
+            ondelete="CASCADE"
+        ),
+        Index('idx_participation_user', 'user_id', 'user_source')
+    )
 
 
 =========================================
@@ -4410,15 +5385,15 @@ class OnlineTaskORM(Base):
     duration: Mapped[int] = mapped_column(nullable=False)
     type: Mapped[TaskType] = mapped_column(SQLEnum(TaskType), nullable=False)
     reward: Mapped[int] = mapped_column(nullable=False)
-    post_id: Mapped[int] = mapped_column(nullable=False)
-    group_id: Mapped[int] = mapped_column(nullable=False)
+    url: Mapped[str] = mapped_column(nullable=False)
 
 
 class OfflineTaskORM(Base):
     __tablename__ = "offline_tasks"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     region: Mapped[str] = mapped_column(nullable=False)
-    date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
     reward: Mapped[int] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str] = mapped_column(nullable=False)
@@ -4479,31 +5454,28 @@ class TransactionORM(Base):
 =========================================
 
 from datetime import date, datetime, UTC
-
 from sqlalchemy import Date, DateTime, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
-
 from src.domain.entities.user import User, Sources, UserRole, UserGrade
 from src.infrastructure.database import Base
 
 
 class UserORM(Base):
     __tablename__ = "users"
-
     id: Mapped[int] = mapped_column("id", primary_key=True)
     source: Mapped[Sources] = mapped_column(SQLEnum(Sources), name="source", primary_key=True)
-    is_member: Mapped[bool] = mapped_column("is_member", nullable=False)
+    is_member: Mapped[bool] = mapped_column("is_member", nullable=True)
     username: Mapped[str] = mapped_column("username", nullable=True)
     surname: Mapped[str] = mapped_column("surname", nullable=False)
-    name: Mapped[str] = mapped_column("name", nullable=False)
+    name: Mapped[str] = mapped_column("name", nullable=True)
     patronymic: Mapped[str] = mapped_column("patronymic", nullable=True)
-    birth_date: Mapped[date] = mapped_column("birth_date", Date, nullable=False)
+    birth_date: Mapped[date] = mapped_column("birth_date", Date, nullable=True)
     phone_number: Mapped[str] = mapped_column("phone_number", nullable=False, unique=True)
-    region: Mapped[str] = mapped_column("region", nullable=False)
-    email: Mapped[str] = mapped_column("email", nullable=False)
-    gender: Mapped[str] = mapped_column("gender", nullable=False)
-    city: Mapped[str] = mapped_column("city", nullable=False)
-    wish_to_join: Mapped[bool] = mapped_column("wish_to_join", nullable=False)
+    region: Mapped[str] = mapped_column("region", nullable=True)
+    email: Mapped[str] = mapped_column("email", nullable=True)
+    gender: Mapped[str] = mapped_column("gender", nullable=True)
+    city: Mapped[str] = mapped_column("city", nullable=True)
+    wish_to_join: Mapped[bool] = mapped_column("wish_to_join", nullable=True)
     home_address: Mapped[str] = mapped_column("home_address", nullable=True)
     news_subscription: Mapped[bool] = mapped_column("news_subscription", nullable=False)
     balance: Mapped[int] = mapped_column("balance", nullable=False, default=0)
@@ -4537,6 +5509,38 @@ class UserORM(Base):
             balance=user.balance, role=user.role, grade=user.grade, created_at=user.created_at
         )
 
+=========================================
+ФАЙЛ: src/infrastructure/repositories/active_user.py
+=========================================
+
+import logging
+from sqlalchemy import select
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IActiveUserRepository
+from src.infrastructure.interfaces import IDatabaseUnitOfWork
+from src.infrastructure.models.active_user import ActiveUserORM
+
+logger = logging.getLogger(__name__)
+
+
+class ActiveUserRepository(IActiveUserRepository):
+    def __init__(self, uow: IDatabaseUnitOfWork):
+        self.__uow = uow
+
+    async def save_if_not_exists(self, user_id: int, user_source: Sources) -> None:
+        session = self.__uow.get_session()
+        stmt = select(ActiveUserORM).where(
+            ActiveUserORM.user_id == user_id,
+            ActiveUserORM.user_source == user_source
+        ).limit(1)
+        existing = await session.scalar(stmt)
+        if existing:
+            return
+
+        orm = ActiveUserORM(user_id=user_id, user_source=user_source)
+        session.add(orm)
+        await session.flush()
+        logger.debug(f"Logged active user {user_id} ({user_source.value})")
 
 
 =========================================
@@ -4544,7 +5548,7 @@ class UserORM(Base):
 =========================================
 
 import logging
-from sqlalchemy import select
+from sqlalchemy import select, func, text
 from src.domain.entities.task import Transaction
 from src.domain.entities.user import Sources
 from src.domain.interfaces import ITransactionRepository
@@ -4581,6 +5585,41 @@ class TransactionRepository(ITransactionRepository):
         transaction.id = orm.id
         return transaction
 
+    async def get_user_rating(self, user_id: int, user_source: Sources) -> int:
+        session = self.__uow.get_session()
+        stmt = select(func.coalesce(func.sum(TransactionORM.amount), 0)).where(
+            TransactionORM.user_id == user_id,
+            TransactionORM.user_source == user_source,
+            TransactionORM.amount > 0
+        )
+        return int(await session.scalar(stmt) or 0)
+
+    async def get_global_top(self, limit: int = 10) -> list[tuple[int, int]]:
+        session = self.__uow.get_session()
+        stmt = select(
+            TransactionORM.user_id,
+            func.coalesce(func.sum(TransactionORM.amount), 0).label("total")
+        ).where(
+            TransactionORM.amount > 0
+        ).group_by(TransactionORM.user_id).order_by(text("total DESC")).limit(limit)
+        result = await session.execute(stmt)
+        return [(row.user_id, int(row.total)) for row in result.all()]
+
+    async def get_local_top(self, region: str, limit: int = 10) -> list[tuple[int, int]]:
+        session = self.__uow.get_session()
+        stmt = select(
+            TransactionORM.user_id,
+            func.coalesce(func.sum(TransactionORM.amount), 0).label("total")
+        ).join(
+            UserORM,
+            (UserORM.id == TransactionORM.user_id) & (UserORM.source == TransactionORM.user_source)
+        ).where(
+            TransactionORM.amount > 0,
+            UserORM.region == region
+        ).group_by(TransactionORM.user_id).order_by(text("total DESC")).limit(limit)
+        result = await session.execute(stmt)
+        return [(row.user_id, int(row.total)) for row in result.all()]
+
 
 =========================================
 ФАЙЛ: src/infrastructure/repositories/closed_event_repo.py
@@ -4597,6 +5636,21 @@ logger = logging.getLogger(__name__)
 
 
 class ClosedEventRepository(IClosedEventRepository):
+    async def get_user_events(self, user_id: int, user_source: Sources) -> list[ClosedEvent]:
+        session = self.__uow.get_session()
+        stmt = select(ClosedEventORM).join(
+            EventRegistrationORM, EventRegistrationORM.event_id == ClosedEventORM.id
+        ).where(
+            EventRegistrationORM.user_id == user_id,
+            EventRegistrationORM.user_source == user_source
+        ).order_by(ClosedEventORM.date, ClosedEventORM.time)
+        result = await session.execute(stmt)
+        return [
+            ClosedEvent(id=o.id, region=o.region, title=o.title, description=o.description,
+                        location=o.location, date=o.date, time=o.time)
+            for o in result.scalars().all()
+        ]
+
     def __init__(self, uow: IDatabaseUnitOfWork):
         self.__uow = uow
 
@@ -4665,6 +5719,7 @@ class EventRegistrationRepository(IEventRegistrationRepository):
                               event_id=o.event_id)
             for o in result.scalars().all()
         ], total
+    
 
 
 =========================================
@@ -4706,13 +5761,16 @@ from .balance_repo import TransactionRepository
 from .learning import LearningRepository
 from .vk_verification import VKTaskVerificationRepository 
 from .closed_event_repo import ClosedEventRepository, EventRegistrationRepository
+from .active_user import ActiveUserRepository
+from .participation import ParticipationRepository
 
 
 __all__ = [
     'UserRepository', 'LevenshteinRepository', 'FuzzywuzzyRepository', 'ReferralRepository',
     'OnlineTaskRepository', 'OfflineTaskRepository', 'AcceptedTaskRepository',
     'TransactionRepository', 'LearningRepository', 'VKTaskVerificationRepository',
-    'ClosedEventRepository', 'EventRegistrationRepository'
+    'ClosedEventRepository', 'EventRegistrationRepository', 'ActiveUserRepository',
+    'ParticipationRepository'
 ]
 
 
@@ -4761,6 +5819,15 @@ class LearningRepository(ILearningRepository):
             session.add(orm)
             logger.info(f"Created learning attempt for user {attempt.user_id}")
         await session.flush()
+    
+    async def is_passed(self, user_id: int, user_source: Sources) -> bool:
+        session = self.__uow.get_session()
+        stmt = select(LearningTestAttemptORM).where(
+            LearningTestAttemptORM.user_id == user_id,
+            LearningTestAttemptORM.user_source == user_source,
+            LearningTestAttemptORM.is_passed == True
+        )
+        return (await session.scalar(stmt)) is not None
 
 
 =========================================
@@ -4780,6 +5847,47 @@ class LevenshteinRepository(IStringSorterRepository):
             distances[string] = dist
         string_list.sort(key=lambda x: distances[x])
         return string_list
+
+
+=========================================
+ФАЙЛ: src/infrastructure/repositories/participation.py
+=========================================
+
+from sqlalchemy import select
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IParticipationRepository
+from src.infrastructure.interfaces import IDatabaseUnitOfWork
+from src.infrastructure.models.participation import ParticipationORM
+
+
+class ParticipationRepository(IParticipationRepository):
+    def __init__(self, uow: IDatabaseUnitOfWork):
+        self.__uow = uow
+
+    async def add(self, user_id: int, user_source: Sources) -> int:
+        session = self.__uow.get_session()
+        participation_orm = ParticipationORM(user_id=user_id, user_source=user_source)
+        session.add(participation_orm)
+        await session.flush()
+        return participation_orm.id
+
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        session = self.__uow.get_session()
+        stmt = select(ParticipationORM).where(
+            ParticipationORM.user_id == user_id,
+            ParticipationORM.user_source == user_source
+        ).limit(1)
+        result = await session.scalar(stmt)
+        return result is not None
+
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        session = self.__uow.get_session()
+        stmt = select(ParticipationORM.id).where(
+            ParticipationORM.user_id == user_id,
+            ParticipationORM.user_source == user_source
+        )
+        result = await session.scalars(stmt)
+        return list(result.all())
 
 
 =========================================
@@ -4968,6 +6076,15 @@ class OrderRepository(IOrderRepository):
             OrderORM.product_id == product_id
         )
         return (await session.scalar(stmt) or 0) > 0
+
+    async def get_all_by_user(self, user_id: int, user_source: Sources) -> list[Order]:
+        session = self.__uow.get_session()
+        stmt = select(OrderORM).where(
+            OrderORM.user_id == user_id,
+            OrderORM.user_source == user_source
+        ).order_by(OrderORM.created_at.desc())
+        result = await session.execute(stmt)
+        return [self._orm_to_domain(o) for o in result.scalars().all()]
     
     @staticmethod
     def _orm_to_domain(orm: OrderORM) -> Order:
@@ -4984,6 +6101,7 @@ class OrderRepository(IOrderRepository):
 =========================================
 
 import logging
+import re
 from datetime import date, timedelta
 from sqlalchemy import select, func, or_, and_, text
 from sqlalchemy.sql import expression
@@ -5039,7 +6157,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         tasks = [
             OnlineTask(
                 id=t.id, date=t.date, duration=t.duration,
-                type=t.type, reward=t.reward, post_id=t.post_id, group_id=t.group_id
+                type=t.type, reward=t.reward, url=t.url
             ) for t in tasks_orm
         ]
         logger.debug(f"Found {len(tasks)} active online tasks for user {user_id}")
@@ -5051,7 +6169,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         orm = await session.scalar(stmt)
         if not orm: return None
         return OnlineTask(id=orm.id, date=orm.date, duration=orm.duration, type=orm.type,
-                          reward=orm.reward, post_id=orm.post_id, group_id=orm.group_id)
+                          reward=orm.reward, url=orm.url)
 
     async def create_task(self, task: OnlineTask) -> OnlineTask:
         session = self.__uow.get_session()
@@ -5073,6 +6191,19 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         )
         return (await session.scalar(stmt)) is not None
 
+    @staticmethod
+    def _parse_vk_url(url: str) -> tuple[int, int]:
+        pattern = r'vk\.com/wall-?(\d+)_(\d+)'
+        match = re.search(pattern, url)
+        if not match:
+            raise ValueError(f"Не удалось распарсить VK URL: {url}")
+
+        owner_id = int(match.group(1))
+        post_id = int(match.group(2))
+
+        group_id = abs(owner_id)
+        return group_id, post_id
+
 
 class OfflineTaskRepository(IOfflineTaskRepository):
     def __init__(self, uow: IDatabaseUnitOfWork):
@@ -5083,9 +6214,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         session = self.__uow.get_session()
         base_stmt = select(OfflineTaskORM).where(
             and_(
-                OfflineTaskORM.date <= today + timedelta(days=10),
-                OfflineTaskORM.date >= today
-                # Пример: доступность в течение месяца
+                OfflineTaskORM.start_date <= today,
+                OfflineTaskORM.end_date >= today
             )
         )
         subquery = (
@@ -5097,7 +6227,7 @@ class OfflineTaskRepository(IOfflineTaskRepository):
             )
         )
         final_stmt = base_stmt.where(OfflineTaskORM.id.notin_(subquery)).order_by(
-            OfflineTaskORM.date)
+            OfflineTaskORM.start_date)
         count_stmt = select(func.count()).select_from(final_stmt.subquery())
         total = await session.scalar(count_stmt) or 0
 
@@ -5106,7 +6236,7 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         tasks_orm = result.scalars().all()
 
         tasks = [
-            OfflineTask(id=t.id, region=t.region, date=t.date, reward=t.reward, title=t.title,
+            OfflineTask(id=t.id, region=t.region, start_date=t.start_date, end_date=t.end_date, reward=t.reward, title=t.title,
                         description=t.description, location=t.location, contacts=t.contacts)
             for t in tasks_orm
         ]
@@ -5118,7 +6248,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         stmt = select(OfflineTaskORM).where(OfflineTaskORM.id == task_id)
         orm = await session.scalar(stmt)
         if not orm: return None
-        return OfflineTask(id=orm.id, region=orm.region, date=orm.date, reward=orm.reward,
+        return OfflineTask(id=orm.id, region=orm.region, start_date=orm.start_date,
+                           end_date=orm.end_date, reward=orm.reward,
                            title=orm.title, description=orm.description, location=orm.location,
                            contacts=orm.contacts)
 
@@ -5337,6 +6468,22 @@ class UserRepository(IUserRepository):
         session.add(user_orm)
         await session.commit()
         await session.refresh(user_orm)
+        return await user_orm.to_domain()
+
+    async def update_user_profile(self, user_id: int, source: Sources, **kwargs) -> User:
+        session = self.__uow.get_session()
+        stmt = select(UserORM).where(UserORM.id == user_id, UserORM.source == source)
+        user_orm = await session.scalar(stmt)
+        if user_orm is None:
+            raise exceptions.UserNotFoundError()
+
+        for field, value in kwargs.items():
+            if hasattr(user_orm, field):
+                setattr(user_orm, field, value)
+
+        await session.commit()
+        await session.refresh(user_orm)
+        logger.info(f"Updated profile for user {user_id}: {list(kwargs.keys())}")
         return await user_orm.to_domain()
 
     async def get_user(self, user_id: int, source: Sources) -> User:
@@ -5609,8 +6756,6 @@ class UnitOfWork(IDatabaseUnitOfWork):
 =========================================
 
 import logging
-from aiogram import Bot as TgBot
-from aiogram.client.session.aiohttp import AiohttpSession
 from vkbottle import Bot, DocMessagesUploader, PhotoMessageUploader
 from src.application.handlers import full_labeler as root_labeler
 from src.application.middlewares import DIProvideMiddleware
@@ -5652,6 +6797,31 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+=========================================
+ФАЙЛ: src/services/active_user_service.py
+=========================================
+
+import logging
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IUnitOfWork, IActiveUserRepository
+from src.services.interfaces import IActiveUserService
+
+logger = logging.getLogger(__name__)
+
+
+class ActiveUserService(IActiveUserService):
+    def __init__(self, uow: IUnitOfWork, repo: IActiveUserRepository):
+        self.__uow = uow
+        self.__repo = repo
+
+    async def log_active_user(self, user_id: int, user_source: Sources) -> None:
+        try:
+            async with self.__uow.atomic():
+                await self.__repo.save_if_not_exists(user_id, user_source)
+        except Exception as e:
+            logger.error(f"Failed to log active user {user_id}: {e}")
+
 
 =========================================
 ФАЙЛ: src/services/balance_service.py
@@ -5767,7 +6937,10 @@ class ClosedEventService(IClosedEventService):
     async def get_event(self, event_id: int) -> ClosedEvent | None:
         async with self.__uow.atomic():
             return await self.__event_repo.get_by_id(event_id)
-
+    
+    async def get_user_events(self, user_id: int, source: Sources) -> list[ClosedEvent]:
+        async with self.__uow.atomic():
+            return await self.__event_repo.get_user_events(user_id, source)
     
 
 =========================================
@@ -5802,13 +6975,30 @@ from src.domain.entities.user import UserRole
 
 class IUserService(ABC):
     @abstractmethod
-    async def create_user(self, user_id: int, username: str | None, surname: str, name: str, is_member: bool, patronymic: str | None, birth_date: date, phone_number: str, region: str, email: str, gender: str, city: str, wish_to_join: bool, home_address: str | None, news_subscription: bool) -> User: ...
+    async def create_user(
+            self, user_id: int, username: str | None, surname: str, name: str | None,
+            patronymic: str | None, phone_number: str, region: str | None,
+            news_subscription: bool
+    ) -> User: ...
+
+    @abstractmethod
+    async def update_user_profile(
+            self, user_id: int, source: Sources,
+            birth_date: date | None = None,
+            email: str | None = None,
+            gender: str | None = None,
+            city: str | None = None,
+            wish_to_join: bool | None = None,
+            is_member: bool | None = None,
+            home_address: str | None = None
+    ) -> User: ...
+
     @abstractmethod
     async def is_user_exists(self, user_id: int, inviter_source: Sources | None = None) -> bool: ...
     @abstractmethod
     async def validate_phone(self, phone_number: str) -> str: ...
     @abstractmethod
-    async def validate_email(self, email: str) -> str: ...
+    async def validate_email(self, email: str | None) -> str | None: ...
     @abstractmethod
     async def validate_fio_part(self, part: str, part_name: str) -> str: ...
     @abstractmethod
@@ -5835,6 +7025,14 @@ class IUserService(ABC):
     async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int: ...
     @abstractmethod
     async def update_user_grade(self, user_id: int, source: Sources, grade) -> None: ...
+    @abstractmethod
+    async def get_user_rating(self, user_id: int, source: Sources) -> int: ...
+    @abstractmethod
+    async def get_global_top(self, limit: int = 10) -> list[dict]: ...
+    @abstractmethod
+    async def get_local_top(self, region: str, limit: int = 10) -> list[dict]: ...
+    @abstractmethod
+    async def get_users_by_role(self, role: UserRole) -> list[User]: ...
 
 
 class IBalanceService(ABC):
@@ -5854,7 +7052,7 @@ class IOnlineTaskService(ABC):
     @abstractmethod
     async def get_task(self, task_id: int) -> OnlineTask | None: ...
     @abstractmethod
-    async def create_task(self, date: date, duration: int, type: TaskType, reward: int, post_id: int, group_id: int) -> OnlineTask: ...
+    async def create_task(self, date: date, duration: int, type: TaskType, reward: int, url: str) -> OnlineTask: ...
 
 
 class IOfflineTaskService(ABC):
@@ -5868,10 +7066,16 @@ class IOfflineTaskService(ABC):
     async def get_user_tasks(self, user_id: int, user_source: Sources, page: int = 1) -> tuple[list[AcceptedOfflineTask], int]: ...
     @abstractmethod
     async def cancel_task(self, user_id: int, user_source: Sources, task_id: int) -> None: ...
+
     @abstractmethod
-    async def create_task_by_admin(self, region: str, date: date, reward: int, title: str, description: str, location: str, contacts: str) -> OfflineTask: ...
+    async def create_task_by_admin(self, region: str, start_date: date, duration: int, reward: int,
+                                   title: str, description: str, location: str,
+                                   contacts: str) -> OfflineTask: ...
+
     @abstractmethod
-    async def create_task_by_personal(self, user_id: int, user_source: Sources, date: date, reward: int, title: str, description: str, location: str, contacts: str) -> OfflineTask: ...
+    async def create_task_by_personal(self, user_id: int, user_source: Sources, start_date: date,
+                                      duration: int, reward: int, title: str, description: str,
+                                      location: str, contacts: str) -> OfflineTask: ...
 
     @abstractmethod
     async def get_in_progress_users(self, task_id: int, page: int, limit: int) -> tuple[
@@ -5898,6 +7102,9 @@ class IReferralService(ABC):
 
 
 class IReferralLinkService(ABC):
+    vk_bot_link: str
+    tg_bot_link: str
+
     @abstractmethod
     def generate_post(self, user_id: int) -> Repost:
         ...
@@ -5915,6 +7122,8 @@ class ILearningService(ABC):
     async def get_question(self, question_index: int) -> tuple[str, list[str], int]: ...
     @abstractmethod
     async def finish_quiz(self, user_id: int, user_source: Sources, score: int) -> dict: ...
+    @abstractmethod
+    async def is_learning_passed(self, user_id: int, user_source: Sources) -> bool: ...
     
     
 class IProductService(ABC):
@@ -5937,6 +7146,8 @@ class IOrderService(ABC):
     async def get_admin_orders(self, admin_region: str | None, page: int) -> tuple[list[Order], int]: ...
     @abstractmethod
     async def update_order_status(self, order_id: int, new_status: OrderStatus, reason: str | None = None) -> Order: ...
+    @abstractmethod
+    async def get_user_orders_history(self, user_id: int, source: Sources) -> list[Order]: ...
 
 
 class IClosedEventService(ABC):
@@ -5950,6 +7161,27 @@ class IClosedEventService(ABC):
     async def list_participants(self, event_id: int, page: int) -> tuple[list[EventRegistration], int]: ...
     @abstractmethod
     async def get_event(self, event_id: int) -> ClosedEvent | None: ...
+    @abstractmethod
+    async def get_user_events(self, user_id: int, source: Sources) -> list[ClosedEvent]: ...
+
+
+class IActiveUserService(ABC):
+    @abstractmethod
+    async def log_active_user(self, user_id: int, user_source: Sources) -> None: ...
+
+
+class IParticipationService(ABC):
+    @abstractmethod
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def activate_participation(self, user_id: int, user_source: Sources) -> int:
+        ...
+
+    @abstractmethod
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        ...
 
 
 =========================================
@@ -6028,6 +7260,10 @@ class LearningService(ILearningService):
                     "message": "К сожалению, вы не прошли этот тест. Но вы всегда можете пройти его ещё раз"
                 }
 
+    async def is_learning_passed(self, user_id: int, user_source: Sources) -> bool:
+        async with self.__uow.atomic():
+            return await self.__repo.is_passed(user_id, user_source)
+
 
 =========================================
 ФАЙЛ: src/services/notification_service.py
@@ -6069,7 +7305,7 @@ class NotificationService(INotificationService):
 =========================================
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from src.domain.entities.user import Sources, UserRole, UserGrade
 from src.domain.entities.task import OfflineTask, AcceptedOfflineTask, TaskStatus
 from src.domain.interfaces import IUnitOfWork, IOfflineTaskRepository, IAcceptedTaskRepository, \
@@ -6127,7 +7363,7 @@ class OfflineTaskService(IOfflineTaskService):
                 if user.grade == UserGrade.AGITATOR:
                     # Считаем принятые оффлайн задачи (лимит 200 хватит для проверки)
                     all_accepted, _ = await self.__accepted_repo.get_user_accepted_offline_tasks(
-                        user_id, user_source, skip=0, limit=200)
+                        user_id, user_source, skip=0, limit=1000)
                     accepted_count = sum(1 for t in all_accepted if t.status == TaskStatus.ACCEPTED)
 
                     if accepted_count >= 40:
@@ -6160,23 +7396,36 @@ class OfflineTaskService(IOfflineTaskService):
                                                             is_online=False)
             logger.info(f"User {user_id} cancelled offline task {task_id}")
 
-    async def create_task_by_admin(self, region: str, date: date, reward: int, title: str,
+    async def create_task_by_admin(self, region: str, start_date: date, duration: int, reward: int,
+                                   title: str,
                                    description: str, location: str, contacts: str) -> OfflineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
+        if duration <= 0: raise DomainError("Продолжительность должна быть больше нуля")
+
+        # Вычисляем дату окончания (включительно)
+        end_date = start_date + timedelta(days=duration - 1)
+
         async with self.__uow.atomic():
-            task = OfflineTask(id=0, region=region, date=date, reward=reward, title=title,
-                               description=description, location=location, contacts=contacts)
+            task = OfflineTask(id=0, region=region, start_date=start_date, end_date=end_date,
+                               reward=reward, title=title, description=description,
+                               location=location, contacts=contacts)
             return await self.__task_repo.create_task(task)
 
-    async def create_task_by_personal(self, user_id: int, user_source: Sources, date: date,
+    async def create_task_by_personal(self, user_id: int, user_source: Sources, start_date: date,
+                                      duration: int,
                                       reward: int, title: str, description: str, location: str,
                                       contacts: str) -> OfflineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
+        if duration <= 0: raise DomainError("Продолжительность должна быть больше нуля")
+
+        end_date = start_date + timedelta(days=duration - 1)
+
         async with self.__uow.atomic():
             user = await self.__user_repo.get_user(user_id, user_source)
             region = user.region
-            task = OfflineTask(id=0, region=region, date=date, reward=reward, title=title,
-                               description=description, location=location, contacts=contacts)
+            task = OfflineTask(id=0, region=region, start_date=start_date, end_date=end_date,
+                               reward=reward, title=title, description=description,
+                               location=location, contacts=contacts)
             return await self.__task_repo.create_task(task)
 
     async def get_in_progress_users(self, task_id: int, page: int, limit: int) -> tuple[
@@ -6276,9 +7525,13 @@ class OnlineTaskService(IOnlineTaskService):
 
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
                 raise DomainError("Вы уже взяли эту задачу или она в процессе")
+            try:
+                group_id, post_id = self.__task_repo._parse_vk_url(task.url)
+            except ValueError as e:
+                raise DomainError(f"Ошибка парсинга ссылки задания: {e}")
 
             is_completed = await self.__vk_verify_repo.verify_task(
-                task.type, user_id, task.group_id, task.post_id
+                task.type, user_id, group_id, post_id
             )
             if not is_completed:
                 raise TaskNotCompletedError("Задание не выполнено. Пожалуйста, выполните действие в ВК и попробуйте снова.")
@@ -6311,13 +7564,48 @@ class OnlineTaskService(IOnlineTaskService):
             return await self.__task_repo.get_task_by_id(task_id)
 
     async def create_task(self, date: date, duration: int, type: TaskType, reward: int,
-                          post_id: int, group_id: int) -> OnlineTask:
+                          url: str) -> OnlineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
         if duration <= 0: raise DomainError("Длительность должна быть больше нуля")
+        if not url.startswith("https://vk.com/"):
+            raise DomainError("Ссылка должна быть валидным URL ВКонтакте")
         async with self.__uow.atomic():
-            task = OnlineTask(id=0, date=date, duration=duration, type=type, reward=reward,
-                              post_id=post_id, group_id=group_id)
+            task = OnlineTask(
+                id=0,
+                date=date,
+                duration=duration,
+                type=type,
+                reward=reward,
+                url=url
+            )
             return await self.__task_repo.create_task(task)
+
+
+=========================================
+ФАЙЛ: src/services/participation_service.py
+=========================================
+
+from src.domain.entities.user import Sources
+from src.domain.interfaces import IUnitOfWork, IParticipationRepository
+from src.services.interfaces import IParticipationService
+
+
+class ParticipationService(IParticipationService):
+    def __init__(self, uow: IUnitOfWork, participation_repo: IParticipationRepository):
+        self.__uow = uow
+        self.__participation_repo = participation_repo
+
+    async def is_participant(self, user_id: int, user_source: Sources) -> bool:
+        async with self.__uow.atomic():
+            return await self.__participation_repo.is_participant(user_id, user_source)
+
+    async def activate_participation(self, user_id: int, user_source: Sources) -> int:
+        async with self.__uow.atomic():
+            return await self.__participation_repo.add(user_id, user_source)
+
+    async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
+        async with self.__uow.atomic():
+            return await self.__participation_repo.get_all_participation_ids(user_id, user_source)
 
 
 =========================================
@@ -6346,14 +7634,14 @@ class ReferralLinkService(IReferralLinkService):
         tg_url = f"{self.tg_bot_link}?start={user_id}_{self.source.value}"
 
         text = (
-            bold("🔥 Грандиозный конкурс от ЛДПР!") + "\n\n" 
-            "Участвуй и выигрывай крутые призы!\n"
-            "Присоединяйся прямо сейчас и приглашай друзей:\n\n"
-            f"ВКонтакте: " + url('Перейти в бота ВК', href=vk_url) + "\n" 
-            f"Telegram: " + url('Перейти в бота TG', href=tg_url) + "\n\n"
-            + italic("Твое будущее в твоих руках!")
+                bold("🦅 Присоединяйся к Большой команде ЛДПР!") + "\n\n" +
+                "Стань частью движения, которое меняет страну к лучшему.\n" +
+                "Выполняй задания, проходи обучение, зарабатывай баллы и обменивай их на эксклюзивные подарки в нашем магазине!\n\n"
+                + "Приглашай друзей и получай дополнительные баллы за каждого:\n"
+                f"🔹 ВКонтакте: " + url('Перейти в бота ВК', href=vk_url) + "\n" +
+                f"🔹 Telegram: " + url('Перейти в бота TG', href=tg_url) + "\n\n"
+                + italic("Твоё будущее и будущее страны — в твоих руках!")
         )
-
         return Repost(text=text, image_path=self.image_path)
 
 
@@ -6524,6 +7812,10 @@ class OrderService(IOrderService):
                     msg += f"\nПосылка отправлена. Адрес: {order.delivery_address or ''}, ФИО: {order.delivery_fio or ''}"
                 await self.__notif.notify_user_vk(order.user_id, msg)
             return order
+    
+    async def get_user_orders_history(self, user_id: int, source: Sources) -> list[Order]:
+        async with self.__uow.atomic():
+            return await self.__repo.get_all_by_user(user_id, source)
 
 
 =========================================
@@ -6538,7 +7830,7 @@ from src.domain.exceptions import UserNotFoundError, PhoneBadFormatError, \
     PhoneAlreadyExistsError, PhoneBadCountryError, EmailAlreadyExistsError, \
     EmailBadFormatError, FioFormatError, NotFoundRegionError, DomainError
 from src.domain.interfaces import IUnitOfWork, IUserRepository, \
-    IStringSorterRepository
+    IStringSorterRepository, ITransactionRepository
 from src.services.interfaces import IUserService
 
 
@@ -6552,31 +7844,52 @@ class UserService(IUserService):
     __MAX_REGION_SUGGESTIONS = 10
     __source: Sources
 
-    def __init__(self, user_repo: IUserRepository, uow: IUnitOfWork, string_sorter_repo: IStringSorterRepository, source: Sources):
+    def __init__(
+            self, user_repo: IUserRepository, uow: IUnitOfWork, 
+            string_sorter_repo: IStringSorterRepository, transaction_repo: ITransactionRepository,
+            source: Sources):
         self.__user_repo = user_repo
         self.__uow = uow
         self.__string_sorter_repo = string_sorter_repo
+        self.__transaction_repo = transaction_repo
         self.__source = source
 
     async def create_user(
-            self, user_id: int, username: str | None,
-            surname: str, name: str, is_member: bool,
-            patronymic: str | None, birth_date: date,
-            phone_number: str, region: str, email: str,
-            gender: str, city: str, wish_to_join: bool, home_address: str | None,
-            news_subscription: bool
+        self, user_id: int, username: str | None, surname: str, name: str | None,
+        patronymic: str | None, phone_number: str, region: str | None,
+        news_subscription: bool
     ) -> User:
         user = User(
-            id=user_id, source=self.__source, username=username, phone_number=phone_number,
+            id=user_id, source=self.__source, username=username,
             surname=surname, name=name, patronymic=patronymic,
-            birth_date=birth_date, region=region, email=email,
-            gender=gender, city=city, wish_to_join=wish_to_join,
-            home_address=home_address, is_member=is_member, news_subscription=news_subscription
+            phone_number=phone_number, region=region,
+            news_subscription=news_subscription
         )
         async with self.__uow.atomic():
-            await self.__user_repo.create_user(user)
-        return user
-    
+            return await self.__user_repo.create_user(user)
+
+    async def update_user_profile(
+        self, user_id: int, source: Sources,
+        birth_date: date | None = None,
+        email: str | None = None,
+        gender: str | None = None,
+        city: str | None = None,
+        wish_to_join: bool | None = None,
+        is_member: bool | None = None, 
+        home_address: str | None = None
+    ) -> User:
+        updates = {
+            'birth_date': birth_date,
+            'email': email,
+            'gender': gender,
+            'city': city,
+            'wish_to_join': wish_to_join,
+            'is_member': is_member,
+            'home_address': home_address
+        }
+        async with self.__uow.atomic():
+            return await self.__user_repo.update_user_profile(user_id, source, **updates)
+
     async def get_user_region(self, user_id: int) -> str:
         async with self.__uow.atomic():
             try:
@@ -6620,7 +7933,9 @@ class UserService(IUserService):
                 raise PhoneAlreadyExistsError
         return phone_number
 
-    async def validate_email(self, email: str) -> str:
+    async def validate_email(self, email: str | None) -> str | None:
+        if email is None:
+            return email
         pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(pattern, email.strip()):
             raise EmailBadFormatError()
@@ -6722,6 +8037,36 @@ class UserService(IUserService):
     async def update_user_grade(self, user_id: int, source: Sources, grade: UserGrade) -> None:
         async with self.__uow.atomic():
             await self.__user_repo.update_user_grade(user_id, source, grade)
+    
+    async def get_user_rating(self, user_id: int, source: Sources) -> int:
+        async with self.__uow.atomic():
+            return await self.__transaction_repo.get_user_rating(user_id, source)
+
+    async def get_global_top(self, limit: int = 10) -> list[dict]:
+        async with self.__uow.atomic():
+            top = await self.__transaction_repo.get_global_top(limit)
+            res = []
+            for uid, score in top:
+                try:
+                    u = await self.__user_repo.get_user(uid, self.__source)
+                    res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
+                except: pass
+            return res
+
+    async def get_local_top(self, region: str, limit: int = 10) -> list[dict]:
+        async with self.__uow.atomic():
+            top = await self.__transaction_repo.get_local_top(region, limit)
+            res = []
+            for uid, score in top:
+                try:
+                    u = await self.__user_repo.get_user(uid, self.__source)
+                    res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
+                except: pass
+            return res
+
+    async def get_users_by_role(self, role: UserRole) -> list[User]:
+        async with self.__uow.atomic():
+            return await self.__user_repo.get_users(role=role, source=self.__source)
 
 
 =========================================

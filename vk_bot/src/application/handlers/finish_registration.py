@@ -39,6 +39,7 @@ async def finish_registration(
             name=state_payload.get('name'),
             patronymic=state_payload.get('patronymic'),
             phone_number=state_payload.get('phone'),
+            birth_date=state_payload.get('birth_date'),
             region=state_payload.get('region'),
             news_subscription=state_payload.get('news_subscription', False)
         )
@@ -74,6 +75,7 @@ async def finish_registration(
             f"Источник: ВК\n"
             f"Является членом партии: {'Да' if user.is_member else 'Нет'}\n"
             f"ФИО: {user.surname} {user.name} {user.patronymic or ''}\n"
+            f"Дата рождения: {user.birth_date.strftime('%d.%m.%Y')}\n"
             f"Номер телефона: {user.phone_number}\n"
             f"Регион: {user.region}\n"
             f"Подписка на новости: {'Есть' if user.news_subscription else 'Нет'}\n\n"

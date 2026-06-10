@@ -12,6 +12,7 @@ from .get_phone import router as phone_router
 from .get_region import router as region_router
 from .get_news_subscription import router as news_router
 from .check_subscription import router as check_router
+from .get_birth_date import router as birth_date_router
 from .user.shop import router as user_shop_router
 from .admin.shop import router as admin_shop_router
 from .admin.orders import router as admin_orders_router
@@ -32,6 +33,7 @@ full_labeler.load(admin_router)
 # full_labeler.load(user_learning_router)
 full_labeler.load(pd_router)
 full_labeler.load(fio_router)
+full_labeler.load(birth_date_router)
 full_labeler.load(phone_router)
 full_labeler.load(region_router)
 full_labeler.load(news_router)
