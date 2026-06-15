@@ -15,6 +15,7 @@ from .get_home_address import router as home_address_router
 from .get_news_subscription import router as news_subscription_router
 from .registered_yes import router as registered_yes_router
 from .menu import router as menu_router
+from .user.profile import router as profile_router
 from .start import router as start_router, start_command_router
 
 router = Router(name=__name__)
@@ -35,4 +36,5 @@ router.include_router(home_address_router)
 router.include_router(news_subscription_router)
 router.include_router(registered_yes_router)
 router.include_router(menu_router)
+router.include_router(profile_router)
 router.include_router(start_router)

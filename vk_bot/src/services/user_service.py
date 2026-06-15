@@ -231,9 +231,9 @@ class UserService(IUserService):
         async with self.__uow.atomic():
             top = await self.__transaction_repo.get_global_top(limit)
             res = []
-            for uid, score in top:
+            for uid, score, source in top:
                 try:
-                    u = await self.__user_repo.get_user(uid, self.__source)
+                    u = await self.__user_repo.get_user(uid, source)
                     res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
                 except: pass
             return res
@@ -242,9 +242,9 @@ class UserService(IUserService):
         async with self.__uow.atomic():
             top = await self.__transaction_repo.get_local_top(region, limit)
             res = []
-            for uid, score in top:
+            for uid, score, source in top:
                 try:
-                    u = await self.__user_repo.get_user(uid, self.__source)
+                    u = await self.__user_repo.get_user(uid, source)
                     res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
                 except: pass
             return res

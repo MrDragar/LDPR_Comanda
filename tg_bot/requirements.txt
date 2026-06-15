@@ -1,6 +1,8 @@
 python-dotenv~=1.0.1
 aiogram~=3.25.0
+vkbottle~=4.6.2
 maxapi~=1.1.0
+aioboto3~=15.5.0
 SQLAlchemy~=2.0.38
 aiosqlite~=0.21.0
 pytest~=8.3.5

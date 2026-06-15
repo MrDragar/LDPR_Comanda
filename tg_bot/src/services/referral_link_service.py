@@ -4,23 +4,26 @@ from src.services.interfaces import IReferralLinkService
 
 
 class ReferralLinkService(IReferralLinkService):
-    def __init__(self, vk_bot_link: str, tg_bot_link: str, source: Sources, image_path: str):
+    def __init__(self, vk_bot_link: str, tg_bot_link: str, max_bot_link: str, source: Sources, image_path: str):
         self.vk_bot_link = vk_bot_link
         self.tg_bot_link = tg_bot_link
+        self.max_bot_link = max_bot_link
         self.source = source
         self.image_path = image_path
 
     def generate_post(self, user_id: int) -> Repost:
         vk_url = f"{self.vk_bot_link}?ref={user_id}_{self.source.value}"
         tg_url = f"{self.tg_bot_link}?start={user_id}_{self.source.value}"
+        max_url = f"{self.max_bot_link}?start={user_id}_{self.source.value}"
 
         text = (
-            "<b>🔥 Грандиозный конкурс от ЛДПР!</b>\n\n"
-            "Участвуй и выигрывай крутые призы!\n"
-            "Присоединяйся прямо сейчас и приглашай друзей:\n\n"
-            f"ВКонтакте: <a href='{vk_url}'>Перейти в бота ВК</a>\n"
-            f"Telegram: <a href='{tg_url}'>Перейти в бота TG</a>\n\n"
-            "<i>Твое будущее в твоих руках!</i>"
+            "🦅 Присоединяйся к Большой команде ЛДПР!\n\n"
+            "Стань частью движения, которое меняет страну к лучшему.\n"
+            "Выполняй задания, проходи обучение, зарабатывай баллы и обменивай их на эксклюзивные подарки в нашем магазине!\n\n"
+            "Приглашай друзей и получай дополнительные баллы за каждого:\n"
+            f"🔹 ВКонтакте: {vk_url}\n"
+            f"🔹 Telegram: {tg_url}\n"
+            f"🔹 MAX: {max_url}\n\n"
+            "Твоё будущее и будущее страны — в твоих руках!"
         )
-
         return Repost(text=text, image_path=self.image_path)

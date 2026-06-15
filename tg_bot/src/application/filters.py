@@ -24,15 +24,6 @@ class IsRegisteredFilter(BaseFilter):
         return await user_service.is_user_exists(message.from_user.id)
 
 
-class IsParticipantFilter(BaseFilter):
-    """Проверяет, активировал ли пользователь участие в конкретной активности."""
-    async def __call__(self, message: Message, participation_service: IParticipationService) -> bool:
-        return await participation_service.is_participant(
-            user_id=message.from_user.id,
-            user_source=Sources.TG
-        )
-
-
 class ValidatedStartFilter(CommandStart):
     """Кастомный фильтр, наследующий CommandStart с валидацией формата"""
     def __init__(self, **kwargs):

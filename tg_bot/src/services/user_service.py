@@ -1,12 +1,12 @@
 import re
 from datetime import date
 
-from src.domain.entities.user import User, Sources
+from src.domain.entities.user import User, Sources, UserRole, UserGrade
 from src.domain.exceptions import UserNotFoundError, PhoneBadFormatError, \
     PhoneAlreadyExistsError, PhoneBadCountryError, EmailAlreadyExistsError, \
-    EmailBadFormatError, FioFormatError, NotFoundRegionError
+    EmailBadFormatError, FioFormatError, NotFoundRegionError, DomainError
 from src.domain.interfaces import IUnitOfWork, IUserRepository, \
-    IStringSorterRepository
+    IStringSorterRepository, ITransactionRepository
 from src.services.interfaces import IUserService
 
 
@@ -20,19 +20,27 @@ class UserService(IUserService):
     __MAX_REGION_SUGGESTIONS = 10
     __source: Sources
 
-    def __init__(self, user_repo: IUserRepository, uow: IUnitOfWork, string_sorter_repo: IStringSorterRepository, source: Sources):
+    def __init__(
+            self, user_repo: IUserRepository, uow: IUnitOfWork, 
+            string_sorter_repo: IStringSorterRepository, transaction_repo: ITransactionRepository,
+            source: Sources):
         self.__user_repo = user_repo
         self.__uow = uow
         self.__string_sorter_repo = string_sorter_repo
+        self.__transaction_repo = transaction_repo
         self.__source = source
 
     async def create_user(
-            self, user_id: int, username: str | None,
-            surname: str, name: str, is_member: bool,
-            patronymic: str | None, birth_date: date,
-            phone_number: str, region: str, email: str,
-            gender: str, city: str, wish_to_join: bool, home_address: str | None,
-            news_subscription: bool
+            self, user_id: int, username: str | None, surname: str, name: str | None,
+            patronymic: str | None, phone_number: str, region: str | None,
+            news_subscription: bool,
+            birth_date: date | None = None,
+            email: str | None = None,
+            gender: str | None = None,
+            city: str | None = None,
+            wish_to_join: bool | None = None,
+            is_member: bool | None = None,
+            home_address: str | None = None
     ) -> User:
         user = User(
             id=user_id, source=self.__source, username=username, phone_number=phone_number,
@@ -42,9 +50,31 @@ class UserService(IUserService):
             home_address=home_address, is_member=is_member, news_subscription=news_subscription
         )
         async with self.__uow.atomic():
-            await self.__user_repo.create_user(user)
-        return user
-    
+            return await self.__user_repo.create_user(user)
+
+    async def update_user_profile(
+        self, user_id: int, source: Sources,
+        birth_date: date | None = None,
+        email: str | None = None,
+        gender: str | None = None,
+        city: str | None = None,
+        wish_to_join: bool | None = None,
+        is_member: bool | None = None, 
+        home_address: str | None = None
+    ) -> User:
+        updates = {
+            'email': email,
+            'gender': gender,
+            'city': city,
+            'wish_to_join': wish_to_join,
+            'is_member': is_member,
+            'home_address': home_address
+        }
+        if birth_date is not None:
+            updates['birth_date'] = birth_date
+        async with self.__uow.atomic():
+            return await self.__user_repo.update_user_profile(user_id, source, **updates)
+
     async def get_user_region(self, user_id: int) -> str:
         async with self.__uow.atomic():
             try:
@@ -162,3 +192,63 @@ class UserService(IUserService):
             if region.startswith(region_prefix):
                 return region
         raise NotFoundRegionError(f"No such region starting with {region_prefix}")
+    
+    async def get_user_role(self, user_id: int, user_source: Sources) -> UserRole:
+        async with self.__uow.atomic():
+            try:
+                user = await self.__user_repo.get_user(int(user_id), user_source)
+                return user.role
+            except UserNotFoundError:
+                raise DomainError("Пользователь не найден")
+            except Exception:
+                raise DomainError("Ошибка при получении роли")
+            
+    async def get_user(self, user_id: int, user_source: Sources) -> User:
+        async with self.__uow.atomic():
+            return await self.__user_repo.get_user(user_id, user_source)
+
+    async def search_users_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]:
+        async with self.__uow.atomic():
+            return await self.__user_repo.search_by_fio(surname, name, patronymic, skip, limit)
+
+    async def update_user_role(self, user_id: int, source: Sources, role: UserRole) -> None:
+        async with self.__uow.atomic():
+            await self.__user_repo.update_user_role(user_id, source, role)
+
+    async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int:
+        async with self.__uow.atomic():
+            return await self.__user_repo.get_completed_tasks_count(user_id, source, is_online)
+
+    async def update_user_grade(self, user_id: int, source: Sources, grade: UserGrade) -> None:
+        async with self.__uow.atomic():
+            await self.__user_repo.update_user_grade(user_id, source, grade)
+    
+    async def get_user_rating(self, user_id: int, source: Sources) -> int:
+        async with self.__uow.atomic():
+            return await self.__transaction_repo.get_user_rating(user_id, source)
+
+    async def get_global_top(self, limit: int = 10) -> list[dict]:
+        async with self.__uow.atomic():
+            top = await self.__transaction_repo.get_global_top(limit)
+            res = []
+            for uid, score, source in top:
+                try:
+                    u = await self.__user_repo.get_user(uid, source)
+                    res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
+                except: pass
+            return res
+
+    async def get_local_top(self, region: str, limit: int = 10) -> list[dict]:
+        async with self.__uow.atomic():
+            top = await self.__transaction_repo.get_local_top(region, limit)
+            res = []
+            for uid, score, source in top:
+                try:
+                    u = await self.__user_repo.get_user(uid, source)
+                    res.append({"name": f"{u.surname} {u.name}", "score": score, "uid": uid})
+                except: pass
+            return res
+
+    async def get_users_by_role(self, role: UserRole) -> list[User]:
+        async with self.__uow.atomic():
+            return await self.__user_repo.get_users(role=role, source=self.__source)

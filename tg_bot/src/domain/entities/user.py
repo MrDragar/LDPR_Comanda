@@ -29,19 +29,19 @@ class UserGrade(enum.Enum):
 class User:
     id: int
     source: Sources
-    is_member: bool
     username: str | None
     surname: str
-    name: str
-    patronymic: str
-    birth_date: date
     phone_number: str
-    region: str
-    email: str | None
-    gender: str
-    city: str
-    wish_to_join: bool
-    home_address: str | None
+    name: str | None = None  # nullable
+    is_member: bool | None = None
+    patronymic: str | None = None  # nullable
+    birth_date: date | None = None  # nullable
+    region: str | None = None  # nullable
+    email: str | None = None  # nullable
+    gender: str | None = None  # nullable
+    city: str | None = None  # nullable
+    wish_to_join: bool | None = None  # nullable
+    home_address: str | None = None
     news_subscription: bool = field(default=False)
     created_at: datetime = field(default_factory=lambda: datetime.now())
     balance: int = field(default=0)

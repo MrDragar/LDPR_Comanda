@@ -45,21 +45,22 @@ class TransactionRepository(ITransactionRepository):
         )
         return int(await session.scalar(stmt) or 0)
 
-    async def get_global_top(self, limit: int = 10) -> list[tuple[int, int]]:
+    async def get_global_top(self, limit: int = 10) -> list[tuple[int, int, Sources]]:
         session = self.__uow.get_session()
         stmt = select(
-            TransactionORM.user_id,
+            TransactionORM.user_id, TransactionORM.user_source,
             func.coalesce(func.sum(TransactionORM.amount), 0).label("total")
         ).where(
             TransactionORM.amount > 0
-        ).group_by(TransactionORM.user_id).order_by(text("total DESC")).limit(limit)
+        ).group_by(TransactionORM.user_id, TransactionORM.user_source).order_by(text("total DESC")).limit(
+            limit)
         result = await session.execute(stmt)
-        return [(row.user_id, int(row.total)) for row in result.all()]
+        return [(row.user_id, int(row.total), row.user_source) for row in result.all()]
 
-    async def get_local_top(self, region: str, limit: int = 10) -> list[tuple[int, int]]:
+    async def get_local_top(self, region: str, limit: int = 10) -> list[tuple[int, int, Sources]]:
         session = self.__uow.get_session()
         stmt = select(
-            TransactionORM.user_id,
+            TransactionORM.user_id, TransactionORM.user_source,
             func.coalesce(func.sum(TransactionORM.amount), 0).label("total")
         ).join(
             UserORM,
@@ -67,6 +68,7 @@ class TransactionRepository(ITransactionRepository):
         ).where(
             TransactionORM.amount > 0,
             UserORM.region == region
-        ).group_by(TransactionORM.user_id).order_by(text("total DESC")).limit(limit)
+        ).group_by(TransactionORM.user_id, TransactionORM.user_source).order_by(text("total DESC")).limit(
+            limit)
         result = await session.execute(stmt)
-        return [(row.user_id, int(row.total)) for row in result.all()]
+        return [(row.user_id, int(row.total), row.user_source) for row in result.all()]

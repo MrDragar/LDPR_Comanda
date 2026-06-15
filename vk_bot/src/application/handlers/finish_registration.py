@@ -38,7 +38,7 @@ async def finish_registration(
             surname=state_payload['surname'],
             name=state_payload['name'],
             is_member=state_payload['is_member'],
-            patronymic=state_payload.get('patronymic'),
+            patronymic=state_payload.get('patronymic', None),
             birth_date=state_payload['birth_date'],
             phone_number=state_payload['phone'],
             region=state_payload['region'],
@@ -46,7 +46,7 @@ async def finish_registration(
             gender=state_payload['gender'],
             city=state_payload['city'],
             wish_to_join=state_payload.get('wish_to_join', False),
-            home_address=state_payload.get('home_address'),
+            home_address=state_payload.get('home_address', None),
             news_subscription=state_payload['news_subscription']
         )
         try:
