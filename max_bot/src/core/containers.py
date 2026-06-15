@@ -1,6 +1,7 @@
 from aiogram.client.session.aiohttp import AiohttpSession
-from maxapi import Bot, Dispatcher
+from vkbottle import Bot as VkBot
 from aiogram import Bot as TgBot
+from maxapi import Bot as MaxBot, Dispatcher
 
 from src.core.di import DeclarativeContainer, providers
 from src.domain.entities import Sources
@@ -45,11 +46,13 @@ class Container(DeclarativeContainer):
     uow: providers.Singleton[IUnitOfWork] = providers.Singleton(
         UnitOfWork, database=database
     )
-    bot: providers.Singleton[Bot] = providers.Singleton(Bot, token=config.MAX_API_TOKEN)
+    bot: providers.Singleton[MaxBot] = providers.Singleton(MaxBot, token=config.MAX_API_TOKEN)
     dp: providers.Singleton[Dispatcher] = providers.Singleton(Dispatcher)
     tg_bot: providers.Singleton[TgBot] = providers.Singleton(
         TgBot, token=config.TG_API_TOKEN, session=AiohttpSession(proxy=config.proxy)
     )
+    vk_bot: providers.Singleton[VkBot] = providers.Singleton(VkBot, token=config.VK_API_TOKEN)
+
     vk_verify_repo: providers.Factory[IVKTaskVerificationRepository] = providers.Factory(
         VKTaskVerificationRepository, service_token=config.SERVICE_TOKEN
     )
@@ -85,8 +88,9 @@ class Container(DeclarativeContainer):
     )
     notification_service = providers.Factory(
         NotificationService,
-        vk_bot=bot,
-        tg_bot=tg_bot
+        vk_bot=vk_bot,
+        tg_bot=tg_bot,
+        max_bot=bot
     )
     user_service: providers.Factory[IUserService] = providers.Factory(
         UserService, user_repo=user_repository, uow=uow, string_sorter_repo=string_sorter, 
@@ -110,7 +114,9 @@ class Container(DeclarativeContainer):
         ReferralService,
         uow=uow,
         referral_repo=referral_repository,
-        user_service=user_service
+        user_service=user_service,
+        notify_service=notification_service,
+        balance_service=balance_service
     )
     referral_link_service = providers.Factory(
         ReferralLinkService,

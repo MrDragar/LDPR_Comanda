@@ -14,7 +14,7 @@ async def get_birth_date(message: Message, state_dispenser: BuiltinStateDispense
         birth_date = datetime.strptime(message.text.strip(), "%d.%m.%Y").date()
         now = datetime.now().date()
         age = now.year - birth_date.year - (
-                    (now.month, now.day) < (birth_date.month, birth_date.day))
+                (now.month, now.day) < (birth_date.month, birth_date.day))
 
         if birth_date > now:
             return "Дата рождения не может быть в будущем."
@@ -25,9 +25,9 @@ async def get_birth_date(message: Message, state_dispenser: BuiltinStateDispense
 
         state = await state_dispenser.get(message.from_id)
         await state_dispenser.set(message.from_id,
-                                          RegistrationStates.PHONE,
-                                          **state.payload,
-                                          birth_date=birth_date)
+                                  RegistrationStates.PHONE,
+                                  **state.payload,
+                                  birth_date=birth_date)
         await message.answer(
             "Введите ваш номер телефона (например, +79001234567):")
     except ValueError:

@@ -8,10 +8,10 @@ def get_role_menu_keyboard(role: UserRole | None) -> str:
     kb = Keyboard(one_time=False)
     # kb.add(Text("Выполнить задание", payload=f"{random.randint(0,1000000)}")).row()
     # kb.add(Text("Мои задания")).row()
-    # kb.add(Text("Личный кабинет")).row()
+    kb.add(Text("Личный кабинет")).row()
     # kb.add(Text("Обучение")).row()
     # kb.add(Text("Магазин"))
-    kb.add(Text("Участие в розыгрыше")).row()
+    # kb.add(Text("Участие в розыгрыше")).row()
     # kb.add(Text("Закрытые мероприятия")).row()
 
     # if role in (UserRole.STAFF_RO,

@@ -113,12 +113,12 @@ class OrderService(IOrderService):
                 await self.__balance.add_balance(order.user_id, order.user_source, order.price,
                                                  f"Возврат за отмену заказа #{order_id}")
                 msg = f"Заказ #{order_id} отменен. Причина: {reason or 'Не указана'}\nБаллы ({order.price}) возвращены на баланс."
-                await self.__notif.notify_user_vk(order.user_id, msg)
+                await self.__notif.notify_user(order.user_id, order.user_source, msg)
             else:
                 msg = f"Заказ #{order_id} подтвержден!"
                 if order.delivery_type == "mail":
                     msg += f"\nПосылка отправлена. Адрес: {order.delivery_address or ''}, ФИО: {order.delivery_fio or ''}"
-                await self.__notif.notify_user_vk(order.user_id, msg)
+                await self.__notif.notify_user(order.user_id, order.user_source, msg)
             return order
     
     async def get_user_orders_history(self, user_id: int, source: Sources) -> list[Order]:

@@ -60,10 +60,13 @@ async def referral_link(message: Message, referral_link_service: IReferralLinkSe
     # 1️⃣ Сообщение с прямыми ссылками для копирования
     vk_ref = f"{referral_link_service.vk_bot_link}?ref={message.from_id}_{referral_link_service.source.value}"
     tg_ref = f"{referral_link_service.tg_bot_link}?start={message.from_id}_{referral_link_service.source.value}"
+    max_ref = (f"{referral_link_service.max_bot_link}?start={message.from_id}"
+               f"_{referral_link_service.source.value}")
 
     links_text = (
         "🔗 Ваши реферальные ссылки:\n\n"
         f"🔹 ВКонтакте: {vk_ref}\n"
+        f"🔹 Макс: {max_ref}\n"
         f"🔹 Telegram: {tg_ref}\n\n"
         "Копируйте и отправляйте друзьям!"
     )

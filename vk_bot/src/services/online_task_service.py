@@ -77,7 +77,7 @@ class OnlineTaskService(IOnlineTaskService):
                         "Вам открылся отдел \"Обучение\". Чтобы перейти на следующий уровень, "
                         "вам необходимо пройти наш курс"
                     )
-                    await self.__notification_svc.notify_user_vk(user_id, upgrade_msg)
+                    await self.__notification_svc.notify_user(user_id, user.source, upgrade_msg)
 
     async def get_task(self, task_id: int) -> OnlineTask | None:
         async with self.__uow.atomic():

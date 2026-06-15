@@ -65,7 +65,7 @@ class OfflineTaskService(IOfflineTaskService):
                                                                 UserGrade.RESERVE)
                         msg = ("Поздравляем! Вы получили новый ранг 'Кадровый резерв ЛДПР'. "
                                "У вас открылся новый раздел: 'Закрытые мероприятия'.")
-                        await self.__notification_svc.notify_user_vk(user_id, msg)
+                        await self.__notification_svc.notify_user(user_id, user_source, msg)
             elif new_status == TaskStatus.DECLINED:
                 logger.info(f"Offline task {task_id} status set to DECLINED for user {user_id}")
 

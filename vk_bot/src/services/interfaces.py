@@ -13,7 +13,13 @@ class IUserService(ABC):
             self, user_id: int, username: str | None, surname: str, name: str | None,
             patronymic: str | None, phone_number: str, region: str | None,
             news_subscription: bool,
-            birth_date: date | None = None
+            birth_date: date | None = None,
+            email: str | None = None,
+            gender: str | None = None,
+            city: str | None = None,
+            wish_to_join: bool | None = None,
+            is_member: bool | None = None,
+            home_address: str | None = None
     ) -> User: ...
 
     @abstractmethod
@@ -139,6 +145,8 @@ class IReferralService(ABC):
 class IReferralLinkService(ABC):
     vk_bot_link: str
     tg_bot_link: str
+    max_bot_link: str
+    source: Sources
 
     @abstractmethod
     def generate_post(self, user_id: int) -> Repost:
@@ -147,9 +155,8 @@ class IReferralLinkService(ABC):
 
 class INotificationService(ABC):
     @abstractmethod
-    async def notify_user_vk(self, peer_id: int, text: str, keyboard: str | None = None) -> None: ...
-    @abstractmethod
-    async def notify_user_tg(self, chat_id: int, text: str) -> None: ...
+    async def notify_user(self, user_id: int, source: Sources, text: str) -> None: ...
+
 
 
 class ILearningService(ABC):
