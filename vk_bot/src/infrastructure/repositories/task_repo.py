@@ -224,7 +224,8 @@ class AcceptedTaskRepository(IAcceptedTaskRepository):
             if task_orm:
                 tasks.append(AcceptedOfflineTask(
                     user_id=user_id, user_source=user_source,
-                    task=OfflineTask(id=task_orm.id, region=task_orm.region, date=task_orm.date,
+                    task=OfflineTask(id=task_orm.id, region=task_orm.region,
+                                     start_date=task_orm.start_date, end_date=task_orm.end_date,
                                      reward=task_orm.reward, title=task_orm.title,
                                      description=task_orm.description, location=task_orm.location,
                                      contacts=task_orm.contacts),
@@ -316,7 +317,8 @@ class AcceptedTaskRepository(IAcceptedTaskRepository):
                 accepted_tasks.append(AcceptedOfflineTask(
                     user_id=user.id, user_source=user.source,
                     task=OfflineTask(
-                        id=task_orm.id, region=task_orm.region, date=task_orm.date,
+                        id=task_orm.id, region=task_orm.region, start_date=task_orm.start_date,
+                        end_date=task_orm.end_date,
                         reward=task_orm.reward, title=task_orm.title,
                         description=task_orm.description, location=task_orm.location,
                         contacts=task_orm.contacts
@@ -333,3 +335,17 @@ class AcceptedTaskRepository(IAcceptedTaskRepository):
         )
         session.add(orm)
         await session.flush()
+    
+    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
+        session = self.__uow.get_session()
+        stmt = select(AcceptedOnlineTaskORM).where(
+            AcceptedOnlineTaskORM.user_id == user_id,
+            AcceptedOnlineTaskORM.user_source == user_source,
+            AcceptedOnlineTaskORM.task_id == task_id
+        )
+        orm = await session.scalar(stmt)
+        if orm:
+            orm.status = status
+            logger.info(f"Updated online task {task_id} status to {status.value}")
+        else:
+            logger.warning(f"Tried to update status for non-existing online accepted task {task_id}")

@@ -99,3 +99,43 @@ class OnlineTaskService(IOnlineTaskService):
                 url=url
             )
             return await self.__task_repo.create_task(task)
+
+    async def submit_tg_online_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
+        async with self.__uow.atomic():
+            task = await self.__task_repo.get_task_by_id(task_id)
+            if not task: raise DomainError("Задача не найдена")
+            if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
+                raise DomainError("Вы уже взяли эту задачу или она в процессе")
+
+            accepted = AcceptedOnlineTask(
+                user_id=user_id, user_source=user_source, task=task, status=TaskStatus.IN_PROGRESS
+            )
+            await self.__accepted_repo.accept_online_task(accepted)
+            logger.info(f"TG Online task {task_id} submitted for verification by user {user_id}")
+
+    async def accept_tg_online_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
+        async with self.__uow.atomic():
+            task = await self.__task_repo.get_task_by_id(task_id)
+            if not task: raise DomainError("Задача не найдена")
+            await self.__accepted_repo.update_online_task_status(user_id, user_source, task_id,
+                                                                 TaskStatus.ACCEPTED)
+            await self.__balance_svc.add_balance(user_id, user_source, task.reward,
+                                                 f"Выполнение онлайн-задачи #{task_id} (ТГ)")
+
+            # Логика повышения грейда (аналогично ВК)
+            user = await self.__user_svc.get_user(user_id, user_source)
+            if user.grade == UserGrade.SYMPATHIZER:
+                completed_online = await self.__user_svc.get_completed_tasks_count(user_id,
+                                                                                   user_source,
+                                                                                   is_online=True)
+                if completed_online >= 3:
+                    await self.__user_svc.update_user_grade(user_id, user_source,
+                                                            UserGrade.BIG_TEAM_MEMBER)
+                    upgrade_msg = "Поздравляем, вы получили новый уровень \"Участник большой команды\". Вам открылся отдел \"Обучение\"."
+                    await self.__notification_svc.notify_user(user_id, user_source, upgrade_msg)
+
+    async def decline_tg_online_task(self, user_id: int, user_source: Sources,
+                                     task_id: int) -> None:
+        async with self.__uow.atomic():
+            await self.__accepted_repo.update_online_task_status(user_id, user_source, task_id,
+                                                                 TaskStatus.DECLINED)

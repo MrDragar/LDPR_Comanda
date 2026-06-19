@@ -164,6 +164,10 @@ class IAcceptedTaskRepository(ABC):
     @abstractmethod
     async def add_accepted_offline_task(self, accepted: AcceptedOfflineTask) -> None:
         ...
+    
+    @abstractmethod
+    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
+        ...
 
 
 class ITransactionRepository(ABC):

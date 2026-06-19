@@ -11,5 +11,6 @@ class S3Storage(IS3Storage):
 
     async def upload_photo(self, file_bytes: bytes, filename: str) -> str:
         async with self.session.client("s3", region_name=self.region, endpoint_url=self.endpoint_url) as s3:
-            await s3.put_object(Bucket=self.bucket, Key=filename, Body=file_bytes, ContentType="image/jpeg")
+            await s3.put_object(Bucket=self.bucket, Key=filename, Body=file_bytes, 
+                                ContentType="image/jpeg", ACL='public-read')
             return f"{self.endpoint_url or 'https://s3.amazonaws.com'}/{self.bucket}/{filename}"
