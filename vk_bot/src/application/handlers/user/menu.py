@@ -37,10 +37,6 @@ async def _get_user_role(message: Message, user_service: IUserService) -> UserRo
     "Назад",
     "На главную",
     "Вернуться на главную страницу",
-    "РњРµРЅСЋ",
-    "РќР°Р·Р°Рґ",
-    "РќР° РіР»Р°РІРЅСѓСЋ",
-    "Р’РµСЂРЅСѓС‚СЊСЃСЏ РЅР° РіР»Р°РІРЅСѓСЋ СЃС‚СЂР°РЅРёС†Сѓ",
 ])
 async def show_menu(message: Message, user_service: IUserService) -> None:
     role = await _get_user_role(message, user_service)
@@ -50,7 +46,7 @@ async def show_menu(message: Message, user_service: IUserService) -> None:
     await message.answer("Выберите интерфейс:", keyboard=get_role_entry_keyboard(role))
 
 
-@router.message(text=["Пользователь", "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ"])
+@router.message(text=["Пользователь"])
 async def show_user_interface(message: Message) -> None:
     await message.answer("Пользовательский интерфейс:", keyboard=get_user_menu_keyboard())
 
@@ -60,10 +56,6 @@ async def show_user_interface(message: Message) -> None:
     "Координатор РО",
     "Сотрудник РО",
     "Хэдлайнер",
-    "РЎРѕС‚СЂСѓРґРЅРёРє Р¦Рђ",
-    "РљРѕРѕСЂРґРёРЅР°С‚РѕСЂ Р Рћ",
-    "РЎРѕС‚СЂСѓРґРЅРёРє Р Рћ",
-    "РҐСЌРґР»Р°Р№РЅРµСЂ",
 ])
 async def show_role_interface(message: Message, user_service: IUserService) -> None:
     role = await _get_user_role(message, user_service)
@@ -72,15 +64,8 @@ async def show_role_interface(message: Message, user_service: IUserService) -> N
         return
 
     if message.text not in (role.value,):
-        legacy_role_values = {
-            UserRole.STAFF_CA: ["РЎРѕС‚СЂСѓРґРЅРёРє Р¦Рђ"],
-            UserRole.COORDINATOR_RO: ["РљРѕРѕСЂРґРёРЅР°С‚РѕСЂ Р Рћ"],
-            UserRole.STAFF_RO: ["РЎРѕС‚СЂСѓРґРЅРёРє Р Рћ"],
-            UserRole.HEADLINER: ["РҐСЌРґР»Р°Р№РЅРµСЂ"],
-        }
-        if message.text not in legacy_role_values.get(role, []):
-            await message.answer("Этот интерфейс недоступен для вашей роли.")
-            return
+        await message.answer("Этот интерфейс недоступен для вашей роли.")
+        return
 
     await message.answer(f"Интерфейс роли: {role.value}", keyboard=get_role_tools_keyboard(role))
 
@@ -123,14 +108,14 @@ async def back_to_role_interface(message: Message, user_service: IUserService) -
     await message.answer(f"Интерфейс роли: {role.value}", keyboard=get_role_tools_keyboard(role))
 
 
-@router.message(text=["Выполнить задание", "Р’С‹РїРѕР»РЅРёС‚СЊ Р·Р°РґР°РЅРёРµ"])
+@router.message(text=["Выполнить задание"])
 async def select_task_type(message: Message, state_dispenser):
     kb = Keyboard(inline=True).add(Text("Онлайн")).add(Text("Офлайн"))
     await state_dispenser.set(message.from_id, UserTaskStates.SELECT_TYPE)
     await message.answer("Выберите тип задания:", keyboard=kb.get_json())
 
 
-@router.message(text=["Мои задания", "РњРѕРё Р·Р°РґР°РЅРёСЏ"])
+@router.message(text=["Мои задания"])
 async def my_tasks(message: Message, offline_task_service, user_service,
                    state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
@@ -140,6 +125,7 @@ async def my_tasks(message: Message, offline_task_service, user_service,
 
     kb = Keyboard(inline=True)
     for t in tasks:
+        # Используем Callback для навигации к деталям задачи
         kb.add(Callback(
             f"#{t.task.id} {t.task.title} ({t.status.value})",
             {"cmd": "view_my_task", "tid": t.task.id},
@@ -149,6 +135,7 @@ async def my_tasks(message: Message, offline_task_service, user_service,
     await message.answer("Ваши задания:", keyboard=kb.get_json())
 
 
+# Новый хендлер: просмотр задачи из "Моих заданий" с кнопкой отмены
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_my_task"))
 async def view_my_task(event: GroupTypes.MessageEvent, offline_task_service, user_service,
                        state_dispenser: BuiltinStateDispenser):
@@ -161,6 +148,7 @@ async def view_my_task(event: GroupTypes.MessageEvent, offline_task_service, use
             random_id=0,
         )
 
+    # Получаем статус принятой задачи
     user_tasks, _ = await offline_task_service.get_user_tasks(
         event.object.user_id,
         Sources.VK,
@@ -223,6 +211,7 @@ async def cancel_my_task(event: GroupTypes.MessageEvent, offline_task_service, n
     )
 
 
+# Возврат к списку моих заданий
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_to_my_tasks"))
 async def back_to_my_tasks(event: GroupTypes.MessageEvent, offline_task_service, user_service,
                            state_dispenser: BuiltinStateDispenser):
