@@ -10,11 +10,12 @@ class Sources(enum.Enum):
 
 
 class UserRole(enum.Enum):
-    STAFF_CA = "Сотрудник ЦА"
-    COORDINATOR_RO = "Координатор РО"
-    STAFF_RO = "Сотрудник РО"
-    HEADLINER = "Хэдлайнер"
-    USER = "Пользователь"
+    STAFF_CA = "сотрудник ЦА"
+    COORDINATOR_RO = "координатор РО"
+    STAFF_RO = "сотрудник РО"
+    # STAFF_MO = "сотрудник МО"
+    # STAFF_PO = "сотрудник ПО"
+    USER = "пользователь"
 
 
 class UserGrade(enum.Enum):
@@ -31,15 +32,15 @@ class User:
     username: str | None
     surname: str
     phone_number: str
-    name: str | None = None
+    name: str | None = None  # nullable
     is_member: bool | None = None
-    patronymic: str | None = None
-    birth_date: date | None = None
-    region: str | None = None
-    email: str | None = None
-    gender: str | None = None
-    city: str | None = None
-    wish_to_join: bool | None = None
+    patronymic: str | None = None  # nullable
+    birth_date: date | None = None  # nullable
+    region: str | None = None  # nullable
+    email: str | None = None  # nullable
+    gender: str | None = None  # nullable
+    city: str | None = None  # nullable
+    wish_to_join: bool | None = None  # nullable
     home_address: str | None = None
     news_subscription: bool = field(default=False)
     created_at: datetime = field(default_factory=lambda: datetime.now())

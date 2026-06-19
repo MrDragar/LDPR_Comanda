@@ -37,21 +37,6 @@ class PostsStates(BaseStateGroup):
     CONFIRM_COORD = "confirm_coord"
 
 
-class HeadlinerStates(BaseStateGroup):
-    CREATE_USER_ID = "headliner_create_user_id"
-    CREATE_PHOTO = "headliner_create_photo"
-    CREATE_TOPIC = "headliner_create_topic"
-    CREATE_FIO = "headliner_create_fio"
-    CREATE_POSITION = "headliner_create_position"
-    CREATE_GROUP_LINK = "headliner_create_group_link"
-    DELETE_ID = "headliner_delete_id"
-    EDIT_ID = "headliner_edit_id"
-    SEARCH_SURNAME = "headliner_search_surname"
-    WELCOME_MESSAGE = "headliner_welcome_message"
-    MAILING_MESSAGE = "headliner_mailing_message"
-    MAILING_CONFIRM = "headliner_mailing_confirm"
-
-
 class AdminCAStates(BaseStateGroup):
     SEARCH_FIO = "ca_search_fio"
     SEARCH_RESULTS = "ca_search_results"

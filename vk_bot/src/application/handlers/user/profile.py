@@ -1,12 +1,10 @@
 import logging
-
-from vkbottle import Keyboard, PhotoMessageUploader, Text
 from vkbottle.bot import BotLabeler, Message
-
-from src.domain.entities.user import Sources, UserRole
-from src.services.interfaces import (IBalanceService, IClosedEventService, IHeadlinerService,
-                                     ILearningService, IOrderService, IReferralLinkService,
-                                     IReferralService, IUserService)
+from vkbottle import Keyboard, Text, PhotoMessageUploader
+from src.services.interfaces import (IUserService, IReferralService, IBalanceService,
+                                     ILearningService, IOrderService, IClosedEventService,
+                                     IReferralLinkService)
+from src.domain.entities.user import Sources
 
 logger = logging.getLogger(__name__)
 router = BotLabeler()
@@ -29,8 +27,7 @@ def get_back_kb():
 
 @router.message(text=["Личный кабинет"])
 async def profile(message: Message, user_service: IUserService, referral_service: IReferralService,
-                  balance_service: IBalanceService, learning_service: ILearningService,
-                  headliner_service: IHeadlinerService):
+                  balance_service: IBalanceService, learning_service: ILearningService):
     try:
         u = await user_service.get_user(message.from_id, Sources.VK)
         balance = await balance_service.get_balance(u.id, u.source)
@@ -41,7 +38,6 @@ async def profile(message: Message, user_service: IUserService, referral_service
 
         text = (
             f"Ваш ранг - {u.grade.value}\n"
-            f"Ваша роль - {u.role.value}\n"
             f"Ваш регион - {u.region}\n"
             f"Количество баллов - {balance}\n"
             f"Количество приглашённых людей - {refs}\n"
@@ -50,18 +46,6 @@ async def profile(message: Message, user_service: IUserService, referral_service
             f"Обучение пройдено - {'да' if is_passed else 'нет'}\n"
             f"Дата регистрации - {u.created_at.strftime('%d.%m.%Y')}"
         )
-
-        if u.role == UserRole.HEADLINER:
-            headliner = await headliner_service.get_by_user(u.id, u.source)
-            if headliner:
-                followers_count = await headliner_service.count_followers(headliner.id)
-                text += (
-                    f"\n\nХэдлайнер: {headliner.fio}\n"
-                    f"Должность: {headliner.position}\n"
-                    f"Тема: {headliner.topic}\n"
-                    f"Последователей: {followers_count}"
-                )
-
         await message.answer(text, keyboard=get_profile_kb())
     except Exception as e:
         logger.error(f"Profile error: {e}", exc_info=True)
@@ -70,35 +54,25 @@ async def profile(message: Message, user_service: IUserService, referral_service
 
 @router.message(text=["Реферальная ссылка"])
 async def referral_link(message: Message, referral_link_service: IReferralLinkService,
-                        photo_uploader: PhotoMessageUploader,
-                        headliner_service: IHeadlinerService):
-    headliner = await headliner_service.get_by_user(message.from_id, Sources.VK)
-    if headliner:
-        links = headliner_service.make_referral_links(headliner.id)
-        links_text = (
-            "Ваши ссылки хэдлайнера:\n\n"
-            f"VK: {links['VK']}\n"
-            f"MAX: {links['MAX']}\n"
-            f"Telegram: {links['Telegram']}\n\n"
-            "Все зарегистрированные по этим ссылкам попадут в вашу команду."
-        )
-        return await message.answer(links_text, keyboard=get_back_kb())
-
+                        photo_uploader: PhotoMessageUploader):
     repost_data = referral_link_service.generate_post(message.from_id)
+
+    # 1️⃣ Сообщение с прямыми ссылками для копирования
     vk_ref = f"{referral_link_service.vk_bot_link}?ref={message.from_id}_{referral_link_service.source.value}"
     tg_ref = f"{referral_link_service.tg_bot_link}?start={message.from_id}_{referral_link_service.source.value}"
     max_ref = (f"{referral_link_service.max_bot_link}?start={message.from_id}"
                f"_{referral_link_service.source.value}")
 
     links_text = (
-        "Ваши реферальные ссылки:\n\n"
-        f"ВКонтакте: {vk_ref}\n"
-        f"Макс: {max_ref}\n"
-        f"Telegram: {tg_ref}\n\n"
+        "🔗 Ваши реферальные ссылки:\n\n"
+        f"🔹 ВКонтакте: {vk_ref}\n"
+        f"🔹 Макс: {max_ref}\n"
+        f"🔹 Telegram: {tg_ref}\n\n"
         "Копируйте и отправляйте друзьям!"
     )
     await message.answer(links_text, keyboard=get_back_kb())
 
+    # 2️⃣ Сообщение для репоста с картинкой
     photo = await photo_uploader.upload(repost_data.image_path, peer_id=message.peer_id)
     await message.answer(
         message=repost_data.text,
@@ -113,7 +87,7 @@ async def orders_history(message: Message, order_service: IOrderService):
     if not orders:
         return await message.answer("У вас пока нет покупок.", keyboard=get_back_kb())
 
-    lines = ["Ваши покупки:"]
+    lines = ["🛍 Ваши покупки:"]
     for o in orders:
         status_map = {"pending": "Ожидает", "completed": "Получен", "cancelled": "Отменен"}
         status_text = status_map.get(o.status.value, o.status.value)
@@ -129,7 +103,7 @@ async def events_history(message: Message, closed_event_service: IClosedEventSer
         return await message.answer("Вы пока не записаны ни на одно мероприятие.",
                                     keyboard=get_back_kb())
 
-    lines = ["Ваши мероприятия:"]
+    lines = ["📅 Ваши мероприятия:"]
     for e in events:
         lines.append(
             f"- {e.title} | {e.date.strftime('%d.%m.%Y')} {e.time.strftime('%H:%M')} | {e.location}")
@@ -145,22 +119,31 @@ async def show_rating(message: Message, user_service: IUserService):
     global_top = await user_service.get_global_top(10)
     local_top = await user_service.get_local_top(u.region, 10)
 
-    text = f"Ваш рейтинг: {user_score} баллов\n\n"
-    text += "Глобальный рейтинг (Топ-10):\n"
+    text = f"🏆 Ваш рейтинг: {user_score} баллов\n\n"
+
+    text += "🌍 Глобальный рейтинг (Топ-10):\n"
     if not global_top:
         text += "Пока нет данных.\n"
     else:
+        user_in_global = False
         for i, entry in enumerate(global_top, 1):
-            marker = " (Это вы!)" if entry["uid"] == u.id else ""
+            marker = " 👈 (Это вы!)" if entry["uid"] == u.id else ""
             text += f"{i}. {entry['name']} - {entry['score']}{marker}\n"
+            if entry["uid"] == u.id: user_in_global = True
+        if not user_in_global:
+            text += f"... Вы не в топ-10.\n"
 
-    text += f"\nЛокальный рейтинг ({u.region}, Топ-10):\n"
+    text += f"\n📍 Локальный рейтинг ({u.region}, Топ-10):\n"
     if not local_top:
         text += "Пока нет данных.\n"
     else:
+        user_in_local = False
         for i, entry in enumerate(local_top, 1):
-            marker = " (Это вы!)" if entry["uid"] == u.id else ""
+            marker = " 👈 (Это вы!)" if entry["uid"] == u.id else ""
             text += f"{i}. {entry['name']} - {entry['score']}{marker}\n"
+            if entry["uid"] == u.id: user_in_local = True
+        if not user_in_local:
+            text += f"... Вы не в топ-10.\n"
 
     await message.answer(text, keyboard=get_back_kb())
 
@@ -168,7 +151,6 @@ async def show_rating(message: Message, user_service: IUserService):
 @router.message(text=["Назад"])
 async def back_to_profile(message: Message, user_service: IUserService,
                           referral_service: IReferralService,
-                          balance_service: IBalanceService, learning_service: ILearningService,
-                          headliner_service: IHeadlinerService):
-    await profile(message, user_service, referral_service, balance_service, learning_service,
-                  headliner_service)
+                          balance_service: IBalanceService, learning_service: ILearningService):
+    # Возврат в личный кабинет
+    await profile(message, user_service, referral_service, balance_service, learning_service)

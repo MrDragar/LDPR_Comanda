@@ -9,7 +9,7 @@ from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources
-from src.services.interfaces import IUserService, IReferralService, IActiveUserService, IHeadlinerService
+from src.services.interfaces import IUserService, IReferralService, IActiveUserService
 
 router = BotLabeler()
 start_command_router = BotLabeler()
@@ -18,13 +18,6 @@ logger = logging.getLogger(__name__)
 
 def parse_ref(ref: str) -> tuple[int, Sources] | None:
     pattern = re.compile(r'^(\d+)_(tg|vk|max)$')
-    match = pattern.match(ref)
-    if match:
-            return int(match.group(1)), Sources(match.group(2))
-
-
-def parse_headliner_ref(ref: str) -> tuple[int, Sources] | None:
-    pattern = re.compile(r'^hl_(\d+)_(tg|vk|max)$')
     match = pattern.match(ref)
     if match:
         return int(match.group(1)), Sources(match.group(2))
@@ -40,8 +33,7 @@ async def hello_handler(message: Message):
 async def start(
         message: Message, user_service: IUserService, 
         state_dispenser: BuiltinStateDispenser, photo_uploader: PhotoMessageUploader,
-        referral_service: IReferralService, active_user_service: IActiveUserService,
-        headliner_service: IHeadlinerService
+        referral_service: IReferralService, active_user_service: IActiveUserService
 ):
     if message.peer_id < 0:
         return
@@ -58,15 +50,7 @@ async def start(
             role = None
         await message.answer("Главное меню:", keyboard=get_role_menu_keyboard(role))
         return
-    headliner_ref = None
     if message.ref:
-        headliner_ref = parse_headliner_ref(message.ref)
-        if headliner_ref is not None:
-            headliner = await headliner_service.get_by_id(headliner_ref[0])
-            if headliner is None:
-                headliner_ref = None
-
-    if message.ref and headliner_ref is None:
         parsed_ref = parse_ref(message.ref)
         if parsed_ref is not None:
             await referral_service.activate_referral(
@@ -96,10 +80,4 @@ async def start(
         "Для начала дайте согласие на обработку персональных данных",
         keyboard=get_personal_data_keyboard()
     )
-    payload = {}
-    if headliner_ref is not None:
-        payload = {
-            "headliner_id": headliner_ref[0],
-            "headliner_source": headliner_ref[1].value
-        }
-    await state_dispenser.set(message.from_id, RegistrationStates.PERSONAL_DATA, **payload)
+    await state_dispenser.set(message.from_id, RegistrationStates.PERSONAL_DATA)

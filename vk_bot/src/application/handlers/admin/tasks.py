@@ -439,25 +439,6 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
     )
 
 
-@router.message(text=["Создать онлайн задачу"])
-async def start_create_online_normal(message: Message, user_service: IUserService,
-                                     state_dispenser: BuiltinStateDispenser):
-    return await start_create_online(message, user_service, state_dispenser)
-
-
-@router.message(text=["Создать офлайн задачу"])
-async def start_create_offline_normal(message: Message, user_service: IUserService,
-                                      state_dispenser: BuiltinStateDispenser):
-    return await start_create_offline(message, user_service, state_dispenser)
-
-
-@router.message(text=["Проверить офлайн задачи"])
-async def start_verify_normal(message: Message, user_service: IUserService,
-                              offline_task_service: IOfflineTaskService,
-                              state_dispenser: BuiltinStateDispenser):
-    return await start_verify(message, user_service, offline_task_service, state_dispenser)
-
-
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("check_user"))
 async def select_user(event: GroupTypes.MessageEvent, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     uid = event.object.payload["uid"]; tid = event.object.payload["tid"]
