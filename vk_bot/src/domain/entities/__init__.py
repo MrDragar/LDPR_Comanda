@@ -6,6 +6,7 @@ from .shop import Product, Order, OrderStatus
 from .closed_event import ClosedEvent, EventRegistration
 from .active_user import ActiveUser
 from .participation import Participation
+from .headliner import Headliner, HeadlinerFollower
 
 
 __all__ = [
@@ -19,5 +20,7 @@ __all__ = [
     'OrderStatus',
     'ClosedEvent',
     'EventRegistration',
-    'ActiveUser'
+    'ActiveUser',
+    'Headliner',
+    'HeadlinerFollower',
 ]

@@ -10,7 +10,7 @@ from vkbottle_types.events import GroupEventType
 from src.application.handlers.finish_registration import finish_registration
 from src.application.keyboards.check_keyboard import get_check_keyboard
 from src.application.states import RegistrationStates
-from src.services.interfaces import IUserService
+from src.services.interfaces import IUserService, IHeadlinerService
 
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,8 @@ async def check_sub(
         log_chat: str,
         tg_bot: TgBot,
         group_id: int,
-        service_token: str
+        service_token: str,
+        headliner_service: IHeadlinerService
 ):
     text = message.text.lower().strip() if message.text else ""
     if text == 'проверить' or text:
@@ -61,7 +62,8 @@ async def check_sub(
         log_chat=log_chat,
         state_dispenser=state_dispenser,
         tg_bot=tg_bot,
-        photo_uploader=photo_uploader
+        photo_uploader=photo_uploader,
+        headliner_service=headliner_service
     )
     await state_dispenser.delete(message.from_id)
 
@@ -75,7 +77,8 @@ async def handle_group_join(
         log_chat: str,
         tg_bot: TgBot,
         group_id: int,
-        service_token: str
+        service_token: str,
+        headliner_service: IHeadlinerService
 ):
     if event.object.join_type != "request":
         return
@@ -100,7 +103,8 @@ async def handle_group_join(
                 log_chat=log_chat,
                 state_dispenser=state_dispenser,
                 tg_bot=tg_bot,
-                photo_uploader=photo_uploader
+                photo_uploader=photo_uploader,
+                headliner_service=headliner_service
             )
             await state_dispenser.delete(user_id)
         except Exception as e:

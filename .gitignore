@@ -1,6 +1,29 @@
 .git
-.idea
+.idea/
+
+# Environments and secrets
 .env
-.venv
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# Runtime data
 db.sqlite3
+*.sqlite3
 logs/
+*.log
+vk_bot.out.log
+vk_bot.err.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# OS / office temporary files
+Thumbs.db
+.DS_Store
+~$*
