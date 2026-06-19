@@ -61,7 +61,7 @@ class HeadlinerService(IHeadlinerService):
             f"Должность: {headliner.position}\n"
             f"Тема: {headliner.topic}\n"
             f"Группа: {headliner.group_link}\n\n"
-            "Присоединяйтесь к команде хэдлайнера через реферальную ссылку в боте."
+            "Присоединяйтесь к команде хедлайнера через реферальную ссылку в боте."
         )
         try:
             post_id = await self.__publication_repo.publish_headliner(

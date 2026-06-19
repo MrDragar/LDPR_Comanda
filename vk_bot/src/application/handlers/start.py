@@ -51,7 +51,6 @@ async def start(
         ...
     await active_user_service.log_active_user(message.from_id, Sources.VK)
     if await user_service.is_user_exists(message.from_id):
-        # return await message.answer("Бот находится на этапе разрабоки")  # УДАЛИТЬ СТРОКУ
         try:
             role = await user_service.get_user_role(message.from_id, Sources.VK)
         except Exception:

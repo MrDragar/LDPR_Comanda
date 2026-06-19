@@ -99,7 +99,7 @@ async def require_staff_ca(message: Message, user_service: IUserService) -> bool
     return True
 
 
-@router.message(text=["Добавить хэдлайнера", "Создать хэдлайнера"])
+@router.message(text=["Добавить хедлайнера", "Создать хедлайнера"])
 async def create_headliner_start(
         message: Message,
         user_service: IUserService,
@@ -110,12 +110,12 @@ async def create_headliner_start(
 
     await state_dispenser.set(message.from_id, HeadlinerStates.CREATE_USER_ID)
     await message.answer(
-        "Отправьте ссылку на профиль VK пользователя, которого нужно сделать хэдлайнером.\n"
+        "Отправьте ссылку на профиль VK пользователя, которого нужно сделать хедлайнером.\n"
         "Пользователь должен быть уже зарегистрирован в боте."
     )
 
 
-@router.message(text=["Отредактировать хэдлайнера"])
+@router.message(text=["Отредактировать хедлайнера"])
 async def edit_headliner_start(
         message: Message,
         user_service: IUserService,
@@ -125,7 +125,7 @@ async def edit_headliner_start(
         return
 
     await state_dispenser.set(message.from_id, HeadlinerStates.EDIT_ID)
-    await message.answer("Введите ID хэдлайнера, которого нужно отредактировать.")
+    await message.answer("Введите ID хедлайнера, которого нужно отредактировать.")
 
 
 @router.message(state=HeadlinerStates.EDIT_ID)
@@ -137,11 +137,11 @@ async def edit_headliner_id(
     try:
         headliner_id = int(message.text.strip())
     except ValueError:
-        return await message.answer("Введите числовой ID хэдлайнера.")
+        return await message.answer("Введите числовой ID хедлайнера.")
 
     headliner = await headliner_service.get_by_id(headliner_id)
     if headliner is None:
-        return await message.answer("Хэдлайнер с таким ID не найден.")
+        return await message.answer("Хедлайнер с таким ID не найден.")
 
     await state_dispenser.set(
         message.from_id,
@@ -152,7 +152,7 @@ async def edit_headliner_id(
     await message.answer(
         "Редактирование найдено.\n\n"
         f"{format_headliner(headliner)}\n\n"
-        "Отправьте новое фото хэдлайнера одним сообщением."
+        "Отправьте новое фото хедлайнера одним сообщением."
     )
 
 
@@ -177,7 +177,7 @@ async def create_headliner_user_id(
         HeadlinerStates.CREATE_PHOTO,
         user_id=user_id,
     )
-    await message.answer("Отправьте фото хэдлайнера одним сообщением.")
+    await message.answer("Отправьте фото хедлайнера одним сообщением.")
 
 
 @router.message(state=HeadlinerStates.CREATE_PHOTO)
@@ -190,7 +190,7 @@ async def create_headliner_photo(message: Message, state_dispenser: BuiltinState
         **state.payload,
         photo=photo,
     )
-    await message.answer("Введите тему, над которой будет работать хэдлайнер.")
+    await message.answer("Введите тему, над которой будет работать хедлайнер.")
 
 
 @router.message(state=HeadlinerStates.CREATE_TOPIC)
@@ -202,7 +202,7 @@ async def create_headliner_topic(message: Message, state_dispenser: BuiltinState
         **state.payload,
         topic=message.text.strip(),
     )
-    await message.answer("Введите ФИО хэдлайнера.")
+    await message.answer("Введите ФИО хедлайнера.")
 
 
 @router.message(state=HeadlinerStates.CREATE_FIO)
@@ -214,7 +214,7 @@ async def create_headliner_fio(message: Message, state_dispenser: BuiltinStateDi
         **state.payload,
         fio=message.text.strip(),
     )
-    await message.answer("Введите должность хэдлайнера.")
+    await message.answer("Введите должность хедлайнера.")
 
 
 @router.message(state=HeadlinerStates.CREATE_POSITION)
@@ -226,7 +226,7 @@ async def create_headliner_position(message: Message, state_dispenser: BuiltinSt
         **state.payload,
         position=message.text.strip(),
     )
-    await message.answer("Введите ссылку на группу хэдлайнера.")
+    await message.answer("Введите ссылку на группу хедлайнера.")
 
 
 @router.message(state=HeadlinerStates.CREATE_GROUP_LINK)
@@ -248,7 +248,7 @@ async def create_headliner_finish(
 
     links = headliner_service.make_referral_links(headliner.id)
     await message.answer(
-        "Хэдлайнер сохранен.\n\n"
+        "Хедлайнер сохранен.\n\n"
         f"{format_headliner(headliner)}\n\n"
         "Реферальные ссылки:\n"
         f"VK: {links['VK']}\n"
@@ -257,7 +257,7 @@ async def create_headliner_finish(
     )
 
 
-@router.message(text=["Удалить хэдлайнера"])
+@router.message(text=["Удалить хедлайнера"])
 async def delete_headliner_start(
         message: Message,
         user_service: IUserService,
@@ -267,7 +267,7 @@ async def delete_headliner_start(
         return
 
     await state_dispenser.set(message.from_id, HeadlinerStates.DELETE_ID)
-    await message.answer("Введите ID хэдлайнера, которого нужно удалить.")
+    await message.answer("Введите ID хедлайнера, которого нужно удалить.")
 
 
 @router.message(state=HeadlinerStates.DELETE_ID)
@@ -279,20 +279,20 @@ async def delete_headliner_finish(
     try:
         headliner_id = int(message.text.strip())
     except ValueError:
-        return await message.answer("Введите числовой ID хэдлайнера.")
+        return await message.answer("Введите числовой ID хедлайнера.")
 
     headliner = await headliner_service.delete_headliner(headliner_id)
     await state_dispenser.delete(message.from_id)
     if headliner is None:
-        return await message.answer("Хэдлайнер с таким ID не найден.")
+        return await message.answer("Хедлайнер с таким ID не найден.")
 
     await message.answer(
-        "Хэдлайнер удален, пользователь возвращен к обычной роли.\n\n"
+        "Хедлайнер удален, пользователь возвращен к обычной роли.\n\n"
         f"{format_headliner(headliner)}"
     )
 
 
-@router.message(text=["Список хэдлайнеров"])
+@router.message(text=["Список хедлайнеров"])
 async def list_headliners(
         message: Message,
         user_service: IUserService,
@@ -303,7 +303,7 @@ async def list_headliners(
 
     headliners = await headliner_service.get_all()
     if not headliners:
-        return await message.answer("Хэдлайнеров пока нет.")
+        return await message.answer("Хедлайнеров пока нет.")
 
     parts = []
     for headliner in headliners[:30]:
@@ -311,10 +311,10 @@ async def list_headliners(
         parts.append(format_headliner(headliner, followers))
 
     suffix = "" if len(headliners) <= 30 else f"\n\nПоказано 30 из {len(headliners)}."
-    await message.answer("Список хэдлайнеров:\n\n" + "\n\n".join(parts) + suffix)
+    await message.answer("Список хедлайнеров:\n\n" + "\n\n".join(parts) + suffix)
 
 
-@router.message(text=["Поиск хэдлайнера"])
+@router.message(text=["Поиск хедлайнера"])
 async def search_headliner_start(
         message: Message,
         user_service: IUserService,
@@ -324,7 +324,7 @@ async def search_headliner_start(
         return
 
     await state_dispenser.set(message.from_id, HeadlinerStates.SEARCH_SURNAME)
-    await message.answer("Введите фамилию хэдлайнера для поиска:")
+    await message.answer("Введите фамилию хедлайнера для поиска:")
 
 
 @router.message(state=HeadlinerStates.SEARCH_SURNAME)
@@ -346,7 +346,7 @@ async def search_headliner_by_surname(
 
     await state_dispenser.delete(message.from_id)
     if not found:
-        return await message.answer("Хэдлайнеры по этой фамилии не найдены.")
+        return await message.answer("Хедлайнеры по этой фамилии не найдены.")
 
     parts = []
     for headliner in found[:30]:
@@ -354,10 +354,10 @@ async def search_headliner_by_surname(
         parts.append(format_headliner(headliner, followers))
 
     suffix = "" if len(found) <= 30 else f"\n\nПоказано 30 из {len(found)}."
-    await message.answer("Найденные хэдлайнеры:\n\n" + "\n\n".join(parts) + suffix)
+    await message.answer("Найденные хедлайнеры:\n\n" + "\n\n".join(parts) + suffix)
 
 
-@router.message(text=["Рейтинг хэдлайнеров"])
+@router.message(text=["Рейтинг хедлайнеров"])
 async def headliner_rating(
         message: Message,
         user_service: IUserService,
@@ -370,13 +370,13 @@ async def headliner_rating(
 
     rating = await headliner_service.get_rating()
     if not rating:
-        return await message.answer("Хэдлайнеров пока нет.")
+        return await message.answer("Хедлайнеров пока нет.")
 
     lines = []
     for index, (headliner, followers) in enumerate(rating[:30], start=1):
         lines.append(f"{index}. ID {headliner.id}: {headliner.fio} - {followers} последователей")
 
-    await message.answer("Рейтинг хэдлайнеров:\n\n" + "\n".join(lines))
+    await message.answer("Рейтинг хедлайнеров:\n\n" + "\n".join(lines))
 
 
 @router.message(text=["Рассылка последователям"])
@@ -387,7 +387,7 @@ async def headliner_mailing_start(
 ):
     headliner = await headliner_service.get_by_user(message.from_id, Sources.VK)
     if headliner is None:
-        return await message.answer("Профиль хэдлайнера не найден.")
+        return await message.answer("Профиль хедлайнера не найден.")
 
     await state_dispenser.set(
         message.from_id,
@@ -408,7 +408,7 @@ async def headliner_welcome_start(
 ):
     headliner = await headliner_service.get_by_user(message.from_id, Sources.VK)
     if headliner is None:
-        return await message.answer("Профиль хэдлайнера не найден.")
+        return await message.answer("Профиль хедлайнера не найден.")
 
     current = headliner.welcome_message or "не задано"
     await state_dispenser.set(message.from_id, HeadlinerStates.WELCOME_MESSAGE)
@@ -435,7 +435,7 @@ async def headliner_welcome_save(
     )
     await state_dispenser.delete(message.from_id)
     if headliner is None:
-        return await message.answer("Профиль хэдлайнера не найден.")
+        return await message.answer("Профиль хедлайнера не найден.")
 
     await message.answer("Приветственное сообщение сохранено.")
 

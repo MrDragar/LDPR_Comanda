@@ -13,6 +13,7 @@ from src.application.keyboards.menu_keyboard import (
     get_staff_ca_shop_keyboard,
     get_staff_ca_tasks_keyboard,
     get_user_menu_keyboard,
+    get_headliner_menu_keyboard
 )
 from src.application.states import UserTaskStates
 from src.domain.entities import Sources
@@ -41,7 +42,10 @@ async def _get_user_role(message: Message, user_service: IUserService) -> UserRo
 async def show_menu(message: Message, user_service: IUserService) -> None:
     role = await _get_user_role(message, user_service)
     if role is None or role == UserRole.USER:
-        await message.answer("Пользовательский интерфейс:", keyboard=get_user_menu_keyboard())
+        await message.answer("Меню", keyboard=get_user_menu_keyboard())
+        return
+    if role == UserRole.HEADLINER:
+        await message.answer("Меню", keyboard=get_headliner_menu_keyboard())
         return
     await message.answer("Выберите интерфейс:", keyboard=get_role_entry_keyboard(role))
 
@@ -55,7 +59,7 @@ async def show_user_interface(message: Message) -> None:
     "Сотрудник ЦА",
     "Координатор РО",
     "Сотрудник РО",
-    "Хэдлайнер",
+    "Хедлайнер",
 ])
 async def show_role_interface(message: Message, user_service: IUserService) -> None:
     role = await _get_user_role(message, user_service)
@@ -85,18 +89,18 @@ async def show_staff_ca_shop(message: Message, user_service: IUserService) -> No
     await message.answer("Раздел: магазин", keyboard=get_staff_ca_shop_keyboard())
 
 
-@router.message(text=["Задачи"])
-async def show_staff_ca_tasks(message: Message, user_service: IUserService) -> None:
-    if not await _require_staff_ca(message, user_service):
-        return
-    await message.answer("Раздел: задачи", keyboard=get_staff_ca_tasks_keyboard())
-
-
 @router.message(text=["Хэдлайнеры"])
 async def show_staff_ca_headliners(message: Message, user_service: IUserService) -> None:
     if not await _require_staff_ca(message, user_service):
         return
     await message.answer("Раздел: хэдлайнеры", keyboard=get_staff_ca_headliners_keyboard())
+
+
+@router.message(text=["Задачи"])
+async def show_staff_ca_tasks(message: Message, user_service: IUserService) -> None:
+    if not await _require_staff_ca(message, user_service):
+        return
+    await message.answer("Раздел: задачи", keyboard=get_staff_ca_tasks_keyboard())
 
 
 @router.message(text=["Назад к роли"])

@@ -52,9 +52,11 @@ async def finish_registration(
         referral_headliner = None
         headliner_id = state_payload.get("headliner_id")
         if headliner_id is not None and headliner_service is not None:
-            await headliner_service.attach_follower(int(headliner_id), user.id, Sources.VK)
-            referral_headliner = await headliner_service.get_by_id(int(headliner_id))
-
+            try:
+                await headliner_service.attach_follower(int(headliner_id), user.id, Sources.VK)
+                referral_headliner = await headliner_service.get_by_id(int(headliner_id))
+            except Exception as e:
+                logger.error(e)
         try:
             photo = await photo_uploader.upload("docs/sokol_like.webp", peer_id=peer_id)
             await ctx_api.messages.send(peer_id=peer_id, attachment=photo, random_id=0)
@@ -77,7 +79,7 @@ async def finish_registration(
             await ctx_api.messages.send(
                 peer_id=peer_id,
                 message=(
-                    f"Сообщение от хэдлайнера {referral_headliner.fio}:\n\n"
+                    f"Сообщение от хедлайнера {referral_headliner.fio}:\n\n"
                     f"{referral_headliner.welcome_message}"
                 ),
                 random_id=0,
