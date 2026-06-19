@@ -8,9 +8,10 @@ from src.application.keyboards.personal_data_keyboard import \
     get_personal_data_keyboard
 from src.application.states import RegistrationStates
 
-from src.application.filters import IsRegisteredFilter, ValidatedStartFilter
+from src.application.filters import IsRegisteredFilter, ValidatedStartFilter, HeadlinerStartFilter
 from src.domain.entities import Sources
-from src.services.interfaces import IReferralService, IActiveUserService, IUserService
+from src.services.interfaces import IReferralService, IActiveUserService, IUserService, \
+    IHeadlinerService
 
 router = Router(name=__name__)
 start_command_router = Router(name=__name__)
@@ -37,7 +38,7 @@ async def participant_start(
 async def cmd_start(
         message: types.Message, user_id: int, platform: str,
         referral_service: IReferralService,
-        state: FSMContext, active_user_service: IActiveUserService
+        state: FSMContext, active_user_service: IActiveUserService, user_service: IUserService
 ):
     if message.chat.id <= 0:
         return
@@ -46,7 +47,23 @@ async def cmd_start(
         user_id, Sources(platform),
         message.from_user.id, Sources.TG
     )
-    await start(message, state, active_user_service)
+    await start(message, state, active_user_service, user_service)
+
+
+@start_command_router.message(HeadlinerStartFilter())
+async def cmd_start_headliner(
+        message: types.Message, user_id: int, platform: str,
+        state: FSMContext, active_user_service: IActiveUserService,
+        headliner_service: IHeadlinerService, user_service: IUserService
+):
+    if message.chat.id <= 0:
+        return
+    logging.debug(f"Got headliner follower: {user_id}, {platform}")
+    try:
+        headliner = await headliner_service.get_by_id(user_id)
+    except Exception as e:
+        logger.debug(f"Got exception {e}")
+    await start(message, state, active_user_service, user_service, user_id)
 
 
 @router.message()
@@ -54,11 +71,12 @@ async def cmd_start(
 @start_command_router.message(F.text == 'Отмена')
 async def start(message: types.Message,
                 state: FSMContext, active_user_service: IActiveUserService,
-                user_service: IUserService
+                user_service: IUserService, headliner_id: int | None = None
                 ):
     if message.chat.id <= 0:
         return
     await state.clear()
+    await state.update_data(headliner_id=headliner_id)
     logging.debug(f"User {message.from_user.id} Start conversation")
     await active_user_service.log_active_user(message.from_user.id, Sources.TG)
     await message.answer_sticker(types.FSInputFile('docs/sokol_stay.webp'))

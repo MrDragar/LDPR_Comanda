@@ -22,6 +22,7 @@ VERIFY_CHAT_ID = int(os.getenv("VERIFY_CHAT_ID", "0"))
 
 group_id = os.getenv("GROUP_ID")
 SERVICE_TOKEN = os.getenv("SERVICE_TOKEN")
+VK_PUBLICATION_TOKEN = os.getenv("VK_PUBLICATION_TOKEN") or os.getenv("VK_MARKET_TOKEN")
 
 S3_BUCKET = os.getenv("S3_BUCKET")
 S3_REGION = os.getenv("S3_REGION", "ru-central1")

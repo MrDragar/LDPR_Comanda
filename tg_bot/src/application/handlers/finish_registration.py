@@ -1,11 +1,14 @@
+import logging
+
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
-from src.services.interfaces import IUserService
+from src.services.interfaces import IUserService, IHeadlinerService
+
 
 async def finish_registration(
     user_service: IUserService, state: FSMContext, message: types.Message,
-    log_chat: str
+    log_chat: str, headliner_service: IHeadlinerService,
 ):
     data = await state.get_data()
     news_subscription = data['news_subscription']
@@ -29,6 +32,15 @@ async def finish_registration(
         home_address=data.get('home_address', None),
         news_subscription=data['news_subscription']
     )
+    referral_headliner = None
+    headliner_id: int | None = data.get("headliner_id", None)
+    if headliner_id is not None and headliner_service is not None:
+        try:
+            await headliner_service.attach_follower(int(headliner_id), user.id, user.source)
+            referral_headliner = await headliner_service.get_by_id(int(headliner_id))
+        except Exception as e:
+            logging.debug(f"Got Exception {e}")
+
     await message.answer_sticker(
         types.FSInputFile('docs/sokol_like.webp')
     )
@@ -38,6 +50,11 @@ async def finish_registration(
         reply_markup=types.ReplyKeyboardRemove()
     )
     await message.answer("Приглашай друзей и получи 10 баллов за приглашённого пользователя.")
+    if referral_headliner is not None and referral_headliner.welcome_message:
+        await message.answer(
+            f"Сообщение от хедлайнера {referral_headliner.fio}:\n\n"
+            f"{referral_headliner.welcome_message}"
+        )
     await message.answer("Меню", reply_markup=get_role_menu_keyboard(user.role))
     await state.clear()
     await message.bot.send_message(chat_id=log_chat, text=f"""
@@ -55,4 +72,5 @@ async def finish_registration(
 Домашний адрес: {user.home_address or 'не указан'}
 Подписка на новости: {'Есть' if news_subscription else 'Нет'}
 ID участника: {user.id}
+Хедлайнер: {referral_headliner.fio if referral_headliner else 'Нет'}
 """)
