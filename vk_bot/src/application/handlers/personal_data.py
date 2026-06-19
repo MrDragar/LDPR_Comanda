@@ -9,6 +9,21 @@ from vkbottle.dispatch import BuiltinStateDispenser
 router = BotLabeler()
 
 
+async def get_callback_user_state(
+        state_dispenser: BuiltinStateDispenser,
+        event: GroupTypes.MessageEvent
+):
+    state_peer = await state_dispenser.get(event.object.peer_id)
+    if state_peer:
+        return event.object.peer_id, state_peer
+
+    state_user = await state_dispenser.get(event.object.user_id)
+    if state_user:
+        return event.object.user_id, state_user
+
+    return event.object.peer_id, None
+
+
 @router.raw_event(
     GroupEventType.MESSAGE_EVENT,
     GroupTypes.MessageEvent,
@@ -17,14 +32,17 @@ router = BotLabeler()
 async def handle_pd_agree(event: GroupTypes.MessageEvent,
                           state_dispenser: BuiltinStateDispenser):
     # Проверяем, находится ли пользователь на этапе ПД
-    state_peer = await state_dispenser.get(event.object.peer_id)
+    state_key, state_peer = await get_callback_user_state(state_dispenser, event)
     if not state_peer or state_peer.state != str(
             RegistrationStates.PERSONAL_DATA):
         return
 
     # Переводим в следующий стейт
-    await state_dispenser.set(event.object.peer_id,
-                              RegistrationStates.MEMBERSHIP)
+    await state_dispenser.set(
+        state_key,
+        RegistrationStates.MEMBERSHIP,
+        **state_peer.payload
+    )
 
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
@@ -49,13 +67,13 @@ async def handle_pd_agree(event: GroupTypes.MessageEvent,
 )
 async def handle_pd_disagree(event: GroupTypes.MessageEvent,
                              state_dispenser: BuiltinStateDispenser):
-    state_peer = await state_dispenser.get(event.object.peer_id)
+    state_key, state_peer = await get_callback_user_state(state_dispenser, event)
     if not state_peer or state_peer.state != str(
             RegistrationStates.PERSONAL_DATA):
         return
 
     # Сбрасываем стейт
-    await state_dispenser.delete(event.object.peer_id)
+    await state_dispenser.delete(state_key)
 
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
@@ -81,7 +99,7 @@ async def handle_pd_read(
         state_dispenser: BuiltinStateDispenser,
         doc_uploader: DocMessagesUploader
 ):
-    state_peer = await state_dispenser.get(event.object.peer_id)
+    _, state_peer = await get_callback_user_state(state_dispenser, event)
     if not state_peer or state_peer.state != str(
             RegistrationStates.PERSONAL_DATA):
         return
