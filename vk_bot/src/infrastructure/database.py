@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import (
     async_scoped_session, AsyncEngine
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 
 from src.infrastructure.interfaces import IDatabase
 
@@ -32,6 +33,14 @@ class Database(IDatabase):
     async def create_database(self):
         async with self.__engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await self.__run_light_migrations(conn)
+
+    @staticmethod
+    async def __run_light_migrations(conn):
+        result = await conn.execute(text("PRAGMA table_info(headliners)"))
+        columns = {row[1] for row in result.fetchall()}
+        if "welcome_message" not in columns:
+            await conn.execute(text("ALTER TABLE headliners ADD COLUMN welcome_message TEXT"))
 
     @staticmethod
     def get_sqlite_url(db_path) -> str:

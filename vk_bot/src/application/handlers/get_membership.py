@@ -17,7 +17,9 @@ async def get_membership(message: Message,
         return
 
     is_member = (text == 'да')
+    state = await state_dispenser.get(message.from_id)
     await state_dispenser.set(message.from_id,
                               RegistrationStates.SURNAME,
+                              **state.payload,
                               is_member=is_member)
     await message.answer("Введите вашу фамилию:")
