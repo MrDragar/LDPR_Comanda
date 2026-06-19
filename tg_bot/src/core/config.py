@@ -18,6 +18,7 @@ admin_ids = json.loads(os.getenv("ADMIN_IDS", '[]'))
 VK_BOT_LINK = os.getenv("VK_BOT_LINK", "https://vk.me/ldpr_bot")
 TG_BOT_LINK = os.getenv("TG_BOT_LINK", "https://t.me/ldpr_bot")
 MAX_BOT_LINK = os.getenv("MAX_BOT_LINK", "https://max.ru/ldpr_bot")
+VERIFY_CHAT_ID = int(os.getenv("VERIFY_CHAT_ID", "0"))
 
 group_id = os.getenv("GROUP_ID")
 SERVICE_TOKEN = os.getenv("SERVICE_TOKEN")

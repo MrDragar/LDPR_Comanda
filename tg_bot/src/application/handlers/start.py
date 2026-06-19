@@ -3,7 +3,7 @@ import logging
 from aiogram import Router, types, filters, F
 from aiogram.fsm.context import FSMContext
 
-from src.application.keyboards.menu_keyboard import get_menu_keyboard
+from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import \
     get_personal_data_keyboard
 from src.application.states import RegistrationStates
@@ -23,10 +23,14 @@ logger = logging.getLogger(__name__)
 @start_command_router.message(F.text.lower() == 'на главную', IsRegisteredFilter())
 async def participant_start(
         message: types.Message,
+        user_service: IUserService,
+        state: FSMContext
 ):
     if message.chat.id <= 0:
         return
-    await message.answer("Меню", reply_markup=get_menu_keyboard())
+    await state.clear()
+    role = await user_service.get_user_role(message.from_user.id, Sources.TG)
+    await message.answer("Меню", reply_markup=get_role_menu_keyboard(role))
 
 
 @start_command_router.message(ValidatedStartFilter())
@@ -54,11 +58,13 @@ async def start(message: types.Message,
                 ):
     if message.chat.id <= 0:
         return
+    await state.clear()
     logging.debug(f"User {message.from_user.id} Start conversation")
     await active_user_service.log_active_user(message.from_user.id, Sources.TG)
     await message.answer_sticker(types.FSInputFile('docs/sokol_stay.webp'))
     if await user_service.is_user_exists(message.from_user.id, Sources.TG):
-        await message.answer("Меню", reply_markup=get_menu_keyboard())
+        role = await user_service.get_user_role(message.from_user.id, Sources.TG)
+        await message.answer("Меню", reply_markup=get_role_menu_keyboard(role))
         return
     await message.reply(
         "Здравствуйте! Я — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"

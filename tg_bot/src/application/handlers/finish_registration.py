@@ -1,21 +1,17 @@
 from aiogram import types
 from aiogram.fsm.context import FSMContext
-
-from src.application.keyboards.menu_keyboard import get_menu_keyboard
+from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.services.interfaces import IUserService
 
-
 async def finish_registration(
-        user_service: IUserService, state: FSMContext, message: types.Message, 
-        log_chat: str
+    user_service: IUserService, state: FSMContext, message: types.Message,
+    log_chat: str
 ):
     data = await state.get_data()
     news_subscription = data['news_subscription']
-
     if await user_service.is_user_exists(message.from_user.id):
         await state.clear()
         return await message.reply(f"Вы уже зарегистрировались.")
-
     user = await user_service.create_user(
         user_id=message.from_user.id,
         username=message.from_user.username,
@@ -33,7 +29,6 @@ async def finish_registration(
         home_address=data.get('home_address', None),
         news_subscription=data['news_subscription']
     )
-
     await message.answer_sticker(
         types.FSInputFile('docs/sokol_like.webp')
     )
@@ -43,8 +38,7 @@ async def finish_registration(
         reply_markup=types.ReplyKeyboardRemove()
     )
     await message.answer("Приглашай друзей и получи 10 баллов за приглашённого пользователя.")
-    await message.answer("Меню", reply_markup=get_menu_keyboard())
-
+    await message.answer("Меню", reply_markup=get_role_menu_keyboard(user.role))
     await state.clear()
     await message.bot.send_message(chat_id=log_chat, text=f"""
 Новый пользователь {'@' + user.username if user.username else '<нет username>'} зарегистрировался.
@@ -60,10 +54,5 @@ async def finish_registration(
 Хочет вступить в партию ЛДПР: {'Да' if user.wish_to_join else 'Нет'}
 Домашний адрес: {user.home_address or 'не указан'}
 Подписка на новости: {'Есть' if news_subscription else 'Нет'}
-
 ID участника: {user.id}
 """)
-
-
-
-

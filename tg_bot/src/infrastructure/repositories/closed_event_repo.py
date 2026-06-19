@@ -1,4 +1,6 @@
 import logging
+from datetime import date
+
 from sqlalchemy import select, func
 from src.domain.entities import ClosedEvent, EventRegistration, Sources
 from src.domain.interfaces import IClosedEventRepository, IEventRegistrationRepository
@@ -44,7 +46,10 @@ class ClosedEventRepository(IClosedEventRepository):
     async def get_active_by_region(self, region: str | None, skip: int, limit: int) -> tuple[
         list[ClosedEvent], int]:
         session = self.__uow.get_session()
-        stmt = select(ClosedEventORM).order_by(ClosedEventORM.date, ClosedEventORM.time)
+        current_date = date.today()
+        stmt = select(ClosedEventORM).where(
+            ClosedEventORM.date >= current_date
+        ).order_by(ClosedEventORM.date, ClosedEventORM.time)
         if region:
             stmt = stmt.where(ClosedEventORM.region == region)
 

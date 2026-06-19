@@ -1,94 +1,120 @@
-import asyncio
-import json
 import logging
-from datetime import timedelta, timezone, datetime
-
-from aiogram import Router, types, F, filters
+from aiogram import Router, types, F, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardRemove
-
-from src.application.keyboards.admin.post_keyboard import get_post_keyboard
 from src.application.states import PostsStates
+from src.application.keyboards.admin.post_keyboard import get_post_keyboard
+from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+from src.domain.entities.user import UserRole, Sources
 from src.services.interfaces import IUserService
+from src.application.filters import AdminFilter
 
-router = Router(name=__name__)
 logger = logging.getLogger(__name__)
+router = Router(name=__name__)
 
 
-@router.message(filters.Command('cancel'))
-@router.message(PostsStates.confirm, F.text.lower().strip() == 'отменить')
-async def cancel(message: types.Message, state: FSMContext):
-    await message.answer("Отмена рассылки", reply_markup=ReplyKeyboardRemove())
-    await state.clear()
-
-
-@router.message(filters.Command('post'))
-async def start_post_dialog_handler(message: types.Message, state: FSMContext):
-    await message.answer("Введите сообщение для рассылки")
+# ==================== РАССЫЛКА ВСЕМ ====================
+@router.message(F.text.in_(["/post", "Рассылка всем"]), AdminFilter())
+async def cmd_post(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Отправьте сообщение (текст, фото, видео или документ), которое нужно разослать всем пользователям:",
+        reply_markup=ReplyKeyboardRemove())
     await state.set_state(PostsStates.get_message)
 
 
 @router.message(PostsStates.get_message)
-async def get_message_handler(message: types.Message, state: FSMContext):
-    await message.answer("Подтвердите началу рассылки. Ваше сообщение:", reply_markup=get_post_keyboard())
-    await message.bot.copy_message(message.chat.id, message.chat.id, message.message_id)
-    await state.update_data(message_id=message.message_id)
+async def get_message(message: types.Message, state: FSMContext):
+    # Сохраняем ID чата и сообщения для последующего копирования
+    await state.update_data(from_chat_id=message.chat.id, message_id=message.message_id)
+    await message.answer("Сообщение сохранено. Подтвердите начало рассылки.",
+                         reply_markup=get_post_keyboard())
     await state.set_state(PostsStates.confirm)
 
 
-@router.message(PostsStates.confirm, F.text.lower().strip() == 'подтвердить')
-async def confirm_post_handler(
-        message: types.Message, state: FSMContext, user_service: IUserService
-):
+@router.message(PostsStates.confirm, F.text == "Подтвердить")
+async def confirm_post(message: types.Message, state: FSMContext, user_service: IUserService,
+                       bot: Bot):
+    data = await state.get_data()
     users = await user_service.get_all_users()
-    message_id = (await state.get_data())['message_id']
-    await state.clear()
-    # users = list(filter(lambda x: x.region in [
-    #     'Пензенская область', 'Владимирская область',
-    #     'Тамбовская область', 'Рязанская область'
-    # ], users))
-    await message.answer(f"Начинаю рассылку на {len(users)} пользователей", reply_markup=ReplyKeyboardRemove())
+    await message.answer(f"Начинаю рассылку на {len(users)} пользователей...",
+                         reply_markup=ReplyKeyboardRemove())
+
     success_count = 0
-    good_id = []
-    bad_id = []
-    count = 0
     for user in users:
-        logger.info(f"Checking {user.id}")
         try:
-            sent_message = await message.bot.copy_message(user.id, message.chat.id, message_id,
-                                                          disable_notification=False)
-            good_id.append(user.id)
+            await bot.copy_message(
+                chat_id=user.id,
+                from_chat_id=data['from_chat_id'],
+                message_id=data['message_id']
+            )
             success_count += 1
         except Exception as e:
-            logger.debug(e)
-            bad_id.append(user.id)
-        count += 1
-        if count % 100 == 0:
-            await message.answer(f"Обработано {count}")
+            logger.debug(f"Failed to send to {user.id}: {e}")
 
-    await message.answer(f"Рассылка завершена. Отправлено "
-                         f"успешно {success_count} сообщений из "
-                         f"{len(users)}")
-
-    results = {
-        "total_users": len(users),
-        "success_count": success_count,
-        "failed_count": len(users) - success_count,
-        "successful_ids": good_id,
-        "failed_users": bad_id,
-        "timestamp": datetime.now().isoformat()
-    }
-
-    results_json = json.dumps(results, ensure_ascii=False, indent=2)
-    json_file = types.BufferedInputFile(
-        results_json.encode('utf-8'),
-        filename=f"mailing_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    )
-    await message.answer_document(json_file, caption="📋 Результаты рассылки")
+    await state.clear()
+    await message.answer(f"Рассылка завершена. Успешно отправлено: {success_count} из {len(users)}")
 
 
-@router.message(PostsStates.confirm)
-async def wait_confirm_post_handler(
-        message: types.Message
-):
-    await message.answer("Подтвердите началу рассылки.", reply_markup=get_post_keyboard())
+@router.message(PostsStates.confirm, F.text == "Отменить")
+async def cancel_post(message: types.Message, state: FSMContext, user_service: IUserService):
+    await state.clear()
+    role = await user_service.get_user_role(message.from_user.id, Sources.TG)
+    await message.answer("Рассылка отменена.", reply_markup=get_role_menu_keyboard(role))
+
+
+# ==================== РАССЫЛКА КООРДИНАТОРАМ РО ====================
+@router.message(F.text == "Рассылка координаторам РО")
+async def cmd_post_coord(message: types.Message, state: FSMContext, user_service: IUserService):
+    role = await user_service.get_user_role(message.from_user.id, Sources.TG)
+    if role != UserRole.STAFF_CA:
+        return await message.answer("Недостаточно прав. Эта функция доступна только сотруднику ЦА.")
+
+    await message.answer("Отправьте сообщение для рассылки координаторам РО:",
+                         reply_markup=ReplyKeyboardRemove())
+    await state.set_state(PostsStates.get_coord_message)
+
+
+@router.message(PostsStates.get_coord_message)
+async def get_coord_message(message: types.Message, state: FSMContext):
+    await state.update_data(from_chat_id=message.chat.id, message_id=message.message_id)
+    await message.answer("Сообщение сохранено. Подтвердите рассылку координаторам РО.",
+                         reply_markup=get_post_keyboard())
+    await state.set_state(PostsStates.confirm_coord)
+
+
+@router.message(PostsStates.confirm_coord, F.text == "Подтвердить")
+async def confirm_post_coord(message: types.Message, state: FSMContext, user_service: IUserService,
+                             bot: Bot):
+    data = await state.get_data()
+    all_users = await user_service.get_all_users()
+    coord_users = [u for u in all_users if u.role == UserRole.COORDINATOR_RO]
+
+    if not coord_users:
+        await state.clear()
+        return await message.answer("Координаторы РО не найдены в системе.")
+
+    await message.answer(f"Начинаю рассылку на {len(coord_users)} координаторов РО...",
+                         reply_markup=ReplyKeyboardRemove())
+
+    success_count = 0
+    for user in coord_users:
+        try:
+            await bot.copy_message(
+                chat_id=user.id,
+                from_chat_id=data['from_chat_id'],
+                message_id=data['message_id']
+            )
+            success_count += 1
+        except Exception as e:
+            logger.debug(f"Failed to send to coord {user.id}: {e}")
+
+    await state.clear()
+    await message.answer(
+        f"Рассылка координаторам завершена. Успешно отправлено: {success_count} из {len(coord_users)}")
+
+
+@router.message(PostsStates.confirm_coord, F.text == "Отменить")
+async def cancel_post_coord(message: types.Message, state: FSMContext, user_service: IUserService):
+    await state.clear()
+    role = await user_service.get_user_role(message.from_user.id, Sources.TG)
+    await message.answer("Рассылка отменена.", reply_markup=get_role_menu_keyboard(role))

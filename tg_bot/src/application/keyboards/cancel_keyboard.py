@@ -1,7 +1,10 @@
-from aiogram.utils.keyboard import ReplyKeyboardMarkup, ReplyKeyboardBuilder
+from aiogram.types import ReplyKeyboardMarkup
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 
 def get_cancel_keyboard() -> ReplyKeyboardMarkup:
-    keyword = ReplyKeyboardBuilder()
-    keyword.button(text="Отмена")
-    return keyword.as_markup(one_time_keyboard=True)
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="Отмена")
+    builder.button(text="На главную")
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)

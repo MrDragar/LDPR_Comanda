@@ -1,45 +1,46 @@
 import logging
-from aiogram import Router, F, Bot
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
+from aiogram import Router, F
+from aiogram.types import Message, FSInputFile
+from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from src.application.states import ProfileStates
 from src.services.interfaces import (IUserService, IReferralService, IBalanceService,
                                      ILearningService, IOrderService, IClosedEventService,
                                      IReferralLinkService)
 from src.domain.entities.user import Sources
+from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 
-def get_profile_kb() -> ReplyKeyboardMarkup:
-    """Клавиатура личного кабинета (Reply, так как хендлеры ловят именно текст сообщения)"""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Реферальная ссылка")],
-            # [KeyboardButton(text="Список покупок")],
-            # [KeyboardButton(text="Список мероприятий")],
-            [KeyboardButton(text="Посмотреть рейтинг")],
-            [KeyboardButton(text="На главную")]
-        ],
-        resize_keyboard=True
-    )
+def get_profile_kb():
+    """Клавиатура личного кабинета"""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="Реферальная ссылка")
+    builder.button(text="Список покупок")
+    builder.button(text="Список мероприятий")
+    builder.button(text="Посмотреть рейтинг")
+    builder.button(text="На главную")
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
 
 
-def get_back_kb() -> ReplyKeyboardMarkup:
+def get_back_kb():
     """Клавиатура возврата"""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Назад")],
-            [KeyboardButton(text="На главную")]
-        ],
-        resize_keyboard=True
-    )
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="Назад")
+    builder.button(text="На главную")
+    builder.adjust(2)
+    return builder.as_markup(resize_keyboard=True)
 
 
+# ==================== ГЛАВНОЕ МЕНЮ ПРОФИЛЯ ====================
 @router.message(F.text == "Личный кабинет")
-async def profile(message: Message, user_service: IUserService, referral_service: IReferralService,
-                  balance_service: IBalanceService, learning_service: ILearningService):
+async def profile(message: Message, state: FSMContext, user_service: IUserService,
+                  referral_service: IReferralService, balance_service: IBalanceService,
+                  learning_service: ILearningService):
     try:
-        # В aiogram message.from_id заменен на message.from_user.id
         u = await user_service.get_user(message.from_user.id, Sources.TG)
         balance = await balance_service.get_balance(u.id, u.source)
         refs = await referral_service.get_count_invitees(u.id, u.source)
@@ -48,71 +49,85 @@ async def profile(message: Message, user_service: IUserService, referral_service
         is_passed = await learning_service.is_learning_passed(u.id, u.source)
 
         text = (
-            f"Ваш ранг - {u.grade.value}\n"
-            f"Ваш регион - {u.region}\n"
-            f"Количество баллов - {balance}\n"
-            f"Количество приглашённых людей - {refs}\n"
-            f"Количество выполненных офлайн заданий - {off_count}\n"
-            f"Количество выполненных онлайн заданий - {on_count}\n"
-            f"Обучение пройдено - {'да' if is_passed else 'нет'}\n"
-            f"Дата регистрации - {u.created_at.strftime('%d.%m.%Y')}"
+            f"👤 Ваш ранг - {u.grade.value}\n"
+            f"🌍 Ваш регион - {u.region}\n"
+            f"💰 Количество баллов - {balance}\n"
+            f"👥 Количество приглашённых людей - {refs}\n"
+            f"🏢 Количество выполненных офлайн заданий - {off_count}\n"
+            f"💻 Количество выполненных онлайн заданий - {on_count}\n"
+            f"🎓 Обучение пройдено - {'да' if is_passed else 'нет'}\n"
+            f"📅 Дата регистрации - {u.created_at.strftime('%d.%m.%Y')}"
         )
-        # В aiogram параметр keyboard называется reply_markup
         await message.answer(text, reply_markup=get_profile_kb())
+        await state.set_state(ProfileStates.menu)
     except Exception as e:
         logger.error(f"Profile error: {e}", exc_info=True)
         await message.answer("Ошибка загрузки профиля")
 
 
-@router.message(F.text == "Реферальная ссылка")
-async def referral_link(message: Message, referral_link_service: IReferralLinkService):
+# ==================== РЕФЕРАЛЬНАЯ ССЫЛКА ====================
+@router.message(ProfileStates.menu, F.text == "Реферальная ссылка")
+async def referral_link(message: Message, state: FSMContext,
+                        referral_link_service: IReferralLinkService):
     repost_data = referral_link_service.generate_post(message.from_user.id)
 
-    # 1️⃣ Сообщение с прямыми ссылками для копирования
-    vk_ref = (f"{referral_link_service.vk_bot_link}?ref={message.from_user.id}"
-              f"_{referral_link_service.source.value}")
+    vk_ref = f"{referral_link_service.vk_bot_link}?ref={message.from_user.id}_{referral_link_service.source.value}"
     tg_ref = f"{referral_link_service.tg_bot_link}?start={message.from_user.id}_{referral_link_service.source.value}"
-    max_ref = (f"{referral_link_service.max_bot_link}?start={message.from_user.id}"
-               f"_{referral_link_service.source.value}")
+    max_ref = f"{referral_link_service.max_bot_link}?start={message.from_user.id}_{referral_link_service.source.value}"
 
     links_text = (
-        "🔗 Ваши реферальные ссылки:\n\n"
+        "🔗 Ваши реферальные ссылки:\n"
         f"🔹 ВКонтакте: {vk_ref}\n"
         f"🔹 Макс: {max_ref}\n"
-        f"🔹 Telegram: {tg_ref}\n\n"
+        f"🔹 Telegram: {tg_ref}\n"
         "Копируйте и отправляйте друзьям!"
     )
-    await message.answer(links_text, reply_markup=get_back_kb())
-    photo = FSInputFile(repost_data.image_path)
+    await message.answer(links_text)
 
-    await message.answer_photo(
-        photo=photo,
-        caption=repost_data.text,
-        reply_markup=get_back_kb()
-    )
+    # Читаем локальный файл через FSInputFile
+    try:
+        photo_file = FSInputFile(repost_data.image_path)
+        await message.answer_photo(
+            photo=photo_file,
+            caption=repost_data.text,
+            reply_markup=get_back_kb()
+        )
+    except Exception as e:
+        logger.error(f"Failed to send repost image from path {repost_data.image_path}: {e}")
+        await message.answer(repost_data.text, reply_markup=get_back_kb())
+
+    await state.set_state(ProfileStates.referrals)
 
 
-@router.message(F.text == "Список покупок")
-async def orders_history(message: Message, order_service: IOrderService):
+# ==================== СПИСОК ПОКУПОК ====================
+@router.message(ProfileStates.menu, F.text == "Список покупок")
+async def orders_history(message: Message, state: FSMContext, order_service: IOrderService):
     orders = await order_service.get_user_orders_history(message.from_user.id, Sources.TG)
     if not orders:
-        return await message.answer("У вас пока нет покупок.", reply_markup=get_back_kb())
+        await message.answer("У вас пока нет покупок.", reply_markup=get_back_kb())
+        await state.set_state(ProfileStates.orders)
+        return
 
     lines = ["🛍 Ваши покупки:"]
     for o in orders:
-        status_map = {"pending": "Ожидает", "completed": "Получен", "cancelled": "Отменен"}
+        status_map = {"ожидание": "Ожидает", "завершено": "Получен", "отклонено": "Отменен"}
         status_text = status_map.get(o.status.value, o.status.value)
         lines.append(f"- {o.product_name} | {status_text} | {o.created_at.strftime('%d.%m.%Y')}")
 
     await message.answer("\n".join(lines), reply_markup=get_back_kb())
+    await state.set_state(ProfileStates.orders)
 
 
-@router.message(F.text == "Список мероприятий")
-async def events_history(message: Message, closed_event_service: IClosedEventService):
+# ==================== СПИСОК МЕРОПРИЯТИЙ ====================
+@router.message(ProfileStates.menu, F.text == "Список мероприятий")
+async def events_history(message: Message, state: FSMContext,
+                         closed_event_service: IClosedEventService):
     events = await closed_event_service.get_user_events(message.from_user.id, Sources.TG)
     if not events:
-        return await message.answer("Вы пока не записаны ни на одно мероприятие.",
-                                    reply_markup=get_back_kb())
+        await message.answer("Вы пока не записаны ни на одно мероприятие.",
+                             reply_markup=get_back_kb())
+        await state.set_state(ProfileStates.events)
+        return
 
     lines = ["📅 Ваши мероприятия:"]
     for e in events:
@@ -120,18 +135,18 @@ async def events_history(message: Message, closed_event_service: IClosedEventSer
             f"- {e.title} | {e.date.strftime('%d.%m.%Y')} {e.time.strftime('%H:%M')} | {e.location}")
 
     await message.answer("\n".join(lines), reply_markup=get_back_kb())
+    await state.set_state(ProfileStates.events)
 
 
-@router.message(F.text == "Посмотреть рейтинг")
-async def show_rating(message: Message, user_service: IUserService):
+# ==================== РЕЙТИНГ ====================
+@router.message(ProfileStates.menu, F.text == "Посмотреть рейтинг")
+async def show_rating(message: Message, state: FSMContext, user_service: IUserService):
     u = await user_service.get_user(message.from_user.id, Sources.TG)
     user_score = await user_service.get_user_rating(u.id, u.source)
-
     global_top = await user_service.get_global_top(10)
     local_top = await user_service.get_local_top(u.region, 10)
 
     text = f"🏆 Ваш рейтинг: {user_score} баллов\n\n"
-
     text += "🌍 Глобальный рейтинг (Топ-10):\n"
     if not global_top:
         text += "Пока нет данных.\n"
@@ -143,7 +158,7 @@ async def show_rating(message: Message, user_service: IUserService):
             if entry["uid"] == u.id:
                 user_in_global = True
         if not user_in_global:
-            text += f"... Вы не в топ-10.\n"
+            text += "... Вы не в топ-10.\n"
 
     text += f"\n📍 Локальный рейтинг ({u.region}, Топ-10):\n"
     if not local_top:
@@ -156,13 +171,31 @@ async def show_rating(message: Message, user_service: IUserService):
             if entry["uid"] == u.id:
                 user_in_local = True
         if not user_in_local:
-            text += f"... Вы не в топ-10.\n"
+            text += "... Вы не в топ-10.\n"
 
     await message.answer(text, reply_markup=get_back_kb())
+    await state.set_state(ProfileStates.rating)
 
 
-@router.message(F.text == "Назад")
-async def back_to_profile(message: Message, user_service: IUserService,
-                          referral_service: IReferralService,
-                          balance_service: IBalanceService, learning_service: ILearningService):
-    await profile(message, user_service, referral_service, balance_service, learning_service)
+# ==================== НАВИГАЦИЯ "НАЗАД" (ИСПРАВЛЕНО: СТЕК ДЕКОРАТОРОВ) ====================
+@router.message(F.text == "Назад", ProfileStates.referrals)
+@router.message(F.text == "Назад", ProfileStates.orders)
+@router.message(F.text == "Назад", ProfileStates.events)
+@router.message(F.text == "Назад", ProfileStates.rating)
+async def back_to_profile(message: Message, state: FSMContext, user_service: IUserService,
+                          referral_service: IReferralService, balance_service: IBalanceService,
+                          learning_service: ILearningService):
+    # Возвращаемся к главному меню профиля
+    await profile(message, state, user_service, referral_service, balance_service, learning_service)
+
+
+# ==================== НАВИГАЦИЯ "НА ГЛАВНУЮ" (ИСПРАВЛЕНО: СТЕК ДЕКОРАТОРОВ) ====================
+@router.message(F.text == "На главную", ProfileStates.menu)
+@router.message(F.text == "На главную", ProfileStates.referrals)
+@router.message(F.text == "На главную", ProfileStates.orders)
+@router.message(F.text == "На главную", ProfileStates.events)
+@router.message(F.text == "На главную", ProfileStates.rating)
+async def back_to_main(message: Message, state: FSMContext, user_service: IUserService):
+    role = await user_service.get_user_role(message.from_user.id, Sources.TG)
+    await message.answer("Главное меню", reply_markup=get_role_menu_keyboard(role))
+    await state.clear()
