@@ -22,6 +22,7 @@ def _order_kb(orders, page, total, admin_region=None):
         kb.add(Callback(f"#{o.id} - {o.product_name} ({o.delivery_type})",
                         {"cmd": "view_order", "oid": o.id}))
         kb.row()
+
     kb.row()
     if total > 1:
         if page > 1: kb.add(Callback("⬅️", {"cmd": "prev_order"}))
@@ -39,7 +40,9 @@ async def start_orders(message: Message, order_service: IOrderService, user_serv
 
     region = u.region if u.role != UserRole.STAFF_CA else None
     orders, total = await order_service.get_admin_orders(region, 1)
+
     if not orders: return await message.answer("Нет ожидающих заказов.")
+
     await state_dispenser.set(message.from_id, OrderStates.BROWSE, page=1, total=total,
                               region=region)
     await message.answer(f"📦 Ожидающие заказы (стр. 1/{total}):",
@@ -52,6 +55,7 @@ async def next_order(event: GroupTypes.MessageEvent, order_service: IOrderServic
     state = await state_dispenser.get(event.object.peer_id)
     np = state.payload.get("page", 1) + 1
     orders, total = await order_service.get_admin_orders(state.payload.get("region"), np)
+
     await state_dispenser.set(event.object.peer_id, OrderStates.BROWSE, page=np, total=total,
                               region=state.payload.get("region"))
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
@@ -69,6 +73,7 @@ async def prev_order(event: GroupTypes.MessageEvent, order_service: IOrderServic
     state = await state_dispenser.get(event.object.peer_id)
     np = max(1, state.payload.get("page", 1) - 1)
     orders, total = await order_service.get_admin_orders(state.payload.get("region"), np)
+
     await state_dispenser.set(event.object.peer_id, OrderStates.BROWSE, page=np, total=total,
                               region=state.payload.get("region"))
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
@@ -86,16 +91,23 @@ async def view_order(event: GroupTypes.MessageEvent, order_service: IOrderServic
     oid = event.object.payload["oid"]
     orders, _ = await order_service.get_admin_orders(None, 1)  # быстрый поиск
     order = next((o for o in orders if o.id == oid), None)
+
     if not order: return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                                            message="Заказ не найден", random_id=0)
 
-    info = f"🆔 Заказ #{order.id}\n👤 Пользователь: {order.user_id}\n📦 Товар: {order.product_name}\n💰 Цена: {order.price}\n🚚 Доставка: {order.delivery_type}"
+    info = f"🆔 Заказ #{order.id}\n" \
+           f"👤 Пользователь: {order.user_id}\n" \
+           f"📦 Товар: {order.product_name}\n" \
+           f"💰 Цена: {order.price}\n" \
+           f"🚚 Доставка: {order.delivery_type}"
+
     if order.delivery_address: info += f"\n📍 Адрес: {order.delivery_address}"
     if order.delivery_fio: info += f"\n👤 ФИО: {order.delivery_fio}"
 
     kb = Keyboard(inline=True).add(Callback("✅ Принять", {"cmd": "accept_order", "oid": oid})).add(
         Callback("❌ Отклонить", {"cmd": "decline_order", "oid": oid})).row().add(
         Callback("⬅️ Назад", {"cmd": "back_orders"}))
+
     await state_dispenser.set(event.object.peer_id, OrderStates.BROWSE, view_oid=oid)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=info,
                                       keyboard=kb.get_json(), random_id=0)
@@ -106,12 +118,17 @@ async def view_order(event: GroupTypes.MessageEvent, order_service: IOrderServic
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("accept_order"))
 async def accept_order(event: GroupTypes.MessageEvent, order_service: IOrderService,
-                       notification_service: INotificationService, state_dispenser: BuiltinStateDispenser):
+                       notification_service: INotificationService,
+                       state_dispenser: BuiltinStateDispenser):
     oid = event.object.payload["oid"]
-    await order_service.update_order_status(oid, OrderStatus.COMPLETED)
+
+    # update_order_status возвращает объект Order, из которого мы берем реальные данные пользователя
+    order = await order_service.update_order_status(oid, OrderStatus.COMPLETED)
+
     msg = f"✅ Заказ #{oid} подтвержден!"
-    await notification_service.notify_user_vk(event.object.user_id,
-                                   msg)  # упрощенно, в реальности нужен user_id заказа
+    # ✅ ИСПРАВЛЕНО: Уведомление уходит реальному пользователю с учетом его источника
+    await notification_service.notify_user(order.user_id, order.user_source, msg)
+
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                       message="✅ Заказ принят и передан в обработку.", random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
@@ -133,15 +150,16 @@ async def ask_reason(event: GroupTypes.MessageEvent, state_dispenser: BuiltinSta
 
 @router.message(state=OrderStates.CANCEL_REASON)
 async def process_decline(message: Message, order_service: IOrderService,
-                          notification_service: INotificationService, balance_service: IBalanceService,
+                          notification_service: INotificationService,
                           state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(message.from_id)
     oid = state.payload.get("oid")
     reason = message.text.strip()
+
     try:
-        await order_service.update_order_status(oid, OrderStatus.CANCELLED, reason)
-        await notification_service.notify_user_vk(message.from_id,
-                                       f"❌ Заказ #{oid} отклонен. Причина: {reason}. Баллы возвращены на баланс.")
+        order = await order_service.update_order_status(oid, OrderStatus.CANCELLED, reason)
+        await notification_service.notify_user(order.user_id, order.user_source,
+                                               f"❌ Заказ #{oid} отклонен. Причина: {reason}. Баллы возвращены на баланс.")
         await state_dispenser.delete(message.from_id)
         await message.answer(
             f"✅ Заказ #{oid} отклонен. Причина сохранена. Баллы возвращены пользователю.")

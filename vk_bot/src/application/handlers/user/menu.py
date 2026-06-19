@@ -89,7 +89,7 @@ async def show_staff_ca_shop(message: Message, user_service: IUserService) -> No
     await message.answer("Раздел: магазин", keyboard=get_staff_ca_shop_keyboard())
 
 
-@router.message(text=["Хэдлайнеры"])
+@router.message(text=["Хедлайнеры"])
 async def show_staff_ca_headliners(message: Message, user_service: IUserService) -> None:
     if not await _require_staff_ca(message, user_service):
         return

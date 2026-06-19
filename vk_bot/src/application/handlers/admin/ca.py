@@ -2,7 +2,6 @@ import logging
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
-
 from src.application.filters import CMDRule
 from src.application.states import AdminCAStates
 from src.domain.entities.user import UserRole, Sources
@@ -18,6 +17,7 @@ ROLE_HIERARCHY = {
     UserRole.HEADLINER: 1,
     UserRole.USER: 0
 }
+
 PAGE_LIMIT = 5
 
 
@@ -40,17 +40,18 @@ async def _render_search(state, page, user_service, api, peer_id, event_id=None,
         msg = "Пользователи не найдены."
     else:
         msg = "Выберите пользователя:"
+        kb = Keyboard(inline=True)
+        for u in users:
+            kb.add(
+                Callback(f"{u.surname} {u.name} - {u.role.value}",
+                         {"cmd": "select_user", "uid": u.id, "source": u.source.value}))
+            kb.row()
 
-    kb = Keyboard(inline=True)
-    for u in users:
-        kb.add(
-            Callback(f"{u.surname} {u.name} - {u.role.value}", {"cmd": "select_user", "uid": u.id}))
         kb.row()
-    kb.row()
-    total_est = len(users)  # Упрощённо, для реального пагинации нужно делать COUNT
-    if page > 1: kb.add(Callback("⬅️ Назад", {"cmd": "prev_search"}))
-    if total_est == PAGE_LIMIT: kb.add(Callback("Вперёд ➡️", {"cmd": "next_search"}))
-    kb.add(Callback("Назад в меню", {"cmd": "back_to_menu"}))
+        total_est = len(users)  # Упрощённо, для реального пагинации нужно делать COUNT
+        if page > 1: kb.add(Callback("⬅️ Назад", {"cmd": "prev_search"}))
+        if total_est == PAGE_LIMIT: kb.add(Callback("Вперёд ➡️", {"cmd": "next_search"}))
+        kb.add(Callback("Назад в меню", {"cmd": "back_to_menu"}))
 
     if is_callback:
         await api.messages.send(peer_id=peer_id, message=msg, keyboard=kb.get_json(), random_id=0)
@@ -65,6 +66,7 @@ async def start_search(message: Message, user_service: IUserService,
                        state_dispenser: BuiltinStateDispenser):
     if not (await user_service.get_user_role(message.from_id, Sources.VK)) in [UserRole.STAFF_CA]:
         return await message.answer("Недостаточно прав")
+
     await message.answer("Введите фамилию пользователя для поиска:")
     await state_dispenser.set(message.from_id, AdminCAStates.SEARCH_FIO, page=1)
 
@@ -74,6 +76,7 @@ async def search_fio(message: Message, user_service: IUserService,
                      state_dispenser: BuiltinStateDispenser):
     if len(message.text.strip()) < 2: return await message.answer(
         "Введите минимум 2 символа фамилии")
+
     await state_dispenser.set(message.from_id, AdminCAStates.SEARCH_RESULTS,
                               query=message.text.strip(), page=1)
     await _render_search(await state_dispenser.get(message.from_id), 1, user_service,
@@ -110,7 +113,9 @@ async def select_user(event: GroupTypes.MessageEvent, user_service: IUserService
     admin_level = ROLE_HIERARCHY.get(admin_role, 0)
 
     uid = event.object.payload.get("uid")
-    target_user = await user_service.get_user(uid, Sources.VK)
+    source = Sources(event.object.payload.get("source"))
+
+    target_user = await user_service.get_user(uid, source)
     target_level = ROLE_HIERARCHY.get(target_user.role, 0)
 
     # 4.1 Проверка иерархии
@@ -119,11 +124,16 @@ async def select_user(event: GroupTypes.MessageEvent, user_service: IUserService
                                                  message="❌ Вы можете менять роль только пользователям с более низким рангом.",
                                                  random_id=0)
 
-    text = f"ФИО: {target_user.surname} {target_user.name} {target_user.patronymic or ''}\nРегион: {target_user.region}\nТекущая роль: {target_user.role.value}"
+    text = f"ФИО: {target_user.surname} {target_user.name} {target_user.patronymic or ''}\n" \
+           f"Регион: {target_user.region}\n" \
+           f"Текущая роль: {target_user.role.value}"
+
     kb = Keyboard(inline=True).add(
-        Callback("Поменять роль", {"cmd": "change_role", "uid": uid})).row().add(
+        Callback("Поменять роль",
+                 {"cmd": "change_role", "uid": uid, "source": source.value})).row().add(
         Callback("Назад", {"cmd": "back_to_menu"}))
-    await state_dispenser.set(admin_peer, AdminCAStates.SELECT_USER, uid=uid)
+
+    await state_dispenser.set(admin_peer, AdminCAStates.SELECT_USER, uid=uid, source=source.value)
     await event.ctx_api.messages.send(peer_id=admin_peer, message=text, keyboard=kb.get_json(),
                                       random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
@@ -135,6 +145,8 @@ async def select_user(event: GroupTypes.MessageEvent, user_service: IUserService
 async def change_role_menu(event: GroupTypes.MessageEvent, state_dispenser: BuiltinStateDispenser,
                            user_service: IUserService):
     uid = event.object.payload.get("uid")
+    source = Sources(event.object.payload.get("source"))
+
     admin_role = await user_service.get_user_role(event.object.user_id, Sources.VK)
     admin_level = ROLE_HIERARCHY.get(admin_role, 0)
 
@@ -142,10 +154,13 @@ async def change_role_menu(event: GroupTypes.MessageEvent, state_dispenser: Buil
     # 4.1 Фильтрация доступных ролей (только ниже своей)
     for r in UserRole:
         if ROLE_HIERARCHY.get(r, 0) < admin_level:
-            kb.add(Callback(r.value, {"cmd": "set_role", "uid": uid, "role": r.value}))
+            kb.add(Callback(r.value, {"cmd": "set_role", "uid": uid, "source": source.value,
+                                      "role": r.value}))
             kb.row()
     kb.add(Callback("Отмена", {"cmd": "cancel_role"}))
-    await state_dispenser.set(event.object.peer_id, AdminCAStates.CHANGE_ROLE, uid=uid)
+
+    await state_dispenser.set(event.object.peer_id, AdminCAStates.CHANGE_ROLE, uid=uid,
+                              source=source.value)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                       message="Выберите новую роль (доступны только роли ниже вашей):",
                                       keyboard=kb.get_json(), random_id=0)
@@ -161,6 +176,7 @@ async def set_role(event: GroupTypes.MessageEvent, user_service: IUserService, n
     admin_level = ROLE_HIERARCHY.get(admin_role, 0)
 
     uid = event.object.payload.get("uid")
+    source = Sources(event.object.payload.get("source"))
     new_role_str = event.object.payload.get("role")
     new_role = UserRole(new_role_str)
 
@@ -170,8 +186,9 @@ async def set_role(event: GroupTypes.MessageEvent, user_service: IUserService, n
                                                  random_id=0)
 
     await state_dispenser.delete(event.object.peer_id)
-    await user_service.update_user_role(uid, Sources.VK, new_role)
-    await notification_service.notify_user_vk(uid, f"Ваша роль изменена на: {new_role.value}")
+    await user_service.update_user_role(uid, source, new_role)
+    await notification_service.notify_user(uid, source, f"Ваша роль изменена на: {new_role.value}")
+
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                       message=f"Роль пользователя {uid} успешно изменена на {new_role.value}",
                                       random_id=0)

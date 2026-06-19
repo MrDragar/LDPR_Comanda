@@ -101,10 +101,11 @@ async def mail_fio(message: Message, state_dispenser: BuiltinStateDispenser):
 async def finalize_mail(message: Message, order_service: IOrderService, notification_service: INotificationService, balance_service: IBalanceService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(message.from_id)
     try:
-        await balance_service.deduct_balance(message.from_id, Sources.VK, state.payload["price"], f"Покупка товара #{state.payload['pid']}")
         order = await order_service.create_order(message.from_id, Sources.VK, state.payload["pid"], "mail", state.payload["addr"], message.text.strip())
         await state_dispenser.delete(message.from_id)
-        await notification_service.notify_user_vk(message.from_id, f"✅ Заказ #{order.id} оформлен. Посылка будет отправлена по адресу: {state.payload['addr']}")
+        await notification_service.notify_user(message.from_id, Sources.VK,
+                                               (f"✅ Заказ #{order.id} оформлен.осылка будет "
+                                                f"отправлена по адресу: {state.payload['addr']}"))
         kb = Keyboard(one_time=True).add(Text("На главную"))
         await message.answer("📦 Отлично, начинаем оформлять посылку!", keyboard=kb.get_json())
     except DomainError as e:
@@ -118,10 +119,12 @@ async def pickup(message: Message, user_service: IUserService, order_service: IO
     u = await user_service.get_user(message.from_id, Sources.VK)
     addr = await user_service.get_region_address(u.region)
     try:
-        await balance_service.deduct_balance(message.from_id, Sources.VK, state.payload["price"], f"Покупка товара #{state.payload['pid']}")
         order = await order_service.create_order(message.from_id, Sources.VK, state.payload["pid"], "pickup", addr, None)
         await state_dispenser.delete(message.from_id)
-        await notification_service.notify_user_vk(message.from_id, f"✅ Заказ #{order.id} оформлен. Заберите товар по адресу: {addr}")
+        await notification_service.notify_user(
+            message.from_id, Sources.VK,
+            f"✅ Заказ #{order.id} оформлен. Заберите товар по адресу: {addr}"
+        )
         kb = Keyboard(one_time=True).add(Text("На главную"))
         await message.answer(f"📍 Отлично, забрать товар можете на {addr} (Заказ #{order.id}).", keyboard=kb.get_json())
     except DomainError as e:
