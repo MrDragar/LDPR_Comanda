@@ -154,15 +154,6 @@ async def change_role_menu(event: GroupTypes.MessageEvent, state_dispenser: Buil
                                                            peer_id=event.object.peer_id)
 
 
-@router.message(text=["Управление пользователями"])
-async def start_search_utf(message: Message, user_service: IUserService,
-                           state_dispenser: BuiltinStateDispenser):
-    if not (await user_service.get_user_role(message.from_id, Sources.VK)) in [UserRole.STAFF_CA]:
-        return await message.answer("Недостаточно прав")
-    await message.answer("Введите фамилию пользователя для поиска:")
-    await state_dispenser.set(message.from_id, AdminCAStates.SEARCH_FIO, page=1)
-
-
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("set_role"))
 async def set_role(event: GroupTypes.MessageEvent, user_service: IUserService, notification_service,
                    state_dispenser: BuiltinStateDispenser):

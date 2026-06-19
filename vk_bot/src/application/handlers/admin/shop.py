@@ -165,13 +165,3 @@ async def execute_hide(event: GroupTypes.MessageEvent, product_service: IProduct
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
     await start_hide(event, product_service, None, state_dispenser)
 
-
-@router.message(text=["Добавить товар"])
-async def start_add_normal(message: Message, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
-    return await start_add(message, user_service, state_dispenser)
-
-
-@router.message(text=["Скрыть товар"])
-async def start_hide_normal(message: Message, product_service: IProductService, user_service: IUserService,
-                            state_dispenser: BuiltinStateDispenser):
-    return await start_hide(message, product_service, user_service, state_dispenser)
