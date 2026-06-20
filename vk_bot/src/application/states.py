@@ -107,3 +107,11 @@ class ClosedEventStates(BaseStateGroup):
     BROWSE_ADMIN = "ce_browse_admin"
     CREATE = "ce_create"
     PART_LIST = "ce_part_list"
+
+
+class ProfileStates(BaseStateGroup):
+    MAIN = "profile_main"
+    REFERRAL = "profile_referral"
+    ORDERS = "profile_orders"
+    EVENTS = "profile_events"
+    RATING = "profile_rating"

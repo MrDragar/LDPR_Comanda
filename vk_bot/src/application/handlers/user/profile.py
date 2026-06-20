@@ -2,7 +2,10 @@ import logging
 
 from vkbottle import Keyboard, PhotoMessageUploader, Text
 from vkbottle.bot import BotLabeler, Message
+from vkbottle.dispatch import BuiltinStateDispenser
 
+from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+from src.application.states import ProfileStates
 from src.domain.entities.user import Sources, UserRole
 from src.services.interfaces import (IBalanceService, IClosedEventService, IHeadlinerService,
                                      ILearningService, IOrderService, IReferralLinkService,
@@ -27,11 +30,23 @@ def get_back_kb():
             .add(Text("На главную")).get_json())
 
 
+async def _get_main_menu_kb(user_service: IUserService, user_id: int) -> str:
+    """Безопасное получение клавиатуры главного меню по роли"""
+    try:
+        role = await user_service.get_user_role(user_id, Sources.VK)
+        return get_role_menu_keyboard(role)
+    except Exception:
+        return get_role_menu_keyboard(UserRole.USER)
+
+
 @router.message(text=["Личный кабинет"])
 async def profile(message: Message, user_service: IUserService, referral_service: IReferralService,
                   balance_service: IBalanceService, learning_service: ILearningService,
-                  headliner_service: IHeadlinerService):
+                  headliner_service: IHeadlinerService, state_dispenser: BuiltinStateDispenser):
     try:
+        # Устанавливаем стейт главного меню ЛК
+        await state_dispenser.set(message.from_id, ProfileStates.MAIN)
+
         u = await user_service.get_user(message.from_id, Sources.VK)
         balance = await balance_service.get_balance(u.id, u.source)
         refs = await referral_service.get_count_invitees(u.id, u.source)
@@ -68,10 +83,15 @@ async def profile(message: Message, user_service: IUserService, referral_service
         await message.answer("Ошибка загрузки профиля")
 
 
-@router.message(text=["Реферальная ссылка"])
+# ==================== ПОДМЕНЮ ЛК ====================
+
+@router.message(state=ProfileStates.MAIN, text=["Реферальная ссылка"])
 async def referral_link(message: Message, referral_link_service: IReferralLinkService,
                         photo_uploader: PhotoMessageUploader,
-                        headliner_service: IHeadlinerService):
+                        headliner_service: IHeadlinerService,
+                        state_dispenser: BuiltinStateDispenser):
+    await state_dispenser.set(message.from_id, ProfileStates.REFERRAL)
+
     headliner = await headliner_service.get_by_user(message.from_id, Sources.VK)
     if headliner:
         links = headliner_service.make_referral_links(headliner.id)
@@ -107,23 +127,28 @@ async def referral_link(message: Message, referral_link_service: IReferralLinkSe
     )
 
 
-@router.message(text=["Список покупок"])
-async def orders_history(message: Message, order_service: IOrderService):
+@router.message(state=ProfileStates.MAIN, text=["Список покупок"])
+async def orders_history(message: Message, order_service: IOrderService,
+                         state_dispenser: BuiltinStateDispenser):
+    await state_dispenser.set(message.from_id, ProfileStates.ORDERS)
     orders = await order_service.get_user_orders_history(message.from_id, Sources.VK)
     if not orders:
         return await message.answer("У вас пока нет покупок.", keyboard=get_back_kb())
 
     lines = ["Ваши покупки:"]
     for o in orders:
-        status_map = {"pending": "Ожидает", "completed": "Получен", "cancelled": "Отменен"}
+        # ИСПРАВЛЕНО: ключи теперь соответствуют реальным значениям из Enum OrderStatus
+        status_map = {"ожидание": "Ожидает", "завершено": "Получен", "отклонено": "Отменен"}
         status_text = status_map.get(o.status.value, o.status.value)
         lines.append(f"- {o.product_name} | {status_text} | {o.created_at.strftime('%d.%m.%Y')}")
 
     await message.answer("\n".join(lines), keyboard=get_back_kb())
 
 
-@router.message(text=["Список мероприятий"])
-async def events_history(message: Message, closed_event_service: IClosedEventService):
+@router.message(state=ProfileStates.MAIN, text=["Список мероприятий"])
+async def events_history(message: Message, closed_event_service: IClosedEventService,
+                         state_dispenser: BuiltinStateDispenser):
+    await state_dispenser.set(message.from_id, ProfileStates.EVENTS)
     events = await closed_event_service.get_user_events(message.from_id, Sources.VK)
     if not events:
         return await message.answer("Вы пока не записаны ни на одно мероприятие.",
@@ -137,8 +162,10 @@ async def events_history(message: Message, closed_event_service: IClosedEventSer
     await message.answer("\n".join(lines), keyboard=get_back_kb())
 
 
-@router.message(text=["Посмотреть рейтинг"])
-async def show_rating(message: Message, user_service: IUserService):
+@router.message(state=ProfileStates.MAIN, text=["Посмотреть рейтинг"])
+async def show_rating(message: Message, user_service: IUserService,
+                      state_dispenser: BuiltinStateDispenser):
+    await state_dispenser.set(message.from_id, ProfileStates.RATING)
     u = await user_service.get_user(message.from_id, Sources.VK)
     user_score = await user_service.get_user_rating(u.id, u.source)
 
@@ -165,10 +192,32 @@ async def show_rating(message: Message, user_service: IUserService):
     await message.answer(text, keyboard=get_back_kb())
 
 
-@router.message(text=["Назад"])
+# ==================== НАВИГАЦИЯ НАЗАД / В ГЛАВНОЕ МЕНЮ ====================
+
+@router.message(state=[ProfileStates.REFERRAL, ProfileStates.ORDERS, ProfileStates.EVENTS,
+                       ProfileStates.RATING], text=["Назад"])
 async def back_to_profile(message: Message, user_service: IUserService,
                           referral_service: IReferralService,
                           balance_service: IBalanceService, learning_service: ILearningService,
-                          headliner_service: IHeadlinerService):
+                          headliner_service: IHeadlinerService,
+                          state_dispenser: BuiltinStateDispenser):
+    """Возврат в главное меню Личного кабинета"""
     await profile(message, user_service, referral_service, balance_service, learning_service,
-                  headliner_service)
+                  headliner_service, state_dispenser)
+
+
+@router.message(
+    state=[
+        ProfileStates.MAIN,
+        ProfileStates.REFERRAL,
+        ProfileStates.ORDERS,
+        ProfileStates.EVENTS,
+        ProfileStates.RATING
+    ], 
+    text=["На главную"]
+)
+async def go_to_main_menu(message: Message, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
+    """Полный выход из ЛК в главное меню бота"""
+    await state_dispenser.delete(message.from_id)
+    kb = await _get_main_menu_kb(user_service, message.from_id)
+    await message.answer("Главное меню:", keyboard=kb)
