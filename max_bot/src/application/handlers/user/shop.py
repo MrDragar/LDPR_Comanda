@@ -75,7 +75,7 @@ async def shop_page(event: MessageCallback, context: MemoryContext,
     products, total_pages = await product_service.list_products(page)
     balance = await balance_service.get_balance(_uid(event), Sources.MAX)
     await context.update_data(page=page, total=total_pages)
-    await event.callback.answer()
+    await event.ack()
     await render_shop(event, products, page, total_pages, balance)
 
 
@@ -83,7 +83,7 @@ async def shop_page(event: MessageCallback, context: MemoryContext,
 async def view_product(event: MessageCallback, product_service: IProductService):
     product_id = int(event.callback.payload.split(":", 1)[1])
     product = await product_service.get_product(product_id)
-    await event.callback.answer()
+    await event.ack()
     if not product:
         return await event.message.answer("Товар не найден.")
     keyboard = _callback_keyboard([
@@ -108,7 +108,7 @@ async def back_shop_list(event: MessageCallback, context: MemoryContext,
     page = data.get("page", 1)
     products, total_pages = await product_service.list_products(page)
     balance = await balance_service.get_balance(_uid(event), Sources.MAX)
-    await event.callback.answer()
+    await event.ack()
     await render_shop(event, products, page, total_pages, balance)
 
 
@@ -117,7 +117,7 @@ async def start_buy(event: MessageCallback, context: MemoryContext,
                     product_service: IProductService, balance_service: IBalanceService):
     product_id = int(event.callback.payload.split(":", 1)[1])
     product = await product_service.get_product(product_id)
-    await event.callback.answer()
+    await event.ack()
     if not product:
         return await event.message.answer("Товар не найден.")
     balance = await balance_service.get_balance(_uid(event), Sources.MAX)
@@ -211,6 +211,6 @@ async def finalize_mail(event: MessageCreated, context: MemoryContext,
 
 @router.message_callback(F.callback.payload == "max_shop_menu")
 async def shop_menu(event: MessageCallback, context: MemoryContext, user_service: IUserService):
-    await event.callback.answer()
+    await event.ack()
     await context.clear()
     await _main_menu(event, user_service, _uid(event))

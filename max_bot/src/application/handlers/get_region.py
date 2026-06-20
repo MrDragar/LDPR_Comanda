@@ -28,7 +28,7 @@ async def retry_region_callback(event: MessageCallback, context: MemoryContext):
         return
     await context.set_state(RegistrationStates.REGION_BY_TEXT)
     await event.message.answer("Введите название региона заново:")
-    await event.callback.answer()
+    await event.ack()
 
 
 @router.message_callback(F.callback.payload.startswith("region:"))
@@ -44,4 +44,4 @@ async def select_region_callback(event: MessageCallback, context: MemoryContext,
         "Хотели бы вы получать информацию о инициативах и мероприятиях ЛДПР? (Да/Нет)",
         attachments=[get_boolean_keyboard().as_markup()]
     )
-    await event.callback.answer()
+    await event.ack()

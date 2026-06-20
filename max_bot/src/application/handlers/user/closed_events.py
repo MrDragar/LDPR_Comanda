@@ -75,7 +75,7 @@ async def event_page(event: MessageCallback, user_service: IUserService,
     user = await user_service.get_user(_uid(event), Sources.MAX)
     events, total_count = await closed_event_service.list_events(user.region, page)
     pages = (total_count + PAGE_LIMIT - 1) // PAGE_LIMIT
-    await event.callback.answer()
+    await event.ack()
     await render_events(event, events, page, pages)
 
 
@@ -83,7 +83,7 @@ async def event_page(event: MessageCallback, user_service: IUserService,
 async def view_event(event: MessageCallback, closed_event_service: IClosedEventService):
     event_id = int(event.callback.payload.split(":", 1)[1])
     item = await closed_event_service.get_event(event_id)
-    await event.callback.answer()
+    await event.ack()
     if not item:
         return await event.message.answer("Мероприятие не найдено.")
     keyboard = _keyboard([
@@ -102,7 +102,7 @@ async def view_event(event: MessageCallback, closed_event_service: IClosedEventS
 @router.message_callback(F.callback.payload.startswith("max_ce_register:"))
 async def register_event(event: MessageCallback, closed_event_service: IClosedEventService):
     event_id = int(event.callback.payload.split(":", 1)[1])
-    await event.callback.answer()
+    await event.ack()
     try:
         await closed_event_service.register(_uid(event), Sources.MAX, event_id)
         await event.message.answer("Вы успешно записались на мероприятие.")
@@ -115,7 +115,7 @@ async def back_events(event: MessageCallback, user_service: IUserService,
                       closed_event_service: IClosedEventService):
     user = await user_service.get_user(_uid(event), Sources.MAX)
     events, total_count = await closed_event_service.list_events(user.region, 1)
-    await event.callback.answer()
+    await event.ack()
     if not events:
         return await event.message.answer("В вашем регионе пока нет закрытых мероприятий.")
     pages = (total_count + PAGE_LIMIT - 1) // PAGE_LIMIT
@@ -124,5 +124,5 @@ async def back_events(event: MessageCallback, user_service: IUserService,
 
 @router.message_callback(F.callback.payload == "max_ce_menu")
 async def closed_events_menu(event: MessageCallback, user_service: IUserService):
-    await event.callback.answer()
+    await event.ack()
     await _main_menu(event, user_service, _uid(event))

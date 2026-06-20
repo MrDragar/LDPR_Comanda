@@ -43,7 +43,7 @@ async def select_task_type(event: MessageCreated, context: MemoryContext):
 async def online_list(event: MessageCallback, context: MemoryContext,
                       online_task_service: IOnlineTaskService, user_service: IUserService):
     tasks, total_pages = await online_task_service.search_tasks(_uid(event), Sources.MAX, page=1)
-    await event.callback.answer()
+    await event.ack()
     if not tasks:
         await event.message.answer("Нет доступных онлайн заданий.")
         return await _main_menu(event, user_service, _uid(event))
@@ -85,7 +85,7 @@ async def render_online_tasks(event, tasks, page: int, total_pages: int):
 async def online_page(event: MessageCallback, online_task_service: IOnlineTaskService):
     page = int(event.callback.payload.split(":", 1)[1])
     tasks, total_pages = await online_task_service.search_tasks(_uid(event), Sources.MAX, page=page)
-    await event.callback.answer()
+    await event.ack()
     await render_online_tasks(event, tasks, page, total_pages)
 
 
@@ -94,7 +94,7 @@ async def view_online(event: MessageCallback, context: MemoryContext,
                       online_task_service: IOnlineTaskService):
     task_id = int(event.callback.payload.split(":", 1)[1])
     task = await online_task_service.get_task(task_id)
-    await event.callback.answer()
+    await event.ack()
     if not task:
         return await event.message.answer("Задание не найдено.")
     await context.set_state(UserTaskStates.ONLINE_VIEW)
@@ -117,12 +117,12 @@ async def check_online(event: MessageCallback, context: MemoryContext,
     task_id = int(event.callback.payload.split(":", 1)[1])
     try:
         await online_task_service.check_task(_uid(event), Sources.MAX, task_id)
-        await event.callback.answer()
+        await event.ack()
         await event.message.answer("Задание принято, баллы начислены.")
         await context.clear()
         await _main_menu(event, user_service, _uid(event))
     except Exception as e:
-        await event.callback.answer()
+        await event.ack()
         await event.message.answer(f"Задание не принято: {e}")
 
 
@@ -130,7 +130,7 @@ async def check_online(event: MessageCallback, context: MemoryContext,
 async def offline_list(event: MessageCallback, context: MemoryContext,
                        offline_task_service: IOfflineTaskService, user_service: IUserService):
     user = await user_service.get_user(_uid(event), Sources.MAX)
-    await event.callback.answer()
+    await event.ack()
     if user.grade not in (UserGrade.AGITATOR, UserGrade.RESERVE):
         await event.message.answer(
             "Этот тип заданий открывается при достижении ранга 'Агитатор'. "
@@ -192,7 +192,7 @@ async def offline_page(event: MessageCallback, offline_task_service: IOfflineTas
     user = await user_service.get_user(_uid(event), Sources.MAX)
     all_tasks, total_pages = await offline_task_service.search_tasks(user.id, user.source, page=page)
     tasks = [task for task in all_tasks if task.region == user.region]
-    await event.callback.answer()
+    await event.ack()
     await render_offline_tasks(event, tasks, page, total_pages)
 
 
@@ -201,7 +201,7 @@ async def view_offline(event: MessageCallback, context: MemoryContext,
                        offline_task_service: IOfflineTaskService):
     task_id = int(event.callback.payload.split(":", 1)[1])
     task = await offline_task_service.get_task(task_id)
-    await event.callback.answer()
+    await event.ack()
     if not task:
         return await event.message.answer("Задание не найдено.")
     keyboard = _button_keyboard([
@@ -230,12 +230,12 @@ async def accept_offline(event: MessageCallback, context: MemoryContext,
         await offline_task_service.accept_offline_task(_uid(event), Sources.MAX, task_id)
         await notification_service.notify_user(_uid(event), Sources.MAX,
                                                f"Вы взяли офлайн задачу #{task_id}. Ожидает проверки.")
-        await event.callback.answer()
+        await event.ack()
         await event.message.answer("Задача принята. Свяжитесь с местным отделением по контактам в описании.")
         await context.clear()
         await _main_menu(event, user_service, _uid(event))
     except DomainError as e:
-        await event.callback.answer()
+        await event.ack()
         await event.message.answer(str(e))
 
 
@@ -260,7 +260,7 @@ async def my_tasks(event: MessageCreated, context: MemoryContext,
 async def view_my_task(event: MessageCallback, offline_task_service: IOfflineTaskService):
     task_id = int(event.callback.payload.split(":", 1)[1])
     task = await offline_task_service.get_task(task_id)
-    await event.callback.answer()
+    await event.ack()
     if not task:
         return await event.message.answer("Задание не найдено.")
     keyboard = _button_keyboard([
@@ -285,12 +285,12 @@ async def cancel_my_task(event: MessageCallback, context: MemoryContext,
         await offline_task_service.cancel_task(_uid(event), Sources.MAX, task_id)
         await notification_service.notify_user(_uid(event), Sources.MAX,
                                                f"Задание #{task_id} отменено.")
-        await event.callback.answer()
+        await event.ack()
         await event.message.answer(f"Задание #{task_id} успешно отменено.")
         await context.clear()
         await _main_menu(event, user_service, _uid(event))
     except Exception as e:
-        await event.callback.answer()
+        await event.ack()
         await event.message.answer(f"Ошибка при отмене: {e}")
 
 
@@ -299,7 +299,7 @@ async def back_to_my_tasks(event: MessageCallback, context: MemoryContext,
                            offline_task_service: IOfflineTaskService, user_service: IUserService):
     user = await user_service.get_user(_uid(event), Sources.MAX)
     tasks, _ = await offline_task_service.get_user_tasks(user.id, user.source, page=1)
-    await event.callback.answer()
+    await event.ack()
     if not tasks:
         await event.message.answer("У вас нет активных заданий.")
         await context.clear()
@@ -314,6 +314,6 @@ async def back_to_my_tasks(event: MessageCallback, context: MemoryContext,
 
 @router.message_callback(F.callback.payload == "max_task_menu")
 async def back_to_menu(event: MessageCallback, context: MemoryContext, user_service: IUserService):
-    await event.callback.answer()
+    await event.ack()
     await context.clear()
     await _main_menu(event, user_service, _uid(event))
