@@ -5,6 +5,7 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import AdminTaskStates
+from src.application.utils import handle_cancel, get_cancel_kb
 from src.domain.entities.task import TaskType, TaskStatus
 from src.domain.entities.user import UserRole, Sources
 from src.services.interfaces import IOnlineTaskService, IOfflineTaskService, IUserService, \
@@ -17,74 +18,46 @@ PAGE_LIMIT = 5
 
 
 @router.message(text=["Создать онлайн задачу"])
-async def start_create_online(message: Message, user_service: IUserService,
-                             state_dispenser: BuiltinStateDispenser):
+async def start_create_online(message: Message, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]):
         return await message.answer("Недостаточно прав")
-    # Сразу переходим к шагу ввода URL
     await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="url")
-    await message.answer("🔗 Введите ссылку на задание (URL поста ВК, например: https://vk.com/wall-123_456):")
+    await message.answer("🔗 Введите ссылку на задание (URL поста ВК):", keyboard=get_cancel_kb())
 
 
 @router.message(state=AdminTaskStates.CREATE_ONLINE)
-async def process_online_fields(message: Message, state_dispenser: BuiltinStateDispenser,
-                                online_task_service: IOnlineTaskService):
+async def process_online_fields(message: Message, state_dispenser: BuiltinStateDispenser, online_task_service: IOnlineTaskService, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     if not state: return
     step = state.payload.get("step")
     payload = {k: v for k, v in state.payload.items() if k != 'step'}
     text = message.text.strip()
-
     try:
         if step == "url":
             pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
-            if not pattern.match(text):
-                return await message.answer(
-                    "⚠️ Ссылка должна быть валидной ссылкой на пост ВК (начинаться с https://vk.com/wall-...). Попробуйте снова.")
-
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
-                                      **payload, url=text, step="type")
-
+            if not pattern.match(text): return await message.answer("⚠️ Ссылка должна быть валидной ссылкой на пост ВК.", keyboard=get_cancel_kb())
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload, url=text, step="type")
             kb = Keyboard(inline=True)
-            for t in TaskType:
-                kb.add(Callback(t.value, {"cmd": "set_type", "type": t.value}))
-                kb.row()
+            for t in TaskType: kb.add(Callback(t.value, {"cmd": "set_type", "type": t.value})); kb.row()
             return await message.answer("📌 Выберите тип задания:", keyboard=kb.get_json())
-
         elif step == "date":
             d = datetime.strptime(text, "%d.%m.%Y").date()
-            if d < date.today():
-                return await message.answer(
-                    "⚠️ Дата начала не может быть в прошлом. Укажите сегодняшнюю или будущую дату.")
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
-                                      **payload, date=d, step="duration")
-            return await message.answer("⏱ Введите количество дней активности (число):")
-
+            if d < date.today(): return await message.answer("⚠️ Дата начала не может быть в прошлом.", keyboard=get_cancel_kb())
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload, date=d, step="duration")
+            return await message.answer("⏱ Введите количество дней активности (число):", keyboard=get_cancel_kb())
         elif step == "duration":
             dur = int(text)
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE,
-                                      **payload, duration=dur, step="reward")
-            return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):")
-
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload, duration=dur, step="reward")
+            return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):", keyboard=get_cancel_kb())
         elif step == "reward":
             reward = int(text)
-            if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.")
-
-            await online_task_service.create_task(
-                date=payload["date"],
-                duration=payload["duration"],
-                type=payload["type"],
-                reward=reward,
-                url=payload["url"]
-            )
+            if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.", keyboard=get_cancel_kb())
+            await online_task_service.create_task(date=payload["date"], duration=payload["duration"], type=payload["type"], reward=reward, url=payload["url"])
             await state_dispenser.delete(message.from_id)
             return await message.answer("✅ Онлайн задача успешно создана!")
-
-        else:
-            return await message.answer("Неизвестный шаг создания задачи. Начните заново.")
-
     except ValueError:
-        return await message.answer("⚠️ Неверный формат данных. Попробуйте снова.")
+        return await message.answer("⚠️ Неверный формат данных. Попробуйте снова.", keyboard=get_cancel_kb())
     except Exception as e:
         logger.error(f"Error creating online task: {e}")
         return await message.answer(f"❌ Произошла ошибка: {e}")
@@ -105,179 +78,90 @@ async def set_online_type(event: GroupTypes.MessageEvent, state_dispenser: Built
 
 # --- СОЗДАНИЕ ОФФЛАЙН ЗАДАЧИ ---
 @router.message(text=["Создать офлайн задачу"])
-async def start_create_offline(
-        message: Message,
-        user_service: IUserService,
-        state_dispenser: BuiltinStateDispenser
-) -> None:
-    """Точка входа в создание задачи. Проверяет роль."""
-    try:
-        role = await user_service.get_user_role(message.from_id, Sources.VK)
-    except Exception as e:
-        logger.error(f"Failed to get role for user {message.from_id}: {e}")
-        return await message.answer("Ошибка проверки прав доступа.")
-
-    if role not in [UserRole.STAFF_CA, UserRole.COORDINATOR_RO]:
-        return await message.answer(
-            "🚫 Недостаточно прав. Создавать офлайн задачи могут только сотрудники ЦА и координаторы РО.")
-
-    # Инициализируем стейт с первым шагом
+async def start_create_offline(message: Message, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
+    try: role = await user_service.get_user_role(message.from_id, Sources.VK)
+    except Exception as e: return await message.answer("Ошибка проверки прав доступа.")
+    if role not in [UserRole.STAFF_CA, UserRole.COORDINATOR_RO]: return await message.answer("🚫 Недостаточно прав.")
     await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, step="title")
-    logger.info(f"User {message.from_id} (role: {role.value}) started offline task creation flow.")
-    await message.answer("📝 Введите название задачи:")
-
+    await message.answer("📝 Введите название задачи:", keyboard=get_cancel_kb())
 
 @router.message(state=AdminTaskStates.CREATE_OFFLINE)
-async def process_offline_fields(
-        message: Message,
-        user_service: IUserService,
-        offline_task_service: IOfflineTaskService,
-        state_dispenser: BuiltinStateDispenser
-) -> None:
-    """Обрабатывает пошаговый ввод полей в зависимости от текущего шага."""
+async def process_offline_fields(message: Message, user_service: IUserService, offline_task_service: IOfflineTaskService, state_dispenser: BuiltinStateDispenser):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
-    if not state:
-        return
-
+    if not state: return
     payload = {k: v for k, v in (state.payload or {}).items() if k != 'step'}
     step = state.payload.get("step", "title")
     text = message.text.strip()
-
     try:
-        # --- ШАГ 1: Название ---
         if step == "title":
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                      **payload, title=text, step="description")
-            return await message.answer("📄 Введите описание задачи:")
-
-        # --- ШАГ 2: Описание ---
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload, title=text, step="description")
+            return await message.answer("📄 Введите описание задачи:", keyboard=get_cancel_kb())
         elif step == "description":
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                      **payload, description=text, step="location")
-            return await message.answer("📍 Введите место проведения:")
-
-        # --- ШАГ 3: Место ---
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload, description=text, step="location")
+            return await message.answer("📍 Введите место проведения:", keyboard=get_cancel_kb())
         elif step == "location":
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                      **payload, location=text, step="contacts")
-            return await message.answer(
-                "📞 Введите контакты организатора (телефон, email или Telegram):")
-
-        # --- ШАГ 4: Контакты ---
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload, location=text, step="contacts")
+            return await message.answer("📞 Введите контакты организатора:", keyboard=get_cancel_kb())
         elif step == "contacts":
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                      **payload, contacts=text, step="start_date")
-            return await message.answer("📅 Введите дату начала проведения задачи (ДД.ММ.ГГГГ):")
-
-        # --- ШАГ 5: Дата ---
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload, contacts=text, step="start_date")
+            return await message.answer("📅 Введите дату начала проведения задачи (ДД.ММ.ГГГГ):", keyboard=get_cancel_kb())
         elif step == "start_date":
             try:
                 start_date = datetime.strptime(text, "%d.%m.%Y").date()
-                if start_date < date.today():
-                    return await message.answer("⚠️ Дата начала не может быть в прошлом. Укажите сегодняшнюю или будущую дату.")
-                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                          **payload, start_date=start_date, step="duration")
-                return await message.answer("⏱ Введите продолжительность задачи в днях (число):")
-            except ValueError:
-                return await message.answer("⚠️ Неверный формат даты. Используйте ДД.ММ.ГГГГ")
-
-        # --- ШАГ 6: Продолжительность ---
+                if start_date < date.today(): return await message.answer("⚠️ Дата начала не может быть в прошлом.", keyboard=get_cancel_kb())
+                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload, start_date=start_date, step="duration")
+                return await message.answer("⏱ Введите продолжительность задачи в днях (число):", keyboard=get_cancel_kb())
+            except ValueError: return await message.answer("⚠️ Неверный формат даты.", keyboard=get_cancel_kb())
         elif step == "duration":
             try:
                 duration = int(text)
-                if duration <= 0:
-                    return await message.answer("⚠️ Продолжительность должна быть больше 0.")
-                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                          **payload, duration=duration, step="reward")
-                return await message.answer("💰 Введите количество баллов за выполнение:")
-            except ValueError:
-                return await message.answer("⚠️ Введите целое число дней.")
-        # --- ШАГ 7: Баллы -> Регион или Подтверждение ---
+                if duration <= 0: return await message.answer("⚠️ Продолжительность должна быть больше 0.", keyboard=get_cancel_kb())
+                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload, duration=duration, step="reward")
+                return await message.answer("💰 Введите количество баллов за выполнение:", keyboard=get_cancel_kb())
+            except ValueError: return await message.answer("⚠️ Введите целое число дней.", keyboard=get_cancel_kb())
         elif step == "reward":
             try:
                 reward = int(text)
-                if reward <= 0:
-                    return await message.answer("⚠️ Количество баллов должно быть больше 0.")
-
+                if reward <= 0: return await message.answer("⚠️ Количество баллов должно быть больше 0.", keyboard=get_cancel_kb())
                 role = await user_service.get_user_role(message.from_id, Sources.VK)
-                # ИСПРАВЛЕНО: ключ "reward" как строка
                 new_payload = {**payload, "reward": reward}
-
                 if role == UserRole.STAFF_CA:
-                    # Сотрудник ЦА указывает регион вручную
                     new_payload["step"] = "region"
-                    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                              **new_payload)
-                    return await message.answer(
-                        "🌍 Введите регион для задачи (например, Москва или Краснодарский край):")
+                    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **new_payload)
+                    return await message.answer("🌍 Введите регион для задачи:", keyboard=get_cancel_kb())
                 else:
-                    # Координатор РО -> регион определяется автоматически через сервис
                     new_payload["step"] = "confirm"
-                    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
-                                              **new_payload)
-                    return await message.answer(
-                        "✅ Регион будет определен автоматически по вашему профилю. Подтвердите создание задачи? (Отправьте 'Да')")
-
-            except ValueError:
-                return await message.answer("⚠️ Введите целое число баллов.")
-
-        # --- ШАГ 7: Регион (только для ЦА) -> Подтверждение ---
+                    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **new_payload)
+                    return await message.answer("✅ Регион будет определен автоматически. Подтвердите создание задачи? (Отправьте 'Да')", keyboard=get_cancel_kb())
+            except ValueError: return await message.answer("⚠️ Введите целое число баллов.", keyboard=get_cancel_kb())
         elif step == "region":
-            # Валидация региона: должен совпадать 1 в 1 со списком в UserService
             region_input = text.strip()
             similar = await user_service.get_similar_regions(region_input)
             if region_input != similar[0]:
-                hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден. Проверьте название."
-                return await message.answer(
-                    f"⚠️ {hint}\n\nВведите название региона точно как в списке субъектов РФ:")
-
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload,
-                                      region=region_input, step="confirm")
-            return await message.answer(
-                "✅ Регион указан. Подтвердите создание задачи? (Отправьте 'Да')")
-
-        # --- ШАГ 8: Подтверждение и вызов сервиса ---
+                hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден."
+                return await message.answer(f"⚠️ {hint}\nВведите название региона точно:", keyboard=get_cancel_kb())
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **payload, region=region_input, step="confirm")
+            return await message.answer("✅ Регион указан. Подтвердите создание задачи? (Отправьте 'Да')", keyboard=get_cancel_kb())
         elif step == "confirm":
             if text.lower() != "да":
                 await state_dispenser.delete(message.from_id)
-                logger.info(f"User {message.from_id} cancelled offline task creation.")
                 return await message.answer("❌ Создание задачи отменено.")
-
-            # Получаем актуальный payload из состояния
             current_state = await state_dispenser.get(message.from_id)
             p = current_state.payload if current_state else {}
             role = await user_service.get_user_role(message.from_id, Sources.VK)
-            logger.info(
-                f"Finalizing offline task creation for user {message.from_id} (role: {role.value})")
-
             if role == UserRole.STAFF_CA:
-                # Вызов сервиса с явным указанием региона
-                if role == UserRole.STAFF_CA:
-                    task = await offline_task_service.create_task_by_admin(
-                        region=p["region"], start_date=p["start_date"], duration=p["duration"],
-                        reward=p["reward"],
-                        title=p["title"], description=p["description"],
-                        location=p["location"], contacts=p["contacts"]
-                    )
-            else:
-                # Вызов сервиса с авто-определением региона по user_id
-                task = await offline_task_service.create_task_by_personal(
-                    user_id=message.from_id, user_source=Sources.VK, start_date=p["start_date"], 
-                    duration=p["duration"], reward=p["reward"],
-                    title=p["title"], description=p["description"],
-                    location=p["location"], contacts=p["contacts"]
+                task = await offline_task_service.create_task_by_admin(
+                    region=p["region"], start_date=p["start_date"], duration=p["duration"], reward=p["reward"], title=p["title"], description=p["description"], location=p["location"], contacts=p["contacts"]
                 )
-
+            else:
+                task = await offline_task_service.create_task_by_personal(user_id=message.from_id, user_source=Sources.VK, start_date=p["start_date"], duration=p["duration"], reward=p["reward"], title=p["title"], description=p["description"], location=p["location"], contacts=p["contacts"])
             await state_dispenser.delete(message.from_id)
-            logger.info(f"Offline task #{task.id} successfully created by user {message.from_id}.")
-            return await message.answer(
-                f"✅ Оффлайн задача '#{task.id} {task.title}' успешно создана и доступна пользователям!")
-
+            return await message.answer(f"✅ Оффлайн задача '#{task.id} {task.title}' успешно создана!")
     except Exception as e:
         logger.error(f"Critical error in process_offline_fields: {e}", exc_info=True)
         await state_dispenser.delete(message.from_id)
-        return await message.answer(
-            "❌ Произошла ошибка при создании задачи. Попробуйте позже или обратитесь к разработчику.")
+        return await message.answer("❌ Произошла ошибка при создании задачи.")
 
 
 # --- ПРОВЕРКА ОФФЛАЙН ЗАДАЧ (ПОЛНЫЙ ЦИКЛ) ---

@@ -4,6 +4,7 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, Text, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import ClosedEventStates
+from src.application.utils import get_cancel_kb, handle_cancel
 from src.domain.entities.user import UserRole, Sources
 from src.services.interfaces import IClosedEventService, IUserService
 from src.application.filters import check_role, CMDRule
@@ -66,20 +67,19 @@ async def start_create_ce(message: Message, user_service: IUserService,
     if not await check_role(user_service, message.from_id,
                             [UserRole.STAFF_CA, UserRole.COORDINATOR_RO]):
         return await message.answer("Недостаточно прав")
-
     u = await user_service.get_user(message.from_id, Sources.VK)
     await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, step="title",
                               region=u.region if u.role == UserRole.COORDINATOR_RO else None)
-    await message.answer("📝 Введите название мероприятия:")
+    await message.answer("📝 Введите название мероприятия:", keyboard=get_cancel_kb())
 
 
 @router.message(state=ClosedEventStates.CREATE)
 async def create_ce_steps(message: Message, closed_event_service: IClosedEventService,
-                          user_service: IUserService,
-                          state_dispenser: BuiltinStateDispenser):
+                          user_service: IUserService, state_dispenser: BuiltinStateDispenser):
+    if await handle_cancel(message, state_dispenser, user_service): return
+
     state = await state_dispenser.get(message.from_id)
     if not state: return
-
     step = state.payload.get("step")
     p = {k: v for k, v in state.payload.items() if k != 'step'}
     txt = message.text.strip()
@@ -87,46 +87,47 @@ async def create_ce_steps(message: Message, closed_event_service: IClosedEventSe
     if step == "title":
         await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p, title=txt,
                                   step="desc")
-        return await message.answer("📄 Введите описание:")
+        return await message.answer("📄 Введите описание:", keyboard=get_cancel_kb())
     elif step == "desc":
         await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p, desc=txt,
                                   step="loc")
-        return await message.answer("📍 Введите место проведения:")
+        return await message.answer("📍 Введите место проведения:", keyboard=get_cancel_kb())
     elif step == "loc":
         await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p, loc=txt,
                                   step="dt")
-        return await message.answer("📅 Введите дату и время (формат: ДД.ММ.ГГГГ ЧЧ:ММ):")
+        return await message.answer("📅 Введите дату и время (формат: ДД.ММ.ГГГГ ЧЧ:ММ):",
+                                    keyboard=get_cancel_kb())
     elif step == "dt":
         try:
             dt = datetime.strptime(txt, "%d.%m.%Y %H:%M")
             await state_dispenser.set(message.from_id, ClosedEventStates.CREATE, **p,
                                       date=dt.date(), time=dt.time(), step="region")
-
-            if p.get("region"):  # Координатор
+            if p.get("region"):
                 region_to_check = p["region"]
                 similar = await user_service.get_similar_regions(region_to_check)
                 if region_to_check not in similar or similar[0] != region_to_check:
                     hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден."
                     return await message.answer(
-                        f"⚠️ {hint}\nВведите название региона точно как в списке субъектов РФ:")
-
-                await _finish_create_ce(message, closed_event_service, region_to_check,
-                                        dt.date(), dt.time(), p, state_dispenser)
+                        f"⚠️ {hint}\nВведите название региона точно как в списке субъектов РФ:",
+                        keyboard=get_cancel_kb())
+                await _finish_create_ce(message, closed_event_service, region_to_check, dt.date(),
+                                        dt.time(), p, state_dispenser)
                 return
-            return await message.answer("🌍 Введите регион проведения:")
+            return await message.answer("🌍 Введите регион проведения:", keyboard=get_cancel_kb())
         except ValueError:
-            return await message.answer("⚠️ Неверный формат. Используйте ДД.ММ.ГГГГ ЧЧ:ММ")
+            return await message.answer("⚠️ Неверный формат. Используйте ДД.ММ.ГГГГ ЧЧ:ММ",
+                                        keyboard=get_cancel_kb())
     elif step == "region":
         region_input = txt.strip()
         similar = await user_service.get_similar_regions(region_input)
         if region_input not in similar or similar[0] != region_input:
             hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден."
             return await message.answer(
-                f"⚠️ {hint}\nВведите название региона точно как в списке субъектов РФ:")
-
+                f"⚠️ {hint}\nВведите название региона точно как в списке субъектов РФ:",
+                keyboard=get_cancel_kb())
         await _finish_create_ce(message, closed_event_service, region_input,
-                                state.payload.get("date"), state.payload.get("time"),
-                                p, state_dispenser)
+                                state.payload.get("date"), state.payload.get("time"), p,
+                                state_dispenser)
 
 
 async def _finish_create_ce(msg, svc, region, date, time, payload, sd):

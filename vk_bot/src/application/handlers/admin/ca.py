@@ -4,6 +4,7 @@ from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.filters import CMDRule
 from src.application.states import AdminCAStates
+from src.application.utils import get_cancel_kb, handle_cancel
 from src.domain.entities.user import UserRole, Sources
 from src.services.interfaces import IUserService
 
@@ -66,16 +67,17 @@ async def start_search(message: Message, user_service: IUserService,
                        state_dispenser: BuiltinStateDispenser):
     if not (await user_service.get_user_role(message.from_id, Sources.VK)) in [UserRole.STAFF_CA]:
         return await message.answer("Недостаточно прав")
-
-    await message.answer("Введите фамилию пользователя для поиска:")
+    await message.answer("Введите фамилию пользователя для поиска:", keyboard=get_cancel_kb())
     await state_dispenser.set(message.from_id, AdminCAStates.SEARCH_FIO, page=1)
 
 
 @router.message(state=AdminCAStates.SEARCH_FIO)
 async def search_fio(message: Message, user_service: IUserService,
                      state_dispenser: BuiltinStateDispenser):
-    if len(message.text.strip()) < 2: return await message.answer(
-        "Введите минимум 2 символа фамилии")
+    if await handle_cancel(message, state_dispenser, user_service): return
+
+    if len(message.text.strip()) < 2:
+        return await message.answer("Введите минимум 2 символа фамилии", keyboard=get_cancel_kb())
 
     await state_dispenser.set(message.from_id, AdminCAStates.SEARCH_RESULTS,
                               query=message.text.strip(), page=1)

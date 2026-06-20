@@ -3,6 +3,7 @@ from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, Text, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import ShopStates
+from src.application.utils import handle_cancel, get_cancel_kb
 from src.domain.entities import Sources
 from src.services.interfaces import IProductService, IOrderService, IBalanceService, IUserService, INotificationService
 from src.application.filters import CMDRule
@@ -83,31 +84,32 @@ async def start_buy(event: GroupTypes.MessageEvent, balance_service: IBalanceSer
 
 
 @router.message(text=["По почте"])
-async def mail_addr(message: Message, state_dispenser: BuiltinStateDispenser):
+async def mail_addr(message: Message, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     if state.state != str(ShopStates.DELIVERY_CHOICE): return
     await state_dispenser.set(message.from_id, ShopStates.MAIL_ADDR, **state.payload)
-    await message.answer("📍 Укажите адрес и индекс почтового отделения:")
+    await message.answer("📍 Укажите адрес и индекс почтового отделения:", keyboard=get_cancel_kb())
 
 
 @router.message(state=ShopStates.MAIL_ADDR)
-async def mail_fio(message: Message, state_dispenser: BuiltinStateDispenser):
+async def mail_fio(message: Message, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     await state_dispenser.set(message.from_id, ShopStates.MAIL_FIO, **state.payload, addr=message.text.strip())
-    await message.answer("👤 Укажите ваше ФИО как в паспорте:")
+    await message.answer("👤 Укажите ваше ФИО как в паспорте:", keyboard=get_cancel_kb())
 
 
 @router.message(state=ShopStates.MAIL_FIO)
-async def finalize_mail(message: Message, order_service: IOrderService, notification_service: INotificationService, balance_service: IBalanceService, state_dispenser: BuiltinStateDispenser):
+async def finalize_mail(message: Message, order_service: IOrderService, notification_service: INotificationService, balance_service: IBalanceService, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     try:
         order = await order_service.create_order(message.from_id, Sources.VK, state.payload["pid"], "mail", state.payload["addr"], message.text.strip())
         await state_dispenser.delete(message.from_id)
-        await notification_service.notify_user(message.from_id, Sources.VK,
-                                               (f"✅ Заказ #{order.id} оформлен.осылка будет "
-                                                f"отправлена по адресу: {state.payload['addr']}"))
-        kb = Keyboard(one_time=True).add(Text("На главную"))
-        await message.answer("📦 Отлично, начинаем оформлять посылку!", keyboard=kb.get_json())
+        await notification_service.notify_user(message.from_id, Sources.VK, f"✅ Заказ #{order.id} оформлен. Посылка будет отправлена по адресу: {state.payload['addr']}")
+        kb = Keyboard(one_time=True).add(Text("На главную")).get_json()
+        await message.answer("📦 Отлично, начинаем оформлять посылку!", keyboard=kb)
     except DomainError as e:
         await message.answer(f"❌ Ошибка: {e}")
 

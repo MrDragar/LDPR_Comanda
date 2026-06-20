@@ -1,8 +1,9 @@
 import logging
 from vkbottle.bot import BotLabeler, Message
-from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
+from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes, Text
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import OrderStates
+from src.application.utils import handle_cancel
 from src.domain.entities import Sources
 from src.domain.entities.user import UserRole
 from src.domain.entities.shop import OrderStatus
@@ -141,8 +142,10 @@ async def accept_order(event: GroupTypes.MessageEvent, order_service: IOrderServ
 async def ask_reason(event: GroupTypes.MessageEvent, state_dispenser: BuiltinStateDispenser):
     await state_dispenser.set(event.object.peer_id, OrderStates.CANCEL_REASON,
                               oid=event.object.payload["oid"])
+    kb = Keyboard(one_time=False).add(Text("Отмена")).get_json()
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message="⚠️ Укажите причину отклонения заказа:", random_id=0)
+                                      message="⚠️ Укажите причину отклонения заказа:", keyboard=kb,
+                                      random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
                                                            user_id=event.object.user_id,
                                                            peer_id=event.object.peer_id)
@@ -151,11 +154,13 @@ async def ask_reason(event: GroupTypes.MessageEvent, state_dispenser: BuiltinSta
 @router.message(state=OrderStates.CANCEL_REASON)
 async def process_decline(message: Message, order_service: IOrderService,
                           notification_service: INotificationService,
-                          state_dispenser: BuiltinStateDispenser):
+                          balance_service: IBalanceService, state_dispenser: BuiltinStateDispenser,
+                          user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
+
     state = await state_dispenser.get(message.from_id)
     oid = state.payload.get("oid")
     reason = message.text.strip()
-
     try:
         order = await order_service.update_order_status(oid, OrderStatus.CANCELLED, reason)
         await notification_service.notify_user(order.user_id, order.user_source,

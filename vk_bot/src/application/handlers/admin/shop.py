@@ -7,6 +7,7 @@ from vkbottle.dispatch import BuiltinStateDispenser
 
 from src.application.filters import check_role, CMDRule
 from src.application.states import AdminShopStates
+from src.application.utils import handle_cancel, get_cancel_kb
 from src.domain.entities.user import UserRole
 from src.domain.exceptions import DomainError
 from src.services.interfaces import IProductService, IUserService
@@ -21,6 +22,7 @@ async def download_file_bytes(url: str) -> bytes:
             if resp.status == 200:
                 return await resp.read()
             raise DomainError("Не удалось скачать файл")
+
 
 def _hide_kb(prods, page, total):
     kb = Keyboard(inline=True)
@@ -37,81 +39,68 @@ def _hide_kb(prods, page, total):
 
 @router.message(text=["Добавить товар"])
 async def start_add(message: Message, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
-    if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]):
-        return await message.answer("Недостаточно прав")
+    if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]): return await message.answer("Недостаточно прав")
     await state_dispenser.set(message.from_id, AdminShopStates.ADD_NAME)
-    await message.answer("📝 Введите название товара:")
+    await message.answer("📝 Введите название товара:", keyboard=get_cancel_kb())
 
 
 @router.message(state=AdminShopStates.ADD_NAME)
-async def add_desc(message: Message, state_dispenser: BuiltinStateDispenser):
+async def add_desc(message: Message, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     if not state: return
     await state_dispenser.set(message.from_id, AdminShopStates.ADD_DESC, **state.payload, name=message.text.strip())
-    await message.answer("📄 Введите описание товара:")
+    await message.answer("📄 Введите описание товара:", keyboard=get_cancel_kb())
 
 
 @router.message(state=AdminShopStates.ADD_DESC)
-async def add_qty(message: Message, state_dispenser: BuiltinStateDispenser):
+async def add_qty(message: Message, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     if not state: return
     await state_dispenser.set(message.from_id, AdminShopStates.ADD_QTY, **state.payload, desc=message.text.strip())
-    await message.answer("📦 Введите количество:")
+    await message.answer("📦 Введите количество:", keyboard=get_cancel_kb())
 
 
 @router.message(state=AdminShopStates.ADD_QTY)
-async def add_price(message: Message, state_dispenser: BuiltinStateDispenser):
+async def add_price(message: Message, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     if not state: return
     try:
         qty = int(message.text.strip())
         if qty <= 0: raise ValueError
         await state_dispenser.set(message.from_id, AdminShopStates.ADD_PRICE, **state.payload, qty=qty)
-        await message.answer("💰 Введите цену в баллах:")
+        await message.answer("💰 Введите цену в баллах:", keyboard=get_cancel_kb())
     except ValueError:
-        return await message.answer("⚠️ Введите корректное число > 0")
+        return await message.answer("⚠️ Введите корректное число > 0", keyboard=get_cancel_kb())
 
 
 @router.message(state=AdminShopStates.ADD_PRICE)
-async def finish_add(message: Message, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
+async def finish_add(message: Message, product_service: IProductService, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     if not state: return
     try:
         price = int(message.text.strip())
         if price <= 0: raise ValueError
-
-        # Сохраняем цену в стейт перед запросом файла
         await state_dispenser.set(message.from_id, AdminShopStates.ADD_PHOTO, **state.payload, price=price)
-        await message.answer("🖼 Отправьте фотографию товара (документом):")
+        await message.answer("🖼 Отправьте фотографию товара (документом):", keyboard=get_cancel_kb())
     except ValueError:
-        return await message.answer("⚠️ Введите корректное число > 0")
+        return await message.answer("⚠️ Введите корректное число > 0", keyboard=get_cancel_kb())
 
 
 @router.message(state=AdminShopStates.ADD_PHOTO)
-async def upload_photo(message: Message, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
-    if not message.attachments:
-        return await message.answer("⚠️ Пожалуйста, отправьте файл документом.")
-
+async def upload_photo(message: Message, product_service: IProductService, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
+    if not message.attachments: return await message.answer("⚠️ Пожалуйста, отправьте файл документом.", keyboard=get_cancel_kb())
     state = await state_dispenser.get(message.from_id)
     if not state: return
-
     p = state.payload
     try:
-        doc_url = max(
-            message.attachments[0].photo.sizes, key=lambda size: size.height if size.height
-            else size.width
-        ).url
+        doc_url = max(message.attachments[0].photo.sizes, key=lambda size: size.height if size.height else size.width).url
         file_bytes = await download_file_bytes(doc_url)
-
-        # Вызов сервиса, который сам загрузит фото в S3 и сохранит в БД
-        await product_service.create_product(
-            name=p["name"],
-            desc=p["desc"],
-            price=p["price"],
-            qty=p["qty"],
-            photo_bytes=file_bytes
-        )
-
+        await product_service.create_product(name=p["name"], desc=p["desc"], price=p["price"], qty=p["qty"], photo_bytes=file_bytes)
         await state_dispenser.delete(message.from_id)
         await message.answer("✅ Товар успешно добавлен в магазин!")
     except DomainError as e:
