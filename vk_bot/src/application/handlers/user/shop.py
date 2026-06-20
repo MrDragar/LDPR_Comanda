@@ -1,6 +1,7 @@
 import logging
+import aiohttp
 from vkbottle.bot import BotLabeler, Message
-from vkbottle import Keyboard, Callback, Text, GroupEventType, GroupTypes
+from vkbottle import Keyboard, Callback, Text, GroupEventType, GroupTypes, PhotoMessageUploader
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import ShopStates
 from src.application.utils import handle_cancel, get_cancel_kb
@@ -59,13 +60,71 @@ async def prev_shop(event: GroupTypes.MessageEvent, product_service: IProductSer
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_shop"))
-async def view_prod(event: GroupTypes.MessageEvent, product_service: IProductService, state_dispenser: BuiltinStateDispenser):
+async def view_prod(event: GroupTypes.MessageEvent, product_service: IProductService,
+                    state_dispenser: BuiltinStateDispenser, photo_uploader: PhotoMessageUploader):
     p = await product_service.get_product(event.object.payload["pid"])
-    if not p: return await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Товар не найден", random_id=0)
-    kb = Keyboard(inline=True).add(Callback("🛒 Купить", {"cmd": "buy_prod", "pid": p.id})).row().add(Callback("Назад", {"cmd": "back_shop"}))
-    await state_dispenser.set(event.object.peer_id, ShopStates.BROWSE, pid=p.id) # сохраняем для возврата
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"{p.image_url}\n📌 {p.name}\n💰 {p.price} баллов\n📝 {p.description}", keyboard=kb.get_json(), random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
+    if not p:
+        return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                                 message="Товар не найден", random_id=0)
+
+    kb = Keyboard(inline=True).add(
+        Callback("🛒 Купить", {"cmd": "buy_prod", "pid": p.id})).row().add(
+        Callback("Назад", {"cmd": "back_shop"}))
+    await state_dispenser.set(event.object.peer_id, ShopStates.BROWSE,
+                              pid=p.id)
+
+    attachment = ""
+    if p.image_url:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(p.image_url) as resp:
+                    if resp.status == 200:
+                        file_bytes = await resp.read()
+                        photo = await photo_uploader.upload(file_source=file_bytes,
+                                                            peer_id=event.object.peer_id)
+                        attachment = photo
+        except Exception as e:
+            logger.error(f"Failed to upload product image to VK: {e}")
+
+    text = f"📌 {p.name}\n💰 {p.price} баллов\n📝 {p.description}"
+
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message=text,
+        attachment=attachment,
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
+                                                           user_id=event.object.user_id,
+                                                           peer_id=event.object.peer_id)
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_shop"))
+async def back_shop(event: GroupTypes.MessageEvent, product_service: IProductService,
+                    balance_service: IBalanceService, state_dispenser: BuiltinStateDispenser):
+    """Возврат из карточки товара обратно в каталог магазина (на 1 страницу)"""
+    bal = await balance_service.get_balance(event.object.user_id, Sources.VK)
+    prods, total = await product_service.list_products(1)
+
+    if not prods:
+        await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                          message="Магазин временно пуст.", random_id=0)
+    else:
+        await state_dispenser.set(event.object.peer_id, ShopStates.BROWSE, page=1, total=total)
+        await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message=f"💳 Ваш баланс: {bal} баллов.\n📦 Список доступных товаров:",
+            keyboard=_shop_kb(prods, 1, total),
+            random_id=0
+        )
+
+    # Обязательно отвечаем на callback, чтобы убрать "часики" на кнопке
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id,
+        user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("buy_prod"))
