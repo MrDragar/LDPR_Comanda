@@ -5,7 +5,10 @@ from maxapi.context import MemoryContext
 from maxapi import Bot
 from src.services.interfaces import IHeadlinerService, IUserService
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+from src.application.states import RegistrationStates
 from src.domain.entities import Sources
+from src.application.handlers.auth_confirmation import request_auth_confirmation
+from src.services.interfaces import INotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,7 @@ async def finish_registration(
         bot: Bot,
         user_service: IUserService,
         headliner_service: IHeadlinerService,
+        notification_service: INotificationService,
         tg_bot: TgBot,
         log_chat: str
 ):
@@ -77,6 +81,23 @@ async def finish_registration(
         if await user_service.is_user_exists(peer_id, Sources.MAX):
             await event.message.answer("Вы уже зарегистрированы в системе.")
             return await context.clear()
+
+        if await request_auth_confirmation(
+                user_service,
+                notification_service,
+                peer_id,
+                Sources.MAX,
+                {
+                    **state_data,
+                    "username": event.from_user.username if hasattr(event.from_user, 'username') else None,
+                    "phone": state_data.get("phone"),
+                }
+        ):
+            await event.message.answer(
+                "Профиль с такими ФИО и телефоном уже есть на другой площадке.\n"
+                "Мы отправили код на первый зарегистрированный профиль. Введите его здесь."
+            )
+            return await context.set_state(RegistrationStates.AUTH_CODE)
 
         user = await user_service.create_user(
             user_id=peer_id,

@@ -27,8 +27,8 @@ async def get_birth_date(event: MessageCreated, context: MemoryContext):
         if age < 14:
             return await event.message.answer("Вам должно быть не менее 14 лет")
         await context.update_data(birth_date=birth_date)
-        await context.set_state(RegistrationStates.PHONE)
-        await event.message.answer("Введите ваш номер телефона (например, +79001234567):")
+        await context.set_state(RegistrationStates.REGION_BY_TEXT)
+        await event.message.answer("Укажите регион вашего проживания (начните вводить название):")
     except ValueError:
         await event.message.answer("Неверный формат. Используйте ДД.ММ.ГГГГ")
         

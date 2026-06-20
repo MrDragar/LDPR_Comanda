@@ -19,6 +19,7 @@ from .get_wish_to_join import router as wish_router
 from .get_home_address import router as home_router
 from .get_news_subscription import router as news_router
 from .check_subscription import router as check_router
+from .auth_confirmation import router as auth_router
 from .user.shop import router as user_shop_router
 from .admin.shop import router as admin_shop_router
 from .admin.orders import router as admin_orders_router
@@ -50,6 +51,7 @@ full_labeler.load(wish_router)
 full_labeler.load(home_router)
 full_labeler.load(news_router)
 full_labeler.load(check_router)
+full_labeler.load(auth_router)
 full_labeler.load(user_shop_router)
 full_labeler.load(admin_shop_router)
 full_labeler.load(admin_orders_router)

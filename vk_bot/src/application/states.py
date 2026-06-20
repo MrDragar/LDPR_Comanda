@@ -3,6 +3,8 @@ from vkbottle import BaseStateGroup
 
 class RegistrationStates(BaseStateGroup):
     PERSONAL_DATA = "personal_data"
+    MERGE_CONFIRM = "merge_confirm"
+    AUTH_CODE = "auth_code"
     MEMBERSHIP = "membership"
     SURNAME = "surname"
     NAME = "name"

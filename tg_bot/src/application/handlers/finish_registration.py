@@ -2,9 +2,11 @@ import logging
 
 from aiogram import types
 from aiogram.fsm.context import FSMContext
+from src.application.handlers.auth_confirmation import request_auth_confirmation
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+from src.application.states import RegistrationStates
 from src.domain.entities import Sources
-from src.services.interfaces import IUserService, IHeadlinerService
+from src.services.interfaces import IHeadlinerService, INotificationService, IUserService
 
 
 def normalize_fio(surname: str, name: str | None, patronymic: str | None) -> str:
@@ -61,12 +63,31 @@ async def sync_headliner_role(
 async def finish_registration(
     user_service: IUserService, state: FSMContext, message: types.Message,
     log_chat: str, headliner_service: IHeadlinerService,
+    notification_service: INotificationService,
 ):
     data = await state.get_data()
     news_subscription = data['news_subscription']
     if await user_service.is_user_exists(message.from_user.id):
         await state.clear()
         return await message.reply(f"Вы уже зарегистрировались.")
+
+    if await request_auth_confirmation(
+            user_service,
+            notification_service,
+            message.from_user.id,
+            Sources.TG,
+            {
+                **data,
+                "username": message.from_user.username,
+                "phone": data.get("phone"),
+            }
+    ):
+        await state.set_state(RegistrationStates.auth_code)
+        return await message.answer(
+            "Профиль с такими ФИО и телефоном уже есть на другой площадке.\n"
+            "Мы отправили код на первый зарегистрированный профиль. Введите его здесь."
+        )
+
     user = await user_service.create_user(
         user_id=message.from_user.id,
         username=message.from_user.username,

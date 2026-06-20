@@ -4,8 +4,10 @@ from aiogram import Bot as TgBot
 from vkbottle import PhotoMessageUploader
 
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+from src.application.handlers.auth_confirmation import request_auth_confirmation
+from src.application.states import RegistrationStates
 from src.domain.entities.user import Sources
-from src.services.interfaces import IHeadlinerService, IUserService
+from src.services.interfaces import IHeadlinerService, INotificationService, IUserService
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,7 @@ async def finish_registration(
         state_dispenser,
         tg_bot: TgBot,
         photo_uploader: PhotoMessageUploader,
+        notification_service: INotificationService,
         headliner_service: IHeadlinerService | None = None,
 ):
     try:
@@ -84,6 +87,24 @@ async def finish_registration(
                 random_id=0,
             )
             await state_dispenser.delete(peer_id)
+            return
+
+        if await request_auth_confirmation(
+                user_service,
+                notification_service,
+                peer_id,
+                Sources.VK,
+                {**state_payload, "username": None, "phone": state_payload.get("phone")}
+        ):
+            await ctx_api.messages.send(
+                peer_id=peer_id,
+                message=(
+                    "Профиль с такими ФИО и телефоном уже есть на другой площадке.\n"
+                    "Мы отправили код на первый зарегистрированный профиль. Введите его здесь."
+                ),
+                random_id=0,
+            )
+            await state_dispenser.set(peer_id, RegistrationStates.AUTH_CODE, **state_payload)
             return
 
         user = await user_service.create_user(

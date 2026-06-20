@@ -2,7 +2,6 @@ from vkbottle.bot import BotLabeler
 from vkbottle import GroupEventType, GroupTypes, DocMessagesUploader
 
 from src.application.filters import CMDRule
-from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.states import RegistrationStates
 from vkbottle.dispatch import BuiltinStateDispenser
 
@@ -37,17 +36,15 @@ async def handle_pd_agree(event: GroupTypes.MessageEvent,
             RegistrationStates.PERSONAL_DATA):
         return
 
-    # Переводим в следующий стейт
     await state_dispenser.set(
         state_key,
-        RegistrationStates.MEMBERSHIP,
+        RegistrationStates.PHONE,
         **state_peer.payload
     )
 
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
-        message='Вы являетесь членом ЛДПР?',
-        keyboard=get_boolean_keyboard(),
+        message="Введите ваш номер телефона (например, +79001234567):",
         random_id=0
     )
 

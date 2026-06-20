@@ -40,7 +40,7 @@ async def get_birth_date(message: types.Message, state: FSMContext):
 
     logger.debug(f"Got birth date: {birth_date}")
     await state.update_data(birth_date=birth_date)
-    await state.set_state(RegistrationStates.phone)
+    await state.set_state(RegistrationStates.email)
     await message.reply(
-        f"Введите ваш номер телефона"
+        "Введите адрес вашей электронной почты (если нет почты, отправьте прочерк '-' или слово 'нет')"
     )

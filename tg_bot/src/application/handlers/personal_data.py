@@ -3,7 +3,6 @@ import logging
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 
-from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.keyboards.personal_data_keyboard import \
     get_personal_data_keyboard
 from src.application.states import RegistrationStates
@@ -14,9 +13,8 @@ logger = logging.getLogger(__name__)
 
 @router.callback_query(F.data == "pd_agree")
 async def pd_agree(query: types.CallbackQuery, state: FSMContext):
-    await query.message.reply('Вы являетесь членом ЛДПР?',
-                              reply_markup=get_boolean_keyboard())
-    await state.set_state(RegistrationStates.membership)
+    await query.message.reply("Введите ваш номер телефона (например, +79001234567):")
+    await state.set_state(RegistrationStates.phone)
 
 
 @router.callback_query(F.data == "pd_disagree")

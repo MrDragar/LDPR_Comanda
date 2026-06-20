@@ -3,6 +3,8 @@ from aiogram.fsm.state import StatesGroup, State
 
 class RegistrationStates(StatesGroup):
     personal_data = State()
+    merge_confirm = State()
+    auth_code = State()
     membership = State()
     surname = State()
     name = State()

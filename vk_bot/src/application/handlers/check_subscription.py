@@ -10,7 +10,7 @@ from vkbottle_types.events import GroupEventType
 from src.application.handlers.finish_registration import finish_registration
 from src.application.keyboards.check_keyboard import get_check_keyboard
 from src.application.states import RegistrationStates
-from src.services.interfaces import IUserService, IHeadlinerService
+from src.services.interfaces import IHeadlinerService, INotificationService, IUserService
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ async def check_sub(
         tg_bot: TgBot,
         group_id: int,
         service_token: str,
+        notification_service: INotificationService,
         headliner_service: IHeadlinerService
 ):
     text = message.text.lower().strip() if message.text else ""
@@ -63,6 +64,7 @@ async def check_sub(
         state_dispenser=state_dispenser,
         tg_bot=tg_bot,
         photo_uploader=photo_uploader,
+        notification_service=notification_service,
         headliner_service=headliner_service
     )
     await state_dispenser.delete(message.from_id)
@@ -78,6 +80,7 @@ async def handle_group_join(
         tg_bot: TgBot,
         group_id: int,
         service_token: str,
+        notification_service: INotificationService,
         headliner_service: IHeadlinerService
 ):
     if event.object.join_type != "request":
@@ -104,6 +107,7 @@ async def handle_group_join(
                 state_dispenser=state_dispenser,
                 tg_bot=tg_bot,
                 photo_uploader=photo_uploader,
+                notification_service=notification_service,
                 headliner_service=headliner_service
             )
             await state_dispenser.delete(user_id)

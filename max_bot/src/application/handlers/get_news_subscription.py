@@ -4,7 +4,7 @@ from maxapi.types import MessageCreated
 from maxapi.context import MemoryContext
 from src.application.states import RegistrationStates
 from src.application.handlers.finish_registration import finish_registration
-from src.services.interfaces import IHeadlinerService, IUserService
+from src.services.interfaces import IHeadlinerService, INotificationService, IUserService
 
 router = Router()
 
@@ -16,6 +16,7 @@ async def get_news_sub(
         bot: Bot,
         user_service: IUserService,
         headliner_service: IHeadlinerService,
+        notification_service: INotificationService,
         tg_bot: TgBot,
         log_chat: str
 ):
@@ -25,4 +26,6 @@ async def get_news_sub(
         return
 
     await context.update_data(news_subscription=(text == 'да'))
-    await finish_registration(event, context, bot, user_service, headliner_service, tg_bot, log_chat)
+    await finish_registration(
+        event, context, bot, user_service, headliner_service, notification_service, tg_bot, log_chat
+    )

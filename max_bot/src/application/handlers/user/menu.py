@@ -6,6 +6,7 @@ from maxapi.types import MessageCreated
 from src.application.keyboards.menu_keyboard import (
     get_headliner_menu_keyboard,
     get_role_entry_keyboard,
+    get_role_menu_keyboard,
     get_role_tools_keyboard,
     get_staff_ca_headliners_keyboard,
     get_staff_ca_shop_keyboard,
@@ -40,13 +41,7 @@ async def _answer(event: MessageCreated, text: str, keyboard):
 ]))
 async def show_menu(event: MessageCreated, user_service: IUserService):
     role = await _get_user_role(event, user_service)
-    if role is None or role == UserRole.USER:
-        await _answer(event, "Меню", get_user_menu_keyboard())
-        return
-    if role == UserRole.HEADLINER:
-        await _answer(event, "Меню", get_headliner_menu_keyboard())
-        return
-    await _answer(event, "Выберите интерфейс:", get_role_entry_keyboard(role))
+    await _answer(event, "Меню", get_role_menu_keyboard(role))
 
 
 @router.message_created(F.message.body.text == "Пользователь")
@@ -108,7 +103,7 @@ async def show_staff_ca_tasks(event: MessageCreated, user_service: IUserService)
     await _answer(event, "Раздел: задачи", get_staff_ca_tasks_keyboard())
 
 
-@router.message_created(F.message.body.text == "Назад к роли")
+@router.message_created(F.message.body.text.in_(["Назад", "Назад к роли"]))
 async def back_to_role_interface(event: MessageCreated, user_service: IUserService):
     role = await _get_user_role(event, user_service)
     if role is None or role == UserRole.USER:

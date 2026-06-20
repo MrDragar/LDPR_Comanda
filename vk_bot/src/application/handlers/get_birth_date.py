@@ -25,10 +25,10 @@ async def get_birth_date(message: Message, state_dispenser: BuiltinStateDispense
 
         state = await state_dispenser.get(message.from_id)
         await state_dispenser.set(message.from_id,
-                                  RegistrationStates.PHONE,
+                                  RegistrationStates.EMAIL,
                                   **state.payload,
                                   birth_date=birth_date)
         await message.answer(
-            "Введите ваш номер телефона (например, +79001234567):")
+            "Введите адрес вашей электронной почты (если нет почты, отправьте прочерк '-' или слово 'нет')")
     except ValueError:
         return "Неверный формат. Пожалуйста, используйте ДД.ММ.ГГГГ"

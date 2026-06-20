@@ -12,8 +12,8 @@ router = Router()
 async def handle_pd_agree(event: MessageCallback, context: MemoryContext):
     if await context.get_state() != RegistrationStates.PERSONAL_DATA:
         return
-    await context.set_state(RegistrationStates.SURNAME)
-    await event.message.answer('Введите вашу фамилию:')
+    await context.set_state(RegistrationStates.PHONE)
+    await event.message.answer("Введите ваш номер телефона (например, +79001234567):")
     # await safe_ack(event)
 
 

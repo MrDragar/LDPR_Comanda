@@ -18,6 +18,7 @@ from .get_city import router as city_router
 from .get_wish_to_join import router as wish_to_join_router
 from .get_home_address import router as home_address_router
 from .get_news_subscription import router as news_subscription_router
+from .auth_confirmation import router as auth_router
 from .menu import router as menu_router
 from .user.profile import router as profile_router
 from .user.learning import router as learning_router
@@ -47,6 +48,7 @@ router.include_router(city_router)
 router.include_router(wish_to_join_router)
 router.include_router(home_address_router)
 router.include_router(news_subscription_router)
+router.include_router(auth_router)
 router.include_router(menu_router)
 router.include_router(profile_router)
 router.include_router(learning_router)
