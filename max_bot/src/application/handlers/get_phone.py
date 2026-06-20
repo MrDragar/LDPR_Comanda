@@ -1,3 +1,4 @@
+import logging
 from maxapi import Router
 from maxapi.types import MessageCreated
 from maxapi.context import MemoryContext
@@ -14,8 +15,8 @@ async def get_phone(event: MessageCreated, context: MemoryContext, user_service:
     try:
         phone = await user_service.validate_phone(event.message.body.text.strip())
         await context.update_data(phone=phone)
-        await context.set_state(RegistrationStates.REGION_BY_TEXT)
-        await event.message.answer("Укажите регион вашего проживания (начните вводить название):")
+        await context.set_state(RegistrationStates.EMAIL)
+        await event.message.answer("Введите адрес вашей электронной почты (если нет почты, отправьте прочерк '-' или слово 'нет'):")
     except exceptions.PhoneBadFormatError:
         await event.message.answer("Некорректный формат. Пример: +79991234567")
     except exceptions.PhoneBadCountryError:

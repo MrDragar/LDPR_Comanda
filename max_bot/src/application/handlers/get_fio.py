@@ -1,20 +1,17 @@
-import logging
-
 from maxapi import Router
 from maxapi.types import MessageCreated
 from maxapi.context import MemoryContext
 from src.application.states import RegistrationStates
 from src.services.interfaces import IUserService
 from src.domain import exceptions
+from src.application.keyboards.gender_keyboard import get_gender_keyboard
 
 router = Router()
 
 
 @router.message_created(RegistrationStates.SURNAME)
 async def get_surname(event: MessageCreated, context: MemoryContext, user_service: IUserService):
-    logging.debug("get_surname")
-    if not event.message.body.text:
-        return
+    if not event.message.body.text: return
     try:
         surname = await user_service.validate_fio_part(event.message.body.text.strip(), 'Фамилия')
         await context.update_data(surname=surname)
@@ -45,7 +42,7 @@ async def get_patronymic(event: MessageCreated, context: MemoryContext, user_ser
         if patronymic:
             patronymic = await user_service.validate_fio_part(patronymic, 'Отчество')
         await context.update_data(patronymic=patronymic)
-        await context.set_state(RegistrationStates.BIRTH_DATE)
-        await event.message.answer("Введите вашу дату рождения в формате ДД.ММ.ГГГГ:")
+        await context.set_state(RegistrationStates.GENDER)
+        await event.message.answer("Укажите ваш пол:", attachments=[get_gender_keyboard().as_markup()])
     except exceptions.FioFormatError as e:
         await event.message.answer(str(e))

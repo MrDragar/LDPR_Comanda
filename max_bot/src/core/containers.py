@@ -12,7 +12,8 @@ from src.domain.interfaces import (IUnitOfWork, IUserRepository, IStringSorterRe
                                    IVKTaskVerificationRepository, IS3Storage, IProductRepository,
                                    IOrderRepository, IClosedEventRepository,
                                    IEventRegistrationRepository, IActiveUserRepository,
-                                   IParticipationRepository)
+                                   IParticipationRepository, IHeadlinerRepository,
+                                   IVKPublicationRepository)
 from src.infrastructure import Database, UnitOfWork
 from src.infrastructure.interfaces import IDatabase
 from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepository,
@@ -21,15 +22,17 @@ from src.infrastructure.repositories import (UserRepository, FuzzywuzzyRepositor
                                              OnlineTaskRepository, LearningRepository,
                                              VKTaskVerificationRepository,
                                              EventRegistrationRepository, ClosedEventRepository,
-                                             ActiveUserRepository, ParticipationRepository)
+                                             ActiveUserRepository, ParticipationRepository,
+                                             VKPublicationRepository, HeadlinerRepository)
 from src.infrastructure.repositories.s3_storage import S3Storage
 from src.infrastructure.repositories.shop_repo import OrderRepository, ProductRepository
 from src.services import UserService, BalanceService, OnlineTaskService, OfflineTaskService
 from src.services.active_user_service import ActiveUserService
 from src.services.closed_event_service import ClosedEventService
+from src.services.headliner_service import HeadlinerService
 from src.services.interfaces import IUserService, IOfflineTaskService, IOnlineTaskService, \
     IBalanceService, ILearningService, IProductService, IOrderService, IClosedEventService, \
-    IActiveUserService
+    IActiveUserService, IHeadlinerService
 from src.core import config
 from src.services.learning_service import LearningService
 from src.services.notification_service import NotificationService
@@ -69,6 +72,14 @@ class Container(DeclarativeContainer):
     )
     referral_repository: providers.Factory[IReferralRepository] = providers.Factory(
         ReferralRepository, uow=uow)
+    headliner_repository: providers.Factory[IHeadlinerRepository] = providers.Factory(
+        HeadlinerRepository, uow=uow)
+    vk_publication_repository: providers.Singleton[IVKPublicationRepository] = providers.Singleton(
+        VKPublicationRepository,
+        token=config.VK_API_TOKEN,
+        group_id=config.group_id,
+        photo_token=None
+    )
     online_task_repository: providers.Factory[IOnlineTaskRepository] = providers.Factory(OnlineTaskRepository, uow=uow)
     offline_task_repository: providers.Factory[IOfflineTaskRepository] = providers.Factory(OfflineTaskRepository, uow=uow)
     accepted_task_repository: providers.Factory[IAcceptedTaskRepository] = providers.Factory(AcceptedTaskRepository, uow=uow)
@@ -125,6 +136,16 @@ class Container(DeclarativeContainer):
         max_bot_link=config.MAX_BOT_LINK,
         source=Sources.MAX,
         image_path="docs/image.jpg"
+    )
+    headliner_service: providers.Factory[IHeadlinerService] = providers.Factory(
+        HeadlinerService,
+        uow=uow,
+        headliner_repo=headliner_repository,
+        publication_repo=vk_publication_repository,
+        user_service=user_service,
+        vk_bot_link=config.VK_BOT_LINK,
+        tg_bot_link=config.TG_BOT_LINK,
+        max_bot_link=config.MAX_BOT_LINK
     )
     log_chat: providers.Object[str] = providers.Object(config.log_chat)
     admin_ids: providers.Object[list[int]] = providers.Object(config.admin_ids)

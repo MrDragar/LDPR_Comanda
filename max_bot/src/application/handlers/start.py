@@ -10,7 +10,7 @@ from src.domain.entities import Sources
 from src.services.interfaces import IUserService, IReferralService, IActiveUserService
 
 router = Router()
-catch_all_router = Router()  # Отдельный роутер для catch-all
+catch_all_router = Router()
 logger = logging.getLogger(__name__)
 
 
@@ -40,9 +40,8 @@ async def _start_logic(
 
     if ref_payload:
         try:
-            await referral_service.activate_referral(
-                ref_payload[0], ref_payload[1], user_id, Sources.MAX
-            )
+            await referral_service.activate_referral(ref_payload[0], ref_payload[1], user_id,
+                                                     Sources.MAX)
         except Exception as e:
             logger.error(f"Referral error: {e}")
 
@@ -51,8 +50,7 @@ async def _start_logic(
             role = await user_service.get_user_role(user_id, Sources.MAX)
         except Exception:
             role = None
-        await event.send("Главное меню:",
-                                   attachments=[get_role_menu_keyboard(role).as_markup()])
+        await event.send("Главное меню:", attachments=[get_role_menu_keyboard(role).as_markup()])
         return
 
     try:
@@ -76,8 +74,6 @@ async def _start_logic(
         "Готовы? Давайте знакомиться!"
     )
     await event.send(
-        "Если вы допустили ошибку при заполнении анкеты, напишите мне 'Заново' или 'Начать'")
-    await event.send(
         "Для начала дайте согласие на обработку персональных данных",
         attachments=[get_personal_data_keyboard().as_markup()]
     )
@@ -86,8 +82,7 @@ async def _start_logic(
 
 @router.bot_started()
 async def on_bot_started(event: BotStarted, context: MemoryContext, bot: Bot,
-                         user_service: IUserService,
-                         referral_service: IReferralService,
+                         user_service: IUserService, referral_service: IReferralService,
                          active_user_service: IActiveUserService):
     payload = parse_start_payload(getattr(event, 'payload', None))
     await _start_logic(event, context, bot, user_service, referral_service, active_user_service,
@@ -97,30 +92,22 @@ async def on_bot_started(event: BotStarted, context: MemoryContext, bot: Bot,
 @router.message_created(Command('start'))
 @router.message_created(F.message.body.text.lower().in_(["начать", "заново"]))
 async def on_start_message(event: MessageCreated, context: MemoryContext, bot: Bot,
-                           user_service: IUserService,
-                           referral_service: IReferralService,
+                           user_service: IUserService, referral_service: IReferralService,
                            active_user_service: IActiveUserService):
     payload = None
-    logger.debug(f"{event.message.body.text and (event.message.body.text.lower() in ['начать', 'заново'])}")
-    logger.debug(f"ON_START: {await context.get_state()}")
     if hasattr(event, 'command') and hasattr(event.command, 'payload'):
         payload = parse_start_payload(event.command.payload)
     elif hasattr(event.message, 'payload'):
         payload = parse_start_payload(event.message.payload)
-
     await _start_logic(event, context, bot, user_service, referral_service, active_user_service,
                        payload)
 
 
 @catch_all_router.message_created(lambda msg: True)
 async def catch_all_handler(event: MessageCreated, context: MemoryContext, bot: Bot,
-                            user_service: IUserService,
-                            referral_service: IReferralService,
+                            user_service: IUserService, referral_service: IReferralService,
                             active_user_service: IActiveUserService):
-    logger.debug("catch_all_handler")
     state = await context.get_state()
-    logger.debug(f"CATCH_ALL: {await context.get_state()}")
     if state is not None:
         return
-
     await on_start_message(event, context, bot, user_service, referral_service, active_user_service)
