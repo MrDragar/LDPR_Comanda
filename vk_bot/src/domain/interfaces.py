@@ -29,7 +29,7 @@ class IUserRepository(ABC):
         ...
 
     @abstractmethod
-    async def is_phone_number_existing(self, phone_number: str) -> bool:
+    async def is_phone_number_existing(self, phone_number: str, source: Sources | None = None) -> bool:
         ...
 
     @abstractmethod
@@ -47,6 +47,9 @@ class IUserRepository(ABC):
     @abstractmethod
     async def search_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int,
                             limit: int) -> list[User]: ...
+
+    @abstractmethod
+    async def search_by_phone(self, phone_number: str) -> list[User]: ...
 
     @abstractmethod
     async def get_completed_tasks_count(self, user_id: int, source: Sources,

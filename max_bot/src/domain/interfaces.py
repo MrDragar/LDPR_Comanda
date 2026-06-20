@@ -4,6 +4,7 @@ from datetime import date
 
 from .entities import User, Sources, LearningTestAttempt, Product, Order, OrderStatus, ClosedEvent, \
     EventRegistration
+from .entities.headliner import Headliner, HeadlinerFollower
 from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, \
     Transaction, TaskStatus, TaskType
 
@@ -28,7 +29,7 @@ class IUserRepository(ABC):
         ...
 
     @abstractmethod
-    async def is_phone_number_existing(self, phone_number: str) -> bool:
+    async def is_phone_number_existing(self, phone_number: str, source: Sources | None = None) -> bool:
         ...
 
     @abstractmethod
@@ -46,6 +47,9 @@ class IUserRepository(ABC):
     @abstractmethod
     async def search_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int,
                             limit: int) -> list[User]: ...
+
+    @abstractmethod
+    async def search_by_phone(self, phone_number: str) -> list[User]: ...
 
     @abstractmethod
     async def get_completed_tasks_count(self, user_id: int, source: Sources,
@@ -89,6 +93,53 @@ class IReferralRepository(ABC):
 
     @abstractmethod
     async def get_count_invitees(self, inviter_id: int, inviter_source: Sources) -> int:
+        ...
+
+
+class IHeadlinerRepository(ABC):
+    @abstractmethod
+    async def create(self, headliner: Headliner) -> Headliner:
+        ...
+
+    @abstractmethod
+    async def update(self, headliner_id: int, **kwargs) -> Headliner:
+        ...
+
+    @abstractmethod
+    async def get_by_id(self, headliner_id: int) -> Headliner | None:
+        ...
+
+    @abstractmethod
+    async def get_by_user(self, user_id: int, user_source: Sources) -> Headliner | None:
+        ...
+
+    @abstractmethod
+    async def get_all(self) -> list[Headliner]:
+        ...
+
+    @abstractmethod
+    async def delete(self, headliner_id: int) -> Headliner | None:
+        ...
+
+    @abstractmethod
+    async def add_follower(
+            self,
+            headliner_id: int,
+            follower_id: int,
+            follower_source: Sources
+    ) -> HeadlinerFollower:
+        ...
+
+    @abstractmethod
+    async def is_follower_exists(self, follower_id: int, follower_source: Sources) -> bool:
+        ...
+
+    @abstractmethod
+    async def get_followers(self, headliner_id: int) -> list[HeadlinerFollower]:
+        ...
+
+    @abstractmethod
+    async def count_followers(self, headliner_id: int) -> int:
         ...
 
 

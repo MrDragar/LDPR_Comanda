@@ -13,7 +13,7 @@ from src.application.keyboards.menu_keyboard import (
     get_staff_ca_shop_keyboard,
     get_staff_ca_tasks_keyboard,
     get_user_menu_keyboard,
-    get_headliner_menu_keyboard
+    get_headliner_menu_keyboard,
 )
 from src.application.states import UserTaskStates
 from src.domain.entities import Sources
@@ -59,6 +59,7 @@ async def show_user_interface(message: Message) -> None:
     "Сотрудник ЦА",
     "Координатор РО",
     "Сотрудник РО",
+    "Хэдлайнер",
     "Хедлайнер",
 ])
 async def show_role_interface(message: Message, user_service: IUserService) -> None:
@@ -67,7 +68,12 @@ async def show_role_interface(message: Message, user_service: IUserService) -> N
         await message.answer("Этот интерфейс недоступен для вашей роли.")
         return
 
-    if message.text not in (role.value,):
+    headliner_names = ("Хэдлайнер", "Хедлайнер")
+    if role == UserRole.HEADLINER:
+        is_current_role = message.text in headliner_names
+    else:
+        is_current_role = message.text == role.value
+    if not is_current_role:
         await message.answer("Этот интерфейс недоступен для вашей роли.")
         return
 
@@ -89,7 +95,7 @@ async def show_staff_ca_shop(message: Message, user_service: IUserService) -> No
     await message.answer("Раздел: магазин", keyboard=get_staff_ca_shop_keyboard())
 
 
-@router.message(text=["Хедлайнеры"])
+@router.message(text=["Хедлайнеры", "Хэдлайнеры"])
 async def show_staff_ca_headliners(message: Message, user_service: IUserService) -> None:
     if not await _require_staff_ca(message, user_service):
         return

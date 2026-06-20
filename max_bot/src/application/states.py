@@ -20,3 +20,20 @@ class LotteryStates(StatesGroup):
     CITY = State()
     WISH_TO_JOIN = State()
     HOME_ADDRESS = State()
+
+
+class HeadlinerStates(StatesGroup):
+    CREATE_PROFILE_LINK = State()
+    CREATE_FIO = State()
+    CREATE_PHONE = State()
+    CREATE_POSITION = State()
+    CREATE_TOPIC = State()
+    CREATE_GROUP_LINK = State()
+    CREATE_PHOTO = State()
+    EDIT_SEARCH = State()
+    EDIT_FIELD = State()
+    EDIT_VALUE = State()
+    DELETE_SEARCH = State()
+    SEARCH = State()
+    WELCOME_TEXT = State()
+    MAILING_TEXT = State()

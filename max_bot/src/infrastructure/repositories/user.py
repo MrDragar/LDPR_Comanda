@@ -54,9 +54,11 @@ class UserRepository(IUserRepository):
         logger.debug(f"Found user {await user_orm.to_domain()}")
         return await user_orm.to_domain()
 
-    async def is_phone_number_existing(self, phone_number: str) -> bool:
+    async def is_phone_number_existing(self, phone_number: str, source: Sources | None = None) -> bool:
         session = self.__uow.get_session()
         stmt = select(UserORM).where(UserORM.phone_number == phone_number)
+        if source is not None:
+            stmt = stmt.where(UserORM.source == source)
         user_orm = await session.scalar(stmt)
         logger.debug(user_orm)
         return user_orm is not None
@@ -143,6 +145,12 @@ class UserRepository(IUserRepository):
         if patronymic:
             stmt = stmt.where(UserORM.patronymic.ilike(f"%{patronymic}%"))
         stmt = stmt.offset(skip).limit(limit)
+        result = await session.execute(stmt)
+        return [await u.to_domain() for u in result.scalars().all()]
+
+    async def search_by_phone(self, phone_number: str) -> list[User]:
+        session = self.__uow.get_session()
+        stmt = select(UserORM).where(UserORM.phone_number == phone_number)
         result = await session.execute(stmt)
         return [await u.to_domain() for u in result.scalars().all()]
 

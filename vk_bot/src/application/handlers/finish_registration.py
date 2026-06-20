@@ -10,6 +10,61 @@ from src.services.interfaces import IHeadlinerService, IUserService
 logger = logging.getLogger(__name__)
 
 
+def normalize_fio(surname: str, name: str | None, patronymic: str | None) -> str:
+    parts = [surname, name, patronymic]
+    return " ".join(part.strip().lower() for part in parts if part and part.strip())
+
+
+def normalize_phone(phone_number: str | None) -> str:
+    return "".join(symbol for symbol in (phone_number or "") if symbol.isdigit())
+
+
+async def sync_headliner_role(
+        user,
+        source: Sources,
+        user_service: IUserService,
+        headliner_service: IHeadlinerService | None
+):
+    if headliner_service is None:
+        return user.role
+
+    existing = await headliner_service.get_by_user(user.id, source)
+    if existing is not None:
+        return await user_service.get_user_role(user.id, source)
+
+    user_fio = normalize_fio(user.surname, user.name, user.patronymic)
+    user_phone = normalize_phone(user.phone_number)
+    for headliner in await headliner_service.get_all():
+        try:
+            headliner_user = await user_service.get_user(headliner.user_id, headliner.user_source)
+        except Exception:
+            continue
+
+        if normalize_phone(headliner_user.phone_number) != user_phone:
+            continue
+        if normalize_fio(headliner_user.surname, headliner_user.name, headliner_user.patronymic) != user_fio:
+            continue
+
+        await headliner_service.create_headliner(
+            user_id=user.id,
+            user_source=source,
+            fio=headliner.fio,
+            position=headliner.position,
+            topic=headliner.topic,
+            group_link=headliner.group_link,
+            photo=headliner.photo,
+        )
+        if headliner.welcome_message:
+            await headliner_service.update_welcome_message_by_user(
+                user.id,
+                source,
+                headliner.welcome_message
+            )
+        return await user_service.get_user_role(user.id, source)
+
+    return user.role
+
+
 async def finish_registration(
         user_service: IUserService,
         peer_id: int,
@@ -48,6 +103,8 @@ async def finish_registration(
             home_address=state_payload.get("home_address"),
             news_subscription=state_payload["news_subscription"],
         )
+
+        user_role = await sync_headliner_role(user, Sources.VK, user_service, headliner_service)
 
         referral_headliner = None
         headliner_id = state_payload.get("headliner_id")
@@ -88,7 +145,7 @@ async def finish_registration(
         await ctx_api.messages.send(
             peer_id=peer_id,
             message="Меню",
-            keyboard=get_role_menu_keyboard(user.role),
+            keyboard=get_role_menu_keyboard(user_role),
             random_id=0,
         )
 

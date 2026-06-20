@@ -61,6 +61,8 @@ class IUserService(ABC):
     @abstractmethod
     async def search_users_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]: ...
     @abstractmethod
+    async def search_users_by_phone(self, phone_number: str) -> list[User]: ...
+    @abstractmethod
     async def update_user_role(self, user_id: int, source: Sources, role: UserRole) -> None: ...
     @abstractmethod
     async def get_completed_tasks_count(self, user_id: int, source: Sources, is_online: bool) -> int: ...
@@ -168,7 +170,8 @@ class IHeadlinerService(ABC):
             position: str,
             topic: str,
             group_link: str,
-            photo: str | None
+            photo: str | None,
+            user_source: Sources = Sources.TG
     ) -> Headliner:
         ...
 

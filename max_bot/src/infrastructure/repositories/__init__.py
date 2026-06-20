@@ -9,6 +9,7 @@ from .vk_verification import VKTaskVerificationRepository
 from .closed_event_repo import ClosedEventRepository, EventRegistrationRepository
 from .active_user import ActiveUserRepository
 from .participation import ParticipationRepository
+from .headliner import HeadlinerRepository
 
 
 __all__ = [
@@ -16,5 +17,5 @@ __all__ = [
     'OnlineTaskRepository', 'OfflineTaskRepository', 'AcceptedTaskRepository',
     'TransactionRepository', 'LearningRepository', 'VKTaskVerificationRepository',
     'ClosedEventRepository', 'EventRegistrationRepository', 'ActiveUserRepository',
-    'ParticipationRepository'
+    'ParticipationRepository', 'HeadlinerRepository'
 ]

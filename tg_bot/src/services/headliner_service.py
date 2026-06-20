@@ -4,6 +4,11 @@ from src.domain.interfaces import IHeadlinerRepository, IUnitOfWork, IVKPublicat
 from src.services.interfaces import IHeadlinerService, IUserService
 
 
+def normalize_fio(surname: str, name: str | None, patronymic: str | None) -> str:
+    parts = [surname, name, patronymic]
+    return " ".join(part.strip().lower() for part in parts if part and part.strip())
+
+
 class HeadlinerService(IHeadlinerService):
     def __init__(
             self,
@@ -30,12 +35,13 @@ class HeadlinerService(IHeadlinerService):
             position: str,
             topic: str,
             group_link: str,
-            photo: str | None
+            photo: str | None,
+            user_source: Sources = Sources.TG
     ) -> Headliner:
         async with self.__uow.atomic():
-            existing = await self.__headliner_repo.get_by_user(user_id, Sources.VK)
+            existing = await self.__headliner_repo.get_by_user(user_id, user_source)
             if existing:
-                return await self.__headliner_repo.update(
+                headliner = await self.__headliner_repo.update(
                     existing.id,
                     fio=fio,
                     position=position,
@@ -43,18 +49,56 @@ class HeadlinerService(IHeadlinerService):
                     group_link=group_link,
                     photo=photo
                 )
+            else:
+                headliner = await self.__headliner_repo.create(Headliner(
+                    user_id=user_id,
+                    user_source=user_source,
+                    fio=fio,
+                    position=position,
+                    topic=topic,
+                    group_link=group_link,
+                    photo=photo
+                ))
 
-            headliner = await self.__headliner_repo.create(Headliner(
-                user_id=user_id,
-                user_source=Sources.VK,
-                fio=fio,
-                position=position,
-                topic=topic,
-                group_link=group_link,
-                photo=photo
-            ))
-        await self.__user_service.update_user_role(user_id, Sources.VK, UserRole.HEADLINER)
+        await self.__user_service.update_user_role(user_id, user_source, UserRole.HEADLINER)
+        await self.__sync_headliners_by_profile(headliner)
         return headliner
+
+    async def __sync_headliners_by_profile(self, source_headliner: Headliner) -> None:
+        source_user = await self.__user_service.get_user(
+            source_headliner.user_id,
+            source_headliner.user_source
+        )
+        source_fio = normalize_fio(source_user.surname, source_user.name, source_user.patronymic)
+        users = await self.__user_service.search_users_by_phone(source_user.phone_number)
+
+        for user in users:
+            if normalize_fio(user.surname, user.name, user.patronymic) != source_fio:
+                continue
+
+            async with self.__uow.atomic():
+                existing = await self.__headliner_repo.get_by_user(user.id, user.source)
+                if existing:
+                    await self.__headliner_repo.update(
+                        existing.id,
+                        fio=source_headliner.fio,
+                        position=source_headliner.position,
+                        topic=source_headliner.topic,
+                        group_link=source_headliner.group_link,
+                        photo=source_headliner.photo
+                    )
+                else:
+                    await self.__headliner_repo.create(Headliner(
+                        user_id=user.id,
+                        user_source=user.source,
+                        fio=source_headliner.fio,
+                        position=source_headliner.position,
+                        topic=source_headliner.topic,
+                        group_link=source_headliner.group_link,
+                        photo=source_headliner.photo
+                    ))
+
+            await self.__user_service.update_user_role(user.id, user.source, UserRole.HEADLINER)
 
     async def publish_article(self, headliner: Headliner) -> tuple[int | None, str | None]:
         description = (
@@ -145,7 +189,7 @@ class HeadlinerService(IHeadlinerService):
             return await self.__headliner_repo.count_followers(headliner_id)
 
     def make_referral_links(self, headliner_id: int) -> dict[str, str]:
-        payload = f"hl_{headliner_id}_vk"
+        payload = f"hl_{headliner_id}_tg"
         return {
             "VK": f"{self.__vk_bot_link}?ref={payload}",
             "MAX": f"{self.__max_bot_link}?start={payload}",

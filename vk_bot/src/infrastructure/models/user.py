@@ -15,7 +15,7 @@ class UserORM(Base):
     name: Mapped[str] = mapped_column("name", nullable=True)
     patronymic: Mapped[str] = mapped_column("patronymic", nullable=True)
     birth_date: Mapped[date] = mapped_column("birth_date", Date, nullable=True)
-    phone_number: Mapped[str] = mapped_column("phone_number", nullable=False, unique=True)
+    phone_number: Mapped[str] = mapped_column("phone_number", nullable=False)
     region: Mapped[str] = mapped_column("region", nullable=True)
     email: Mapped[str] = mapped_column("email", nullable=True)
     gender: Mapped[str] = mapped_column("gender", nullable=True)

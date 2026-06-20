@@ -22,6 +22,7 @@ admin_ids = json.loads(os.getenv("ADMIN_IDS", '[]'))
 VK_BOT_LINK = os.getenv("VK_BOT_LINK", "https://vk.me/ldpr_bot")
 TG_BOT_LINK = os.getenv("TG_BOT_LINK", "https://t.me/ldpr_bot")
 MAX_BOT_LINK = os.getenv("MAX_BOT_LINK", "https://max.ru/ldpr_bot")
+DB_PATH = os.getenv("DB_PATH") or str(BASE_DIR / "db.sqlite3")
 
 group_id = os.getenv("GROUP_ID") or os.getenv("VK_GROUP_ID")
 SERVICE_TOKEN = os.getenv("SERVICE_TOKEN")

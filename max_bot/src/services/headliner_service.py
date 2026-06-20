@@ -1,6 +1,6 @@
 from src.domain.entities.headliner import Headliner, HeadlinerFollower
 from src.domain.entities.user import Sources, UserRole
-from src.domain.interfaces import IHeadlinerRepository, IUnitOfWork, IVKPublicationRepository
+from src.domain.interfaces import IHeadlinerRepository, IUnitOfWork
 from src.services.interfaces import IHeadlinerService, IUserService
 
 
@@ -14,7 +14,6 @@ class HeadlinerService(IHeadlinerService):
             self,
             uow: IUnitOfWork,
             headliner_repo: IHeadlinerRepository,
-            publication_repo: IVKPublicationRepository,
             user_service: IUserService,
             vk_bot_link: str,
             tg_bot_link: str,
@@ -22,7 +21,6 @@ class HeadlinerService(IHeadlinerService):
     ):
         self.__uow = uow
         self.__headliner_repo = headliner_repo
-        self.__publication_repo = publication_repo
         self.__user_service = user_service
         self.__vk_bot_link = vk_bot_link
         self.__tg_bot_link = tg_bot_link
@@ -36,7 +34,7 @@ class HeadlinerService(IHeadlinerService):
             topic: str,
             group_link: str,
             photo: str | None,
-            user_source: Sources = Sources.VK
+            user_source: Sources = Sources.MAX
     ) -> Headliner:
         async with self.__uow.atomic():
             existing = await self.__headliner_repo.get_by_user(user_id, user_source)
@@ -101,21 +99,7 @@ class HeadlinerService(IHeadlinerService):
             await self.__user_service.update_user_role(user.id, user.source, UserRole.HEADLINER)
 
     async def publish_article(self, headliner: Headliner) -> tuple[int | None, str | None]:
-        description = (
-            f"Должность: {headliner.position}\n"
-            f"Тема: {headliner.topic}\n"
-            f"Группа: {headliner.group_link}\n\n"
-            "Присоединяйтесь к команде хедлайнера через реферальную ссылку в боте."
-        )
-        try:
-            post_id = await self.__publication_repo.publish_headliner(
-                name=headliner.fio,
-                description=description,
-                photo=headliner.photo
-            )
-            return post_id, None
-        except Exception as e:
-            return None, str(e)
+        return None, "Публикация в витрину для MAX-бота не используется."
 
     async def get_by_user(self, user_id: int, user_source: Sources) -> Headliner | None:
         async with self.__uow.atomic():
@@ -128,6 +112,10 @@ class HeadlinerService(IHeadlinerService):
     async def get_all(self) -> list[Headliner]:
         async with self.__uow.atomic():
             return await self.__headliner_repo.get_all()
+
+    async def update_headliner(self, headliner_id: int, **kwargs) -> Headliner:
+        async with self.__uow.atomic():
+            return await self.__headliner_repo.update(headliner_id, **kwargs)
 
     async def delete_headliner(self, headliner_id: int) -> Headliner | None:
         async with self.__uow.atomic():
@@ -189,7 +177,7 @@ class HeadlinerService(IHeadlinerService):
             return await self.__headliner_repo.count_followers(headliner_id)
 
     def make_referral_links(self, headliner_id: int) -> dict[str, str]:
-        payload = f"hl_{headliner_id}_vk"
+        payload = f"hl_{headliner_id}_max"
         return {
             "VK": f"{self.__vk_bot_link}?ref={payload}",
             "MAX": f"{self.__max_bot_link}?start={payload}",

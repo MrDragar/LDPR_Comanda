@@ -1,11 +1,6 @@
-from vkbottle.tools.formatting import Formatter, bold, italic, Format, _format
 from src.domain.entities import Repost
 from src.domain.entities.user import Sources
 from src.services.interfaces import IReferralLinkService
-
-
-def url(string: str | Format, /, *, href: str) -> Format:
-    return _format(string, "url", {"url": href})
 
 
 class ReferralLinkService(IReferralLinkService):
@@ -23,13 +18,13 @@ class ReferralLinkService(IReferralLinkService):
         max_url = f"{self.max_bot_link}?start={user_id}_{self.source.value}"
 
         text = (
-                bold("🦅 Присоединяйся к Большой команде ЛДПР!") + "\n\n" +
-                "Стань частью движения, которое меняет страну к лучшему.\n" +
-                "Выполняй задания, проходи обучение, зарабатывай баллы и обменивай их на эксклюзивные подарки в нашем магазине!\n\n"
-                + "Приглашай друзей и получай дополнительные баллы за каждого:\n"
-                f"🔹 ВКонтакте: " + url('Перейти в бота ВК', href=vk_url) + "\n" +
-                f"🔹 Макс: " + url('Перейти в бота Макс', href=max_url) + "\n" +
-                f"🔹 Telegram: " + url('Перейти в бота TG', href=tg_url) + "\n\n"
-                + italic("Твоё будущее и будущее страны — в твоих руках!")
+            "🦅 Присоединяйся к Большой команде ЛДПР!\n\n"
+            "Стань частью движения, которое меняет страну к лучшему.\n"
+            "Выполняй задания, проходи обучение, зарабатывай баллы и обменивай их на эксклюзивные подарки в нашем магазине!\n\n"
+            "Приглашай друзей и получай дополнительные баллы за каждого:\n"
+            f"🔹 ВКонтакте: {vk_url}\n"
+            f"🔹 Telegram: {tg_url}\n"
+            f"🔹 MAX: {max_url}\n\n"
+            "Твоё будущее и будущее страны — в твоих руках!"
         )
         return Repost(text=text, image_path=self.image_path)

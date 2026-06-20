@@ -35,6 +35,14 @@ def get_back_kb():
     return builder.as_markup(resize_keyboard=True)
 
 
+def get_referral_kb():
+    """Клавиатура после реферальной ссылки"""
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="На главную")
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
+
+
 # ==================== ГЛАВНОЕ МЕНЮ ПРОФИЛЯ ====================
 @router.message(F.text == "Личный кабинет")
 async def profile(message: Message, state: FSMContext, user_service: IUserService,
@@ -71,30 +79,17 @@ async def referral_link(message: Message, state: FSMContext,
                         referral_link_service: IReferralLinkService):
     repost_data = referral_link_service.generate_post(message.from_user.id)
 
-    vk_ref = f"{referral_link_service.vk_bot_link}?ref={message.from_user.id}_{referral_link_service.source.value}"
-    tg_ref = f"{referral_link_service.tg_bot_link}?start={message.from_user.id}_{referral_link_service.source.value}"
-    max_ref = f"{referral_link_service.max_bot_link}?start={message.from_user.id}_{referral_link_service.source.value}"
-
-    links_text = (
-        "🔗 Ваши реферальные ссылки:\n"
-        f"🔹 ВКонтакте: {vk_ref}\n"
-        f"🔹 Макс: {max_ref}\n"
-        f"🔹 Telegram: {tg_ref}\n"
-        "Копируйте и отправляйте друзьям!"
-    )
-    await message.answer(links_text)
-
     # Читаем локальный файл через FSInputFile
     try:
         photo_file = FSInputFile(repost_data.image_path)
         await message.answer_photo(
             photo=photo_file,
             caption=repost_data.text,
-            reply_markup=get_back_kb()
+            reply_markup=get_referral_kb()
         )
     except Exception as e:
         logger.error(f"Failed to send repost image from path {repost_data.image_path}: {e}")
-        await message.answer(repost_data.text, reply_markup=get_back_kb())
+        await message.answer(repost_data.text, reply_markup=get_referral_kb())
 
     await state.set_state(ProfileStates.referrals)
 

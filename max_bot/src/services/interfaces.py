@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import date, time
 from src.domain.entities import Repost, Sources, User, OrderStatus, Order, Product, \
     EventRegistration, ClosedEvent
+from src.domain.entities.headliner import Headliner, HeadlinerFollower
 from src.domain.entities.task import OnlineTask, OfflineTask, AcceptedOfflineTask, TaskStatus, \
     TaskType
 from src.domain.entities.user import UserRole
@@ -60,6 +61,8 @@ class IUserService(ABC):
     async def get_user(self, user_id: int, user_source: Sources) -> User: ...
     @abstractmethod
     async def search_users_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]: ...
+    @abstractmethod
+    async def search_users_by_phone(self, phone_number: str) -> list[User]: ...
     @abstractmethod
     async def update_user_role(self, user_id: int, source: Sources, role: UserRole) -> None: ...
     @abstractmethod
@@ -158,6 +161,75 @@ class IReferralLinkService(ABC):
     def generate_post(self, user_id: int) -> Repost:
         ...
     
+
+class IHeadlinerService(ABC):
+    @abstractmethod
+    async def create_headliner(
+            self,
+            user_id: int,
+            fio: str,
+            position: str,
+            topic: str,
+            group_link: str,
+            photo: str | None,
+            user_source: Sources = Sources.MAX
+    ) -> Headliner:
+        ...
+
+    @abstractmethod
+    async def get_by_user(self, user_id: int, user_source: Sources) -> Headliner | None:
+        ...
+
+    @abstractmethod
+    async def get_by_id(self, headliner_id: int) -> Headliner | None:
+        ...
+
+    @abstractmethod
+    async def get_all(self) -> list[Headliner]:
+        ...
+
+    @abstractmethod
+    async def update_headliner(self, headliner_id: int, **kwargs) -> Headliner:
+        ...
+
+    @abstractmethod
+    async def delete_headliner(self, headliner_id: int) -> Headliner | None:
+        ...
+
+    @abstractmethod
+    async def get_rating(self) -> list[tuple[Headliner, int]]:
+        ...
+
+    @abstractmethod
+    async def update_welcome_message_by_user(
+            self,
+            user_id: int,
+            user_source: Sources,
+            welcome_message: str
+    ) -> Headliner | None:
+        ...
+
+    @abstractmethod
+    async def attach_follower(
+            self,
+            headliner_id: int,
+            follower_id: int,
+            follower_source: Sources
+    ) -> HeadlinerFollower | None:
+        ...
+
+    @abstractmethod
+    async def get_followers(self, headliner_id: int) -> list[HeadlinerFollower]:
+        ...
+
+    @abstractmethod
+    async def count_followers(self, headliner_id: int) -> int:
+        ...
+
+    @abstractmethod
+    def make_referral_links(self, headliner_id: int) -> dict[str, str]:
+        ...
+
 
 class INotificationService(ABC):
     @abstractmethod

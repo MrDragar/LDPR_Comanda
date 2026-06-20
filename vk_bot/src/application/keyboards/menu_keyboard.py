@@ -31,7 +31,6 @@ def get_staff_ro_menu_keyboard() -> str:
     kb.add(Text("Проверить офлайн задачи"))
     kb.add(Text("Управление заказами")).row()
     kb.add(Text("Список участников мероприятия")).row()
-    # kb.add(Text("Назад")).row()
     return kb.get_json()
 
 
@@ -43,7 +42,6 @@ def get_coordinator_ro_menu_keyboard() -> str:
     kb.add(Text("Создать офлайн задачу"))
     kb.add(Text("Управление пользователями")).row()
     kb.add(Text("Создать закрытое мероприятие")).row()
-    # kb.add(Text("Назад")).row()
     return kb.get_json()
 
 

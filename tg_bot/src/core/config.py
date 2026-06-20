@@ -1,14 +1,17 @@
 import json
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parents[3]
+load_dotenv(BASE_DIR / ".env", override=True)
+load_dotenv(override=True)
 VK_API_TOKEN = os.getenv("VK_API_TOKEN")
 TG_API_TOKEN = os.getenv("TG_API_TOKEN")
 MAX_API_TOKEN = os.getenv("MAX_API_TOKEN")
 
-proxy = os.getenv("PROXY", None)
+proxy = os.getenv("PROXY") or None
 
 log_chat = os.getenv("LOG_CHAT")
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -18,6 +21,7 @@ admin_ids = json.loads(os.getenv("ADMIN_IDS", '[]'))
 VK_BOT_LINK = os.getenv("VK_BOT_LINK", "https://vk.me/ldpr_bot")
 TG_BOT_LINK = os.getenv("TG_BOT_LINK", "https://t.me/ldpr_bot")
 MAX_BOT_LINK = os.getenv("MAX_BOT_LINK", "https://max.ru/ldpr_bot")
+DB_PATH = os.getenv("DB_PATH") or str(BASE_DIR / "db.sqlite3")
 VERIFY_CHAT_ID = int(os.getenv("VERIFY_CHAT_ID", "0"))
 
 group_id = os.getenv("GROUP_ID")

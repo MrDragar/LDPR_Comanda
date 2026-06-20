@@ -30,6 +30,11 @@ def get_back_kb():
             .add(Text("На главную")).get_json())
 
 
+def get_referral_kb():
+    return (Keyboard(one_time=False)
+            .add(Text("На главную")).get_json())
+
+
 async def _get_main_menu_kb(user_service: IUserService, user_id: int) -> str:
     """Безопасное получение клавиатуры главного меню по роли"""
     try:
@@ -102,28 +107,14 @@ async def referral_link(message: Message, referral_link_service: IReferralLinkSe
             f"Telegram: {links['Telegram']}\n\n"
             "Все зарегистрированные по этим ссылкам попадут в вашу команду."
         )
-        return await message.answer(links_text, keyboard=get_back_kb())
+        return await message.answer(links_text, keyboard=get_referral_kb())
 
     repost_data = referral_link_service.generate_post(message.from_id)
-    vk_ref = f"{referral_link_service.vk_bot_link}?ref={message.from_id}_{referral_link_service.source.value}"
-    tg_ref = f"{referral_link_service.tg_bot_link}?start={message.from_id}_{referral_link_service.source.value}"
-    max_ref = (f"{referral_link_service.max_bot_link}?start={message.from_id}"
-               f"_{referral_link_service.source.value}")
-
-    links_text = (
-        "Ваши реферальные ссылки:\n\n"
-        f"ВКонтакте: {vk_ref}\n"
-        f"Макс: {max_ref}\n"
-        f"Telegram: {tg_ref}\n\n"
-        "Копируйте и отправляйте друзьям!"
-    )
-    await message.answer(links_text, keyboard=get_back_kb())
-
     photo = await photo_uploader.upload(repost_data.image_path, peer_id=message.peer_id)
     await message.answer(
         message=repost_data.text,
         attachment=photo,
-        keyboard=get_back_kb()
+        keyboard=get_referral_kb()
     )
 
 

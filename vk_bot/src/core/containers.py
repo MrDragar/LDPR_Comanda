@@ -44,7 +44,7 @@ from src.services.headliner_service import HeadlinerService
 
 class Container(DeclarativeContainer):
     database: providers.Singleton[IDatabase] = providers.Singleton(
-        Database, "db.sqlite3"
+        Database, config.DB_PATH
     )
     uow: providers.Singleton[IUnitOfWork] = providers.Singleton(
         UnitOfWork, database=database

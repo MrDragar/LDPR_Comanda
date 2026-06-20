@@ -113,7 +113,7 @@ class UserService(IUserService):
             raise PhoneBadCountryError
 
         async with self.__uow.atomic():
-            is_existing = await self.__user_repo.is_phone_number_existing(phone_number)
+            is_existing = await self.__user_repo.is_phone_number_existing(phone_number, self.__source)
             if is_existing:
                 raise PhoneAlreadyExistsError
         return phone_number
@@ -210,6 +210,16 @@ class UserService(IUserService):
     async def search_users_by_fio(self, surname: str, name: str, patronymic: str | None, skip: int, limit: int) -> list[User]:
         async with self.__uow.atomic():
             return await self.__user_repo.search_by_fio(surname, name, patronymic, skip, limit)
+
+    async def search_users_by_phone(self, phone_number: str) -> list[User]:
+        phone_number = phone_number.strip()
+        if phone_number.startswith("+7"):
+            phone_number = "8" + phone_number[2:]
+        phone_number = "".join([symbol for symbol in phone_number if symbol.isdigit()])
+        if len(phone_number) == 11 and phone_number.startswith("7"):
+            phone_number = "8" + phone_number[1:]
+        async with self.__uow.atomic():
+            return await self.__user_repo.search_by_phone(phone_number)
 
     async def update_user_role(self, user_id: int, source: Sources, role: UserRole) -> None:
         async with self.__uow.atomic():

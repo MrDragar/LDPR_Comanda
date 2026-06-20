@@ -3,7 +3,59 @@ import logging
 from aiogram import types
 from aiogram.fsm.context import FSMContext
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+from src.domain.entities import Sources
 from src.services.interfaces import IUserService, IHeadlinerService
+
+
+def normalize_fio(surname: str, name: str | None, patronymic: str | None) -> str:
+    parts = [surname, name, patronymic]
+    return " ".join(part.strip().lower() for part in parts if part and part.strip())
+
+
+def normalize_phone(phone_number: str | None) -> str:
+    return "".join(symbol for symbol in (phone_number or "") if symbol.isdigit())
+
+
+async def sync_headliner_role(
+    user,
+    user_service: IUserService,
+    headliner_service: IHeadlinerService
+):
+    existing = await headliner_service.get_by_user(user.id, Sources.TG)
+    if existing is not None:
+        return await user_service.get_user_role(user.id, Sources.TG)
+
+    user_fio = normalize_fio(user.surname, user.name, user.patronymic)
+    user_phone = normalize_phone(user.phone_number)
+    for headliner in await headliner_service.get_all():
+        try:
+            headliner_user = await user_service.get_user(headliner.user_id, headliner.user_source)
+        except Exception:
+            continue
+
+        if normalize_phone(headliner_user.phone_number) != user_phone:
+            continue
+        if normalize_fio(headliner_user.surname, headliner_user.name, headliner_user.patronymic) != user_fio:
+            continue
+
+        await headliner_service.create_headliner(
+            user_id=user.id,
+            user_source=Sources.TG,
+            fio=headliner.fio,
+            position=headliner.position,
+            topic=headliner.topic,
+            group_link=headliner.group_link,
+            photo=headliner.photo,
+        )
+        if headliner.welcome_message:
+            await headliner_service.update_welcome_message_by_user(
+                user.id,
+                Sources.TG,
+                headliner.welcome_message
+            )
+        return await user_service.get_user_role(user.id, Sources.TG)
+
+    return user.role
 
 
 async def finish_registration(
@@ -32,6 +84,7 @@ async def finish_registration(
         home_address=data.get('home_address', None),
         news_subscription=data['news_subscription']
     )
+    user_role = await sync_headliner_role(user, user_service, headliner_service)
     referral_headliner = None
     headliner_id: int | None = data.get("headliner_id", None)
     if headliner_id is not None and headliner_service is not None:
@@ -55,7 +108,7 @@ async def finish_registration(
             f"Сообщение от хедлайнера {referral_headliner.fio}:\n\n"
             f"{referral_headliner.welcome_message}"
         )
-    await message.answer("Меню", reply_markup=get_role_menu_keyboard(user.role))
+    await message.answer("Меню", reply_markup=get_role_menu_keyboard(user_role))
     await state.clear()
     await message.bot.send_message(chat_id=log_chat, text=f"""
 Новый пользователь {'@' + user.username if user.username else '<нет username>'} зарегистрировался.

@@ -10,12 +10,11 @@ class Sources(enum.Enum):
 
 
 class UserRole(enum.Enum):
-    STAFF_CA = "сотрудник ЦА"
-    COORDINATOR_RO = "координатор РО"
-    STAFF_RO = "сотрудник РО"
-    # STAFF_MO = "сотрудник МО"
-    # STAFF_PO = "сотрудник ПО"
-    USER = "пользователь"
+    STAFF_CA = "Сотрудник ЦА"
+    COORDINATOR_RO = "Координатор РО"
+    STAFF_RO = "Сотрудник РО"
+    HEADLINER = "Хэдлайнер"
+    USER = "Пользователь"
 
 
 class UserGrade(enum.Enum):
