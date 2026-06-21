@@ -22,7 +22,7 @@ def get_profile_kb():
     builder.button(text="Список мероприятий")
     builder.button(text="Посмотреть рейтинг")
     builder.button(text="На главную")
-    builder.adjust(1)
+    builder.adjust(1, 1, 1, 2)
     return builder.as_markup(resize_keyboard=True)
 
 

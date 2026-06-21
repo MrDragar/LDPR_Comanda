@@ -8,12 +8,14 @@ def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
 
     # Базовые пользовательские кнопки
-    builder.button(text="Выполнить задание")
-    builder.button(text="Мои задания")
-    builder.button(text="Личный кабинет")
-    builder.button(text="Обучение")
-    builder.button(text="Магазин")
-    builder.button(text="Закрытые мероприятия")
+    if role == UserRole.USER:
+        builder.button(text="Выполнить задание")
+        builder.button(text="Личный кабинет")
+        builder.button(text="Обучение")
+        builder.button(text="Мои задания")
+        builder.button(text="Магазин")
+        builder.button(text="Закрытые мероприятия")
+        builder.adjust(1, 1, 2, 2)
 
     # Кнопки для сотрудников РО, координаторов и ЦА
     if role in (UserRole.STAFF_RO, UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
@@ -34,5 +36,4 @@ def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
         builder.button(text="Скрыть товар")
         builder.button(text="Рассылка координаторам РО")
 
-    builder.adjust(1)
     return builder.as_markup(resize_keyboard=True)
