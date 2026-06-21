@@ -180,7 +180,6 @@ async def finalize_mail(message: types.Message, state: FSMContext, order_service
 
     data = await state.get_data()
     try:
-        await balance_service.deduct_balance(message.from_user.id, Sources.TG, data["price"], f"Покупка товара #{data['pid']}")
         order = await order_service.create_order(message.from_user.id, Sources.TG, data["pid"], "mail", data["addr"], message.text.strip())
         await notification_service.notify_user(message.from_user.id, Sources.TG, f"✅ Заказ #{order.id} оформлен.")
         role = await user_service.get_user_role(message.from_user.id, Sources.TG)

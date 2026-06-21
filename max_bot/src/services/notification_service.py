@@ -34,7 +34,7 @@ class NotificationService(INotificationService):
 
     async def notify_user_max(self, chat_id: int, text: str) -> None:
         try:
-            await self.max_bot.send_message(chat_id=chat_id, text=text)
+            await self.max_bot.send_message(user_id=chat_id, text=text)
             logger.info(f"MAX notification sent to {chat_id}")
         except Exception as e:
             logger.error(f"Failed to send MAX notification to {chat_id}: {e}")
