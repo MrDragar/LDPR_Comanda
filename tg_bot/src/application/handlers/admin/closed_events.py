@@ -17,9 +17,7 @@ PAGE_LIMIT = 5
 
 
 # ==================== СОЗДАНИЕ МЕРОПРИЯТИЯ ====================
-router.message(F.text == "Создать закрытое мероприятие")
-
-
+@router.message(F.text == "Создать закрытое мероприятие")
 async def start_create_ce(message: types.Message, state: FSMContext, user_service: IUserService):
     role = await user_service.get_user_role(message.from_user.id, Sources.TG)
     if role not in [UserRole.STAFF_CA, UserRole.COORDINATOR_RO]: return await message.answer(
