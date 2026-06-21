@@ -23,16 +23,20 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         self.__uow = uow
 
     async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int) -> tuple[list[OnlineTask], int]:
+                                        skip: int, limit: int, is_member: bool | None = None) -> \
+    tuple[list[OnlineTask], int]:
         session = self.__uow.get_session()
-        end_date = today + timedelta(days=1)  # tasks available until end of duration
         base_stmt = select(OnlineTaskORM).where(
             and_(
                 OnlineTaskORM.date <= today,
                 text("date(date, '+' || duration || ' days') >= :today").bindparams(today=today)
             )
         )
-        # Исключаем уже принятые/в процессе
+
+        # Фильтрация по членству в партии
+        if is_member is not None:
+            base_stmt = base_stmt.where(OnlineTaskORM.is_for_members == is_member)
+
         subquery = (
             select(AcceptedOnlineTaskORM.task_id)
             .where(
@@ -42,22 +46,20 @@ class OnlineTaskRepository(IOnlineTaskRepository):
             )
         )
         final_stmt = base_stmt.where(OnlineTaskORM.id.notin_(subquery)).order_by(OnlineTaskORM.date)
-        # Пагинация и подсчёт
         count_stmt = select(func.count()).select_from(final_stmt.subquery())
         total = await session.scalar(count_stmt) or 0
         paginated_stmt = final_stmt.offset(skip).limit(limit)
         result = await session.execute(paginated_stmt)
         tasks_orm = result.scalars().all()
 
-        # ✅ ИСПРАВЛЕНО: Добавлены title и description
         tasks = [
             OnlineTask(
                 id=t.id, date=t.date, duration=t.duration,
                 type=t.type, reward=t.reward, url=t.url,
-                title=t.title, description=t.description
+                title=t.title, description=t.description,
+                is_for_members=t.is_for_members
             ) for t in tasks_orm
         ]
-        logger.debug(f"Found {len(tasks)} active online tasks for user {user_id}")
         return tasks, total
 
     async def get_task_by_id(self, task_id: int) -> OnlineTask | None:
@@ -65,10 +67,10 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         stmt = select(OnlineTaskORM).where(OnlineTaskORM.id == task_id)
         orm = await session.scalar(stmt)
         if not orm: return None
-
         return OnlineTask(id=orm.id, date=orm.date, duration=orm.duration, type=orm.type,
-                          reward=orm.reward, url=orm.url,
-                          title=orm.title, description=orm.description)
+                          reward=orm.reward, url=orm.url, title=orm.title,
+                          description=orm.description,
+                          is_for_members=orm.is_for_members)
 
     async def create_task(self, task: OnlineTask) -> OnlineTask:
         session = self.__uow.get_session()
@@ -76,7 +78,6 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         session.add(orm)
         await session.flush()
         task.id = orm.id
-        logger.info(f"Created online task {task.id}")
         return task
 
     async def is_task_accepted_by_user(self, user_id: int, user_source: Sources,
@@ -96,10 +97,8 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         match = re.search(pattern, url)
         if not match:
             raise ValueError(f"Не удалось распарсить VK URL: {url}")
-
         owner_id = int(match.group(1))
         post_id = int(match.group(2))
-
         group_id = abs(owner_id)
         return group_id, post_id
 
@@ -109,7 +108,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         self.__uow = uow
 
     async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int) -> tuple[list[OfflineTask], int]:
+                                        skip: int, limit: int, is_member: bool | None = None) -> \
+    tuple[list[OfflineTask], int]:
         session = self.__uow.get_session()
         base_stmt = select(OfflineTaskORM).where(
             and_(
@@ -117,6 +117,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
                 OfflineTaskORM.end_date >= today
             )
         )
+        if is_member is not None:
+            base_stmt = base_stmt.where(OfflineTaskORM.is_for_members == is_member)
         subquery = (
             select(AcceptedOfflineTaskORM.task_id)
             .where(
@@ -129,17 +131,17 @@ class OfflineTaskRepository(IOfflineTaskRepository):
             OfflineTaskORM.start_date)
         count_stmt = select(func.count()).select_from(final_stmt.subquery())
         total = await session.scalar(count_stmt) or 0
-
         paginated_stmt = final_stmt.offset(skip).limit(limit)
         result = await session.execute(paginated_stmt)
         tasks_orm = result.scalars().all()
 
         tasks = [
-            OfflineTask(id=t.id, region=t.region, start_date=t.start_date, end_date=t.end_date, reward=t.reward, title=t.title,
-                        description=t.description, location=t.location, contacts=t.contacts)
+            OfflineTask(id=t.id, region=t.region, start_date=t.start_date, end_date=t.end_date,
+                        reward=t.reward, title=t.title,
+                        description=t.description, location=t.location, contacts=t.contacts,
+                        is_for_members=t.is_for_members)
             for t in tasks_orm
         ]
-        logger.debug(f"Found {len(tasks)} active offline tasks for user {user_id}")
         return tasks, total
 
     async def get_task_by_id(self, task_id: int) -> OfflineTask | None:
@@ -150,7 +152,8 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         return OfflineTask(id=orm.id, region=orm.region, start_date=orm.start_date,
                            end_date=orm.end_date, reward=orm.reward,
                            title=orm.title, description=orm.description, location=orm.location,
-                           contacts=orm.contacts)
+                           contacts=orm.contacts,
+                           is_for_members=orm.is_for_members)
 
     async def create_task(self, task: OfflineTask) -> OfflineTask:
         session = self.__uow.get_session()
@@ -158,7 +161,6 @@ class OfflineTaskRepository(IOfflineTaskRepository):
         session.add(orm)
         await session.flush()
         task.id = orm.id
-        logger.info(f"Created offline task {task.id}")
         return task
 
     async def is_task_accepted_by_user(self, user_id: int, user_source: Sources,

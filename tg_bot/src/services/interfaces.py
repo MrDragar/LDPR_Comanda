@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from datetime import date, time
 from src.domain.entities import Repost, Sources, User, OrderStatus, Order, Product, \
-    EventRegistration, ClosedEvent, HeadlinerFollower, Headliner
+    EventRegistration, ClosedEvent
+from src.domain.entities.headliner import Headliner, HeadlinerFollower
 from src.domain.entities.task import OnlineTask, OfflineTask, AcceptedOfflineTask, TaskStatus, \
     TaskType
 from src.domain.entities.user import UserRole
@@ -87,13 +88,13 @@ class IBalanceService(ABC):
 
 class IOnlineTaskService(ABC):
     @abstractmethod
-    async def search_tasks(self, user_id: int, user_source: Sources, page: int = 1) -> tuple[list[OnlineTask], int]: ...
+    async def search_tasks(self, user_id: int, user_source: Sources, page: int = 1, is_member: bool | None = None) -> tuple[list[OnlineTask], int]: ...
     @abstractmethod
     async def check_task(self, user_id: int, user_source: Sources, task_id: int) -> None: ...
     @abstractmethod
     async def get_task(self, task_id: int) -> OnlineTask | None: ...
     @abstractmethod
-    async def create_task(self, date: date, duration: int, type: TaskType, reward: int, url: str | None, title: str, description: str) -> OnlineTask: ...
+    async def create_task(self, date: date, duration: int, type: TaskType, reward: int, url: str | None, title: str, description: str, is_for_members: bool) -> OnlineTask: ...
     @abstractmethod
     async def submit_tg_online_task(self, user_id: int, user_source: Sources, task_id: int) -> None: ...
     @abstractmethod
@@ -104,7 +105,7 @@ class IOnlineTaskService(ABC):
 
 class IOfflineTaskService(ABC):
     @abstractmethod
-    async def search_tasks(self, user_id: int, user_source: Sources, page: int = 1) -> tuple[list[OfflineTask], int]: ...
+    async def search_tasks(self, user_id: int, user_source: Sources, page: int = 1, is_member: bool | None = None) -> tuple[list[OfflineTask], int]: ...
     @abstractmethod
     async def check_task(self, user_id: int, user_source: Sources, task_id: int, new_status: TaskStatus) -> None: ...
     @abstractmethod
@@ -115,14 +116,10 @@ class IOfflineTaskService(ABC):
     async def cancel_task(self, user_id: int, user_source: Sources, task_id: int) -> None: ...
 
     @abstractmethod
-    async def create_task_by_admin(self, region: str, start_date: date, duration: int, reward: int,
-                                   title: str, description: str, location: str,
-                                   contacts: str) -> OfflineTask: ...
+    async def create_task_by_admin(self, region: str, start_date: date, duration: int, reward: int, title: str, description: str, location: str, contacts: str, is_for_members: bool) -> OfflineTask: ...
 
     @abstractmethod
-    async def create_task_by_personal(self, user_id: int, user_source: Sources, start_date: date,
-                                      duration: int, reward: int, title: str, description: str,
-                                      location: str, contacts: str) -> OfflineTask: ...
+    async def create_task_by_personal(self, user_id: int, user_source: Sources, start_date: date, duration: int, reward: int, title: str, description: str, location: str, contacts: str, is_for_members: bool) -> OfflineTask: ...
 
     @abstractmethod
     async def get_in_progress_users(self, task_id: int, page: int, limit: int) -> tuple[
@@ -157,7 +154,7 @@ class IReferralLinkService(ABC):
     @abstractmethod
     def generate_post(self, user_id: int) -> Repost:
         ...
-    
+
 
 class IHeadlinerService(ABC):
     @abstractmethod
@@ -225,11 +222,12 @@ class IHeadlinerService(ABC):
     @abstractmethod
     def make_referral_links(self, headliner_id: int) -> dict[str, str]:
         ...
-
+    
 
 class INotificationService(ABC):
     @abstractmethod
     async def notify_user(self, user_id: int, source: Sources, text: str) -> None: ...
+
 
 
 class ILearningService(ABC):

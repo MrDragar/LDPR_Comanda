@@ -35,91 +35,70 @@ def _build_task_keyboard(tasks, current_page: int, total_pages: int, prefix: str
     return kb.get_json()
 
 
-# ==================== ОНЛАЙН ЗАДАНИЯ ====================
+async def _get_task_filter(user_service: IUserService, user_id: int) -> bool | None:
+    u = await user_service.get_user(user_id, Sources.VK)
+    return bool(u.is_member)
 
+
+# ==================== ОНЛАЙН ЗАДАНИЯ ====================
 @router.message(state=UserTaskStates.SELECT_TYPE, text=["Онлайн"])
-async def online_list(message: Message, online_task_service: IOnlineTaskService,
-                      state_dispenser: BuiltinStateDispenser):
-    tasks, total_pages = await online_task_service.search_tasks(message.from_id, Sources.VK, page=1)
+async def online_list(message: Message, online_task_service: IOnlineTaskService, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
+    is_member_filter = await _get_task_filter(user_service, message.from_id)
+    tasks, total_pages = await online_task_service.search_tasks(message.from_id, Sources.VK, page=1, is_member=is_member_filter)
     if not tasks:
         return await message.answer("Нет доступных онлайн заданий.")
-
     kb = _build_task_keyboard(tasks, 1, total_pages, "online")
-    await state_dispenser.set(message.from_id, UserTaskStates.ONLINE_LIST, page=1,
-                              total_pages=total_pages)
+    await state_dispenser.set(message.from_id, UserTaskStates.ONLINE_LIST, page=1, total_pages=total_pages)
     await message.answer(f"Доступные задания (стр. 1/{total_pages}):", keyboard=kb)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_online"))
-async def next_online(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService,
-                      state_dispenser: BuiltinStateDispenser):
+async def next_online(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
-    if not state or state.state != str(UserTaskStates.ONLINE_LIST):
-        return
-
+    if not state or state.state != str(UserTaskStates.ONLINE_LIST): return
     new_page = state.payload.get("page", 1) + 1
-    tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK,
-                                                                page=new_page)
-
+    is_member_filter = await _get_task_filter(user_service, event.object.user_id)
+    tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK, page=new_page, is_member=is_member_filter)
     if not tasks:
-        await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                          message="На этой странице заданий нет.", random_id=0)
-        return await event.ctx_api.messages.send_message_event_answer(
-            event_id=event.object.event_id, user_id=event.object.user_id,
-            peer_id=event.object.peer_id)
-
+        await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="На этой странице заданий нет.", random_id=0)
+        return await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
     kb = _build_task_keyboard(tasks, new_page, total_pages, "online")
-    await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=new_page,
-                              total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message=f"Доступные задания (стр. {new_page}/{total_pages}):",
-                                      keyboard=kb, random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
-                                                           user_id=event.object.user_id,
-                                                           peer_id=event.object.peer_id)
+    await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=new_page, total_pages=total_pages)
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные задания (стр. {new_page}/{total_pages}):", keyboard=kb, random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("prev_online"))
-async def prev_online(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService,
-                      state_dispenser: BuiltinStateDispenser):
+async def prev_online(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
-    if not state or state.state != str(UserTaskStates.ONLINE_LIST):
-        return
-
+    if not state or state.state != str(UserTaskStates.ONLINE_LIST): return
     new_page = max(1, state.payload.get("page", 1) - 1)
-    tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK,
-                                                                page=new_page)
-
+    is_member_filter = await _get_task_filter(user_service, event.object.user_id)
+    tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK, page=new_page, is_member=is_member_filter)
     kb = _build_task_keyboard(tasks, new_page, total_pages, "online")
-    await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=new_page,
-                              total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message=f"Доступные задания (стр. {new_page}/{total_pages}):",
-                                      keyboard=kb, random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
-                                                           user_id=event.object.user_id,
-                                                           peer_id=event.object.peer_id)
+    await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=new_page, total_pages=total_pages)
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные задания (стр. {new_page}/{total_pages}):", keyboard=kb, random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
 # ==================== ОФЛАЙН ЗАДАНИЯ ====================
-
 @router.message(state=UserTaskStates.SELECT_TYPE, text=["Офлайн"])
 async def offline_list(message: Message, offline_task_service: IOfflineTaskService,
                        user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
     if u.grade not in (UserGrade.AGITATOR, UserGrade.RESERVE):
         kb = Keyboard(one_time=True).add(Text("На главную"))
-        return await message.answer("Этот тип заданий открывается при достижении ранга "
-                                    "'Агитатор'. Для его прохождения необходимо пройти обучене",
-                                    keyboard=kb.get_json())
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1)
+        return await message.answer(
+            "Этот тип заданий открывается при достижении ранга 'Агитатор'. Для его прохождения необходимо пройти обучене",
+            keyboard=kb.get_json())
+
+    is_member_filter = await _get_task_filter(user_service, message.from_id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1,
+                                                                     is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
 
     if not tasks:
         return await message.answer("Нет заданий в вашем регионе.")
-
-    # Примечание: фильтрация по региону на клиенте может делать total_pages неточным.
-    # Для production рекомендуется добавить фильтр по region прямо в SQL-запрос репозитория.
     kb = _build_task_keyboard(tasks, 1, total_pages, "offline")
     await state_dispenser.set(message.from_id, UserTaskStates.OFFLINE_LIST, page=1,
                               total_pages=total_pages)
@@ -130,14 +109,13 @@ async def offline_list(message: Message, offline_task_service: IOfflineTaskServi
 async def next_offline(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService,
                        user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
-    if not state or state.state != str(UserTaskStates.OFFLINE_LIST):
-        return
-
+    if not state or state.state != str(UserTaskStates.OFFLINE_LIST): return
     new_page = state.payload.get("page", 1) + 1
     u = await user_service.get_user(event.object.user_id, Sources.VK)
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=new_page)
+    is_member_filter = await _get_task_filter(user_service, event.object.user_id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=new_page,
+                                                                     is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-
     if not tasks:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                           message="Больше заданий в вашем регионе нет.",
@@ -145,7 +123,6 @@ async def next_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
         return await event.ctx_api.messages.send_message_event_answer(
             event_id=event.object.event_id, user_id=event.object.user_id,
             peer_id=event.object.peer_id)
-
     kb = _build_task_keyboard(tasks, new_page, total_pages, "offline")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.OFFLINE_LIST, page=new_page,
                               total_pages=total_pages)
@@ -161,14 +138,13 @@ async def next_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
 async def prev_offline(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService,
                        user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
-    if not state or state.state != str(UserTaskStates.OFFLINE_LIST):
-        return
-
+    if not state or state.state != str(UserTaskStates.OFFLINE_LIST): return
     new_page = max(1, state.payload.get("page", 1) - 1)
     u = await user_service.get_user(event.object.user_id, Sources.VK)
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=new_page)
+    is_member_filter = await _get_task_filter(user_service, event.object.user_id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=new_page,
+                                                                     is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-
     kb = _build_task_keyboard(tasks, new_page, total_pages, "offline")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.OFFLINE_LIST, page=new_page,
                               total_pages=total_pages)
@@ -179,9 +155,7 @@ async def prev_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
                                                            user_id=event.object.user_id,
                                                            peer_id=event.object.peer_id)
 
-
 # ==================== ОБЩИЕ ХЕНДЛЕРЫ ====================
-
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("view_online"))
 async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService,
                       state_dispenser: BuiltinStateDispenser):
@@ -391,57 +365,37 @@ async def accept_offline(event: GroupTypes.MessageEvent, offline_task_service: I
                                                            peer_id=event.object.peer_id)
 
 
-@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent,
-                  CMDRule("back_online_list"))
-async def back_online_list(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService,
-                           state_dispenser: BuiltinStateDispenser):
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_online_list"))
+async def back_online_list(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
     page = state.payload.get("page", 1) if state else 1
-    tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK,
-                                                                page=page)
-
+    is_member_filter = await _get_task_filter(user_service, event.object.user_id)
+    tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK, page=page, is_member=is_member_filter)
     if not tasks and total_pages > 0:
-        tasks, total_pages = await online_task_service.search_tasks(event.object.user_id,
-                                                                    Sources.VK, page=1)
+        tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK, page=1, is_member=is_member_filter)
         page = 1
-
     kb = _build_task_keyboard(tasks, page, total_pages, "online")
-    await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=page,
-                              total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message=f"Доступные задания (стр. {page}/{total_pages}):",
-                                      keyboard=kb, random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
-                                                           user_id=event.object.user_id,
-                                                           peer_id=event.object.peer_id)
+    await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=page, total_pages=total_pages)
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные задания (стр. {page}/{total_pages}):", keyboard=kb, random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
-@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent,
-                  CMDRule("back_offline_list"))
-async def back_offline_list(event: GroupTypes.MessageEvent,
-                            offline_task_service: IOfflineTaskService,
-                            user_service: IUserService, state_dispenser: BuiltinStateDispenser):
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_offline_list"))
+async def back_offline_list(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
     page = state.payload.get("page", 1) if state else 1
     u = await user_service.get_user(event.object.user_id, Sources.VK)
-
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page)
+    is_member_filter = await _get_task_filter(user_service, event.object.user_id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page, is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-
     if not tasks and total_pages > 1:
-        all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1)
+        all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1, is_member=is_member_filter)
         tasks = [t for t in all_tasks if t.region == u.region]
         page = 1
-
     kb = _build_task_keyboard(tasks, page, total_pages, "offline")
-    await state_dispenser.set(event.object.peer_id, UserTaskStates.OFFLINE_LIST, page=page,
-                              total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message=f"Задания в регионе (стр. {page}/{total_pages}):",
-                                      keyboard=kb, random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
-                                                           user_id=event.object.user_id,
-                                                           peer_id=event.object.peer_id)
+    await state_dispenser.set(event.object.peer_id, UserTaskStates.OFFLINE_LIST, page=page, total_pages=total_pages)
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Задания в регионе (стр. {page}/{total_pages}):", keyboard=kb, random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_to_menu"))

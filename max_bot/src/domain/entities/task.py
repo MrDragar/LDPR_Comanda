@@ -27,6 +27,7 @@ class OnlineTask:
     url: str | None
     title: str
     description: str 
+    is_for_members: bool = False
 
 
 @dataclass
@@ -40,6 +41,7 @@ class OfflineTask:
     description: str
     location: str
     contacts: str
+    is_for_members: bool = False
 
 
 @dataclass

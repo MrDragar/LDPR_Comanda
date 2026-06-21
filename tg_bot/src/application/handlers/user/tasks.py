@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 router = Router(name=__name__)
 
 
+async def _get_task_filter(user_service: IUserService, user_id: int) -> bool | None:
+    try:
+        u = await user_service.get_user(user_id, Sources.TG)
+        return bool(u.is_member)
+    except Exception:
+        return False
+
+
 @router.message(F.text == "Выполнить задание")
 async def select_task_type(message: types.Message, state: FSMContext):
     await message.answer("Выберите тип задания:", reply_markup=get_task_type_keyboard())
@@ -29,8 +37,9 @@ async def select_task_type(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "task_type_online", UserTaskStates.select_type)
 async def online_list(query: types.CallbackQuery, state: FSMContext,
                       online_task_service: IOnlineTaskService, user_service: IUserService):
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
     tasks, total_pages = await online_task_service.search_tasks(query.from_user.id, Sources.TG,
-                                                                page=1)
+                                                                page=1, is_member=is_member_filter)
     if not tasks:
         role = await user_service.get_user_role(query.from_user.id, Sources.TG)
         await query.answer()
@@ -38,7 +47,6 @@ async def online_list(query: types.CallbackQuery, state: FSMContext,
                                    reply_markup=get_role_menu_keyboard(role))
         await state.clear()
         return
-
     await query.answer()
     await query.message.answer(
         f"Доступные задания (стр. 1/{total_pages}):",
@@ -50,14 +58,14 @@ async def online_list(query: types.CallbackQuery, state: FSMContext,
 
 @router.callback_query(F.data.startswith("next_online_"), UserTaskStates.online_list)
 async def next_online(query: types.CallbackQuery, state: FSMContext,
-                      online_task_service: IOnlineTaskService):
+                      online_task_service: IOnlineTaskService, user_service: IUserService):
     page = int(query.data.split("_")[-1])
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
     tasks, total_pages = await online_task_service.search_tasks(query.from_user.id, Sources.TG,
-                                                                page=page)
+                                                                page=page, is_member=is_member_filter)
     if not tasks:
         await query.answer("На этой странице заданий нет.", show_alert=True)
         return
-
     await query.answer()
     await query.message.answer(
         f"Доступные задания (стр. {page}/{total_pages}):",
@@ -68,10 +76,11 @@ async def next_online(query: types.CallbackQuery, state: FSMContext,
 
 @router.callback_query(F.data.startswith("prev_online_"), UserTaskStates.online_list)
 async def prev_online(query: types.CallbackQuery, state: FSMContext,
-                      online_task_service: IOnlineTaskService):
+                      online_task_service: IOnlineTaskService, user_service: IUserService):
     page = int(query.data.split("_")[-1])
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
     tasks, total_pages = await online_task_service.search_tasks(query.from_user.id, Sources.TG,
-                                                                page=page)
+                                                                page=page, is_member=is_member_filter)
     await query.answer()
     await query.message.answer(
         f"Доступные задания (стр. {page}/{total_pages}):",
@@ -202,9 +211,10 @@ async def confirm_submit(query: types.CallbackQuery, state: FSMContext,
 
 @router.callback_query(F.data == "back_online_list")
 async def back_online_list(query: types.CallbackQuery, state: FSMContext,
-                           online_task_service: IOnlineTaskService):
+                           online_task_service: IOnlineTaskService, user_service: IUserService):
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
     tasks, total_pages = await online_task_service.search_tasks(query.from_user.id, Sources.TG,
-                                                                page=1)
+                                                                page=1, is_member=is_member_filter)
     await query.answer()
     await query.message.answer(
         f"Доступные задания (стр. 1/{total_pages}):",
@@ -228,7 +238,9 @@ async def offline_list(query: types.CallbackQuery, state: FSMContext,
         await state.clear()
         return
 
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1)
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1,
+                                                                     is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
 
     if not tasks:
@@ -237,7 +249,6 @@ async def offline_list(query: types.CallbackQuery, state: FSMContext,
                                    reply_markup=get_role_menu_keyboard(u.role))
         await state.clear()
         return
-
     await query.answer()
     await query.message.answer(
         f"Задания в вашем регионе (стр. 1/{total_pages}):",
@@ -252,13 +263,13 @@ async def next_offline(query: types.CallbackQuery, state: FSMContext,
                        offline_task_service: IOfflineTaskService, user_service: IUserService):
     page = int(query.data.split("_")[-1])
     u = await user_service.get_user(query.from_user.id, Sources.TG)
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page)
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page,
+                                                                     is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-
     if not tasks:
         await query.answer("Больше заданий в вашем регионе нет.", show_alert=True)
         return
-
     await query.answer()
     await query.message.answer(
         f"Задания в вашем регионе (стр. {page}/{total_pages}):",
@@ -272,9 +283,10 @@ async def prev_offline(query: types.CallbackQuery, state: FSMContext,
                        offline_task_service: IOfflineTaskService, user_service: IUserService):
     page = int(query.data.split("_")[-1])
     u = await user_service.get_user(query.from_user.id, Sources.TG)
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page)
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page,
+                                                                     is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-
     await query.answer()
     await query.message.answer(
         f"Задания в вашем регионе (стр. {page}/{total_pages}):",
@@ -330,9 +342,9 @@ async def accept_offline(query: types.CallbackQuery, state: FSMContext,
 async def back_offline_list(query: types.CallbackQuery, state: FSMContext,
                             offline_task_service: IOfflineTaskService, user_service: IUserService):
     u = await user_service.get_user(query.from_user.id, Sources.TG)
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1)
+    is_member_filter = await _get_task_filter(user_service, query.from_user.id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1, is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-
     await query.answer()
     await query.message.answer(
         f"Задания в регионе (стр. 1/{total_pages}):",

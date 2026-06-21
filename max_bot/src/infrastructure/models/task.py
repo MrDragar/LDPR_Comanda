@@ -16,6 +16,7 @@ class OnlineTaskORM(Base):
     url: Mapped[str | None] = mapped_column(nullable=True)
     title: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str] = mapped_column(nullable=False)
+    is_for_members: Mapped[bool] = mapped_column(default=False, nullable=False)
 
 
 class OfflineTaskORM(Base):
@@ -29,6 +30,7 @@ class OfflineTaskORM(Base):
     description: Mapped[str] = mapped_column(nullable=False)
     location: Mapped[str] = mapped_column(nullable=False)
     contacts: Mapped[str] = mapped_column(nullable=False)
+    is_for_members: Mapped[bool] = mapped_column(default=False, nullable=False)
 
 
 class AcceptedOnlineTaskORM(Base):

@@ -3,7 +3,8 @@ from contextlib import _AsyncGeneratorContextManager
 from datetime import date
 
 from .entities import User, Sources, LearningTestAttempt, Product, Order, OrderStatus, ClosedEvent, \
-    EventRegistration, Headliner, HeadlinerFollower
+    EventRegistration
+from .entities.headliner import Headliner, HeadlinerFollower
 from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, \
     Transaction, TaskStatus, TaskType
 
@@ -152,8 +153,7 @@ class IVKPublicationRepository(ABC):
 
 class IOnlineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int) -> tuple[list[OnlineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int, is_member: bool | None = None) -> tuple[list[OnlineTask], int]: ...
 
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OnlineTask | None: ...
@@ -172,8 +172,7 @@ class IOnlineTaskRepository(ABC):
 
 class IOfflineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int) -> tuple[list[OfflineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int, is_member: bool | None = None) -> tuple[list[OfflineTask], int]: ...
 
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OfflineTask | None: ...
@@ -187,10 +186,6 @@ class IOfflineTaskRepository(ABC):
 
 
 class IAcceptedTaskRepository(ABC):
-    @abstractmethod
-    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
-        ...
-
     @abstractmethod
     async def accept_online_task(self, accepted: AcceptedOnlineTask) -> AcceptedOnlineTask:
         ...
@@ -227,6 +222,9 @@ class IAcceptedTaskRepository(ABC):
     async def add_accepted_offline_task(self, accepted: AcceptedOfflineTask) -> None:
         ...
 
+    @abstractmethod
+    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
+        ...
 
 class ITransactionRepository(ABC):
     @abstractmethod

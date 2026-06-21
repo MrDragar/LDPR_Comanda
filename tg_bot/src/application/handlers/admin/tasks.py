@@ -5,6 +5,8 @@ from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.states import AdminTaskStates
 from src.domain.entities.task import TaskType, TaskStatus
 from src.domain.entities.user import UserRole, Sources
@@ -42,7 +44,6 @@ async def start_create_online(message: types.Message, state: FSMContext,
                               user_service: IUserService):
     if not await check_role_tg(user_service, message.from_user.id, [UserRole.STAFF_CA], Sources.TG):
         return await message.answer("Недостаточно прав")
-
     await message.answer("📝 Введите название онлайн задачи:",
                          reply_markup=get_cancel_keyboard())
     await state.set_state(AdminTaskStates.create_online)
@@ -55,38 +56,30 @@ async def process_online_fields(message: types.Message, state: FSMContext,
                                 user_service: IUserService):
     if message.text and message.text in ["Отмена", "На главную"]:
         return await _cancel_and_exit(message, state, user_service)
-
     data = await state.get_data()
     step = data.get("step")
     text = message.text.strip()
-
     try:
         if step == "title":
             await state.update_data(title=text, step="description")
             return await message.answer("📄 Введите описание задачи:",
                                         reply_markup=get_cancel_keyboard())
-
         elif step == "description":
             await state.update_data(description=text, step="type")
             return await message.answer("📌 Выберите тип задания:",
                                         reply_markup=get_task_type_admin_keyboard())
-
         elif step == "url":
             task_type = data.get("type")
             url = text if text != "-" else None
-
-            # Если тип не "другое", проверяем ссылку на пост ВК
             if task_type != TaskType.OTHER.value:
                 pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
                 if not url or not pattern.match(url):
                     return await message.answer(
                         "⚠️ Ссылка должна быть валидной ссылкой на пост ВК.",
                         reply_markup=get_cancel_keyboard())
-
             await state.update_data(url=url, step="date")
             return await message.answer("📅 Введите дату начала (ДД.ММ.ГГГГ):",
                                         reply_markup=get_cancel_keyboard())
-
         elif step == "date":
             d = datetime.strptime(text, "%d.%m.%Y").date()
             if d < date.today():
@@ -96,29 +89,37 @@ async def process_online_fields(message: types.Message, state: FSMContext,
             await state.update_data(date=d, step="duration")
             return await message.answer("⏱ Введите количество дней активности (число):",
                                         reply_markup=get_cancel_keyboard())
-
         elif step == "duration":
             dur = int(text)
             await state.update_data(duration=dur, step="reward")
             return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):",
                                         reply_markup=get_cancel_keyboard())
-
         elif step == "reward":
             reward = int(text)
             if reward <= 0:
                 return await message.answer("Вознаграждение должно быть больше 0.",
                                             reply_markup=get_cancel_keyboard())
+            await state.update_data(reward=reward, step="is_for_members")
+            return await message.answer(
+                "Это задание предназначено только для членов партии ЛДПР? (Да/Нет)",
+                reply_markup=get_boolean_keyboard())
+        elif step == "is_for_members":
+            text_lower = text.lower().strip()
+            if text_lower not in ['да', 'нет']:
+                return await message.answer("Пожалуйста, выберите вариант на клавиатуре:",
+                                            reply_markup=get_boolean_keyboard())
+            is_for_members = (text_lower == 'да')
 
             await online_task_service.create_task(
                 date=data["date"],
                 duration=data["duration"],
                 type=TaskType(data["type"]),
-                reward=reward,
+                reward=data["reward"],
                 url=data.get("url"),
                 title=data["title"],
-                description=data["description"]
+                description=data["description"],
+                is_for_members=is_for_members
             )
-
             await state.clear()
             role = await user_service.get_user_role(message.from_user.id, Sources.TG)
             return await message.answer("✅ Онлайн задача успешно создана!",
@@ -137,14 +138,11 @@ async def set_online_type(query: types.CallbackQuery, state: FSMContext):
     await query.answer()
     task_type_str = query.data.split("_")[-1]
     task_type = TaskType(task_type_str)
-
     await state.update_data(type=task_type.value, step="url")
-
     if task_type == TaskType.OTHER:
         msg = "🔗 Введите ссылку на задание (или '-', если не требуется):"
     else:
         msg = "🔗 Введите ссылку на задание (URL поста ВК):"
-
     await query.message.answer(msg, reply_markup=get_cancel_keyboard())
 
 
@@ -166,11 +164,9 @@ async def process_offline_fields(message: types.Message, state: FSMContext,
                                  offline_task_service: IOfflineTaskService):
     if message.text and message.text in ["Отмена", "На главную"]:
         return await _cancel_and_exit(message, state, user_service)
-
     data = await state.get_data()
     step = data.get("step")
     text = message.text.strip()
-
     try:
         if step == "title":
             await state.update_data(title=text, step="description")
@@ -206,13 +202,24 @@ async def process_offline_fields(message: types.Message, state: FSMContext,
             reward = int(text)
             if reward <= 0: return await message.answer("⚠️ Баллы должны быть > 0.",
                                                         reply_markup=get_cancel_keyboard())
+            await state.update_data(reward=reward, step="is_for_members")
+            return await message.answer(
+                "Это задание предназначено только для членов партии ЛДПР? (Да/Нет)",
+                reply_markup=get_boolean_keyboard())
+        elif step == "is_for_members":
+            text_lower = text.lower().strip()
+            if text_lower not in ['да', 'нет']:
+                return await message.answer("Пожалуйста, выберите вариант на клавиатуре:",
+                                            reply_markup=get_boolean_keyboard())
+            is_for_members = (text_lower == 'да')
+
             role = UserRole(data["role"])
             if role == UserRole.STAFF_CA:
-                await state.update_data(reward=reward, step="region")
+                await state.update_data(is_for_members=is_for_members, step="region")
                 return await message.answer("🌍 Введите регион для задачи:",
                                             reply_markup=get_cancel_keyboard())
             else:
-                await state.update_data(reward=reward, step="confirm")
+                await state.update_data(is_for_members=is_for_members, step="confirm")
                 return await message.answer(
                     "✅ Регион определится автоматически. Подтвердите? (Да/Нет)",
                     reply_markup=get_cancel_keyboard())
@@ -228,25 +235,27 @@ async def process_offline_fields(message: types.Message, state: FSMContext,
         elif step == "confirm":
             if text.lower() != "да":
                 return await _cancel_and_exit(message, state, user_service)
-
             role = UserRole(data["role"])
             if role == UserRole.STAFF_CA:
-                task = await offline_task_service.create_task_by_admin(region=data["region"],
-                                                                       start_date=data[
-                                                                           "start_date"],
-                                                                       duration=data["duration"],
-                                                                       reward=data["reward"],
-                                                                       title=data["title"],
-                                                                       description=data[
-                                                                           "description"],
-                                                                       location=data["location"],
-                                                                       contacts=data["contacts"])
+                task = await offline_task_service.create_task_by_admin(
+                    region=data["region"],
+                    start_date=data["start_date"],
+                    duration=data["duration"],
+                    reward=data["reward"],
+                    title=data["title"],
+                    description=data["description"],
+                    location=data["location"],
+                    contacts=data["contacts"],
+                    is_for_members=data["is_for_members"]
+                )
             else:
                 task = await offline_task_service.create_task_by_personal(
                     user_id=message.from_user.id, user_source=Sources.TG,
                     start_date=data["start_date"], duration=data["duration"], reward=data["reward"],
                     title=data["title"], description=data["description"], location=data["location"],
-                    contacts=data["contacts"])
+                    contacts=data["contacts"],
+                    is_for_members=data["is_for_members"]
+                )
             await state.clear()
             admin_role = await user_service.get_user_role(message.from_user.id, Sources.TG)
             return await message.answer(f"✅ Задача '#{task.id} {task.title}' создана!",

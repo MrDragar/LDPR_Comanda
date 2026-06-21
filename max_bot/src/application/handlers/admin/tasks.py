@@ -6,6 +6,7 @@ from maxapi.types import MessageCreated, MessageCallback, CallbackButton
 from maxapi.context import MemoryContext
 from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
 
+from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.states import AdminTaskStates
 from src.application.keyboards.task_keyboard import get_task_type_admin_keyboard, \
     get_admin_verify_task_keyboard, get_admin_verify_users_keyboard
@@ -61,15 +62,13 @@ async def process_online_fields(event: MessageCreated, context: MemoryContext,
                                 user_service: IUserService):
     if event.message.body.text and event.message.body.text in ["Отмена", "На главную"]:
         return await _cancel_and_exit(event, context, user_service)
-
     data = await context.get_data()
     step = data.get("step")
     text = event.message.body.text.strip()
-
     try:
         if step == "title":
             await context.update_data(title=text, step="description")
-            return await event.message.answer("📄 Введите описание задачи:",
+            return await event.message.answer("📄 Введите описание онлайн задачи:",
                                               attachments=[get_cancel_keyboard().as_markup()])
         elif step == "description":
             await context.update_data(description=text, step="type")
@@ -78,21 +77,20 @@ async def process_online_fields(event: MessageCreated, context: MemoryContext,
         elif step == "url":
             task_type = data.get("type")
             url = text if text != "-" else None
-            # Если тип не "другое", проверяем ссылку на пост ВК
             if task_type != TaskType.OTHER.value:
                 pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
                 if not url or not pattern.match(url):
                     return await event.message.answer(
-                        "⚠️ Ссылка должна быть валидной ссылкой на пост ВК (или введите '-' если нет ссылки).",
+                        "⚠️ Ссылка должна быть валидной ссылкой на пост ВК.",
                         attachments=[get_cancel_keyboard().as_markup()])
             await context.update_data(url=url, step="date")
             return await event.message.answer("📅 Введите дату начала (ДД.ММ.ГГГГ):",
                                               attachments=[get_cancel_keyboard().as_markup()])
         elif step == "date":
             d = datetime.strptime(text, "%d.%m.%Y").date()
-            if d < date.today():
-                return await event.message.answer("⚠️ Дата начала не может быть в прошлом.",
-                                                  attachments=[get_cancel_keyboard().as_markup()])
+            if d < date.today(): return await event.message.answer(
+                "⚠️ Дата начала не может быть в прошлом.",
+                attachments=[get_cancel_keyboard().as_markup()])
             await context.update_data(date=d, step="duration")
             return await event.message.answer("⏱ Введите количество дней активности (число):",
                                               attachments=[get_cancel_keyboard().as_markup()])
@@ -104,14 +102,25 @@ async def process_online_fields(event: MessageCreated, context: MemoryContext,
                 attachments=[get_cancel_keyboard().as_markup()])
         elif step == "reward":
             reward = int(text)
-            if reward <= 0:
-                return await event.message.answer("Вознаграждение должно быть больше 0.",
-                                                  attachments=[get_cancel_keyboard().as_markup()])
+            if reward <= 0: return await event.message.answer(
+                "Вознаграждение должно быть больше 0.",
+                attachments=[get_cancel_keyboard().as_markup()])
+            # ПЕРЕХОД К НОВОМУ ШАГУ
+            await context.update_data(reward=reward, step="is_for_members")
+            return await event.message.answer(
+                "Это задание предназначено только для членов партии ЛДПР? (Да/Нет)",
+                attachments=[get_boolean_keyboard().as_markup()])
+        elif step == "is_for_members":
+            text_lower = text.lower().strip()
+            if text_lower not in ['да', 'нет']:
+                return await event.message.answer("Пожалуйста, выберите вариант на клавиатуре:",
+                                                  attachments=[get_boolean_keyboard().as_markup()])
+            is_for_members = (text_lower == 'да')
 
             await online_task_service.create_task(
-                date=data["date"], duration=data["duration"],
-                type=TaskType(data["type"]), reward=reward,
-                url=data.get("url"), title=data["title"], description=data["description"]
+                date=data["date"], duration=data["duration"], type=data["type"],
+                reward=data["reward"], url=data.get("url"), title=data["title"],
+                description=data["description"], is_for_members=is_for_members
             )
             await context.clear()
             role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
@@ -121,6 +130,7 @@ async def process_online_fields(event: MessageCreated, context: MemoryContext,
         return await event.message.answer("⚠️ Неверный формат данных. Попробуйте снова.",
                                           attachments=[get_cancel_keyboard().as_markup()])
     except Exception as e:
+        logger.error(f"Error creating online task: {e}")
         return await event.message.answer(f"❌ Произошла ошибка: {e}",
                                           attachments=[get_cancel_keyboard().as_markup()])
 
@@ -159,11 +169,9 @@ async def process_offline_fields(event: MessageCreated, context: MemoryContext,
                                  offline_task_service: IOfflineTaskService):
     if event.message.body.text and event.message.body.text in ["Отмена", "На главную"]:
         return await _cancel_and_exit(event, context, user_service)
-
     data = await context.get_data()
     step = data.get("step")
     text = event.message.body.text.strip()
-
     try:
         if step == "title":
             await context.update_data(title=text, step="description")
@@ -179,88 +187,102 @@ async def process_offline_fields(event: MessageCreated, context: MemoryContext,
                                               attachments=[get_cancel_keyboard().as_markup()])
         elif step == "contacts":
             await context.update_data(contacts=text, step="start_date")
-            return await event.message.answer("📅 Введите дату начала (ДД.ММ.ГГГГ):",
-                                              attachments=[get_cancel_keyboard().as_markup()])
+            return await event.message.answer(
+                "📅 Введите дату начала проведения задачи (ДД.ММ.ГГГГ):",
+                attachments=[get_cancel_keyboard().as_markup()])
         elif step == "start_date":
             start_date = datetime.strptime(text, "%d.%m.%Y").date()
-            if start_date < date.today():
-                return await event.message.answer("⚠️ Дата не может быть в прошлом.",
-                                                  attachments=[get_cancel_keyboard().as_markup()])
+            if start_date < date.today(): return await event.message.answer(
+                "⚠️ Дата начала не может быть в прошлом.",
+                attachments=[get_cancel_keyboard().as_markup()])
             await context.update_data(start_date=start_date, step="duration")
-            return await event.message.answer("⏱ Введите продолжительность в днях:",
+            return await event.message.answer("⏱ Введите продолжительность задачи в днях (число):",
                                               attachments=[get_cancel_keyboard().as_markup()])
         elif step == "duration":
             duration = int(text)
-            if duration <= 0:
-                return await event.message.answer("⚠️ Продолжительность должна быть > 0.",
-                                                  attachments=[get_cancel_keyboard().as_markup()])
+            if duration <= 0: return await event.message.answer(
+                "⚠️ Продолжительность должна быть больше 0.",
+                attachments=[get_cancel_keyboard().as_markup()])
             await context.update_data(duration=duration, step="reward")
-            return await event.message.answer("💰 Введите количество баллов:",
+            return await event.message.answer("💰 Введите количество баллов за выполнение:",
                                               attachments=[get_cancel_keyboard().as_markup()])
         elif step == "reward":
             reward = int(text)
-            if reward <= 0:
-                return await event.message.answer("⚠️ Баллы должны быть > 0.",
-                                                  attachments=[get_cancel_keyboard().as_markup()])
+            if reward <= 0: return await event.message.answer(
+                "⚠️ Количество баллов должно быть больше 0.",
+                attachments=[get_cancel_keyboard().as_markup()])
+
+            # ПЕРЕХОД К НОВОМУ ШАГУ
+            await context.update_data(reward=reward, step="is_for_members")
+            return await event.message.answer(
+                "Это задание предназначено только для членов партии ЛДПР? (Да/Нет)",
+                attachments=[get_boolean_keyboard().as_markup()])
+
+        elif step == "is_for_members":
+            text_lower = text.lower().strip()
+            if text_lower not in ['да', 'нет']:
+                return await event.message.answer("Пожалуйста, выберите вариант на клавиатуре:",
+                                                  attachments=[get_boolean_keyboard().as_markup()])
+            is_for_members = (text_lower == 'да')
 
             role = UserRole(data["role"])
             if role == UserRole.STAFF_CA:
-                await context.update_data(reward=reward, step="region")
+                await context.update_data(is_for_members=is_for_members, step="region")
                 return await event.message.answer("🌍 Введите регион для задачи:",
                                                   attachments=[get_cancel_keyboard().as_markup()])
             else:
-                await context.update_data(reward=reward, step="confirm")
+                await context.update_data(is_for_members=is_for_members, step="confirm")
                 return await event.message.answer(
-                    "✅ Регион определится автоматически. Подтвердите? (Да/Нет)",
+                    "✅ Регион будет определен автоматически. Подтвердите создание задачи? (Отправьте 'Да')",
                     attachments=[get_cancel_keyboard().as_markup()])
+
         elif step == "region":
             region_input = text.strip()
             similar = await user_service.get_similar_regions(region_input)
             if region_input != similar[0]:
-                hint = f"Регион не найден. Возможно: {', '.join(similar[:3])}" if similar else "Регион не найден."
-                return await event.message.answer(f"⚠️ {hint}",
+                hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден."
+                return await event.message.answer(f"⚠️ {hint}\nВведите название региона точно:",
                                                   attachments=[get_cancel_keyboard().as_markup()])
             await context.update_data(region=region_input, step="confirm")
-            return await event.message.answer("✅ Регион указан. Подтвердите? (Да/Нет)",
-                                              attachments=[get_cancel_keyboard().as_markup()])
+            return await event.message.answer(
+                "✅ Регион указан. Подтвердите создание задачи? (Отправьте 'Да')",
+                attachments=[get_cancel_keyboard().as_markup()])
+
         elif step == "confirm":
             if text.lower() != "да":
                 return await _cancel_and_exit(event, context, user_service)
 
-            role = UserRole(data["role"])
+            p = await context.get_data()
+            role = UserRole(p["role"])
             if role == UserRole.STAFF_CA:
-                task = await offline_task_service.create_task_by_admin(region=data["region"],
-                                                                       start_date=data[
-                                                                           "start_date"],
-                                                                       duration=data["duration"],
-                                                                       reward=data["reward"],
-                                                                       title=data["title"],
-                                                                       description=data[
-                                                                           "description"],
-                                                                       location=data["location"],
-                                                                       contacts=data["contacts"])
+                task = await offline_task_service.create_task_by_admin(
+                    region=p["region"], start_date=p["start_date"], duration=p["duration"],
+                    reward=p["reward"],
+                    title=p["title"], description=p["description"], location=p["location"],
+                    contacts=p["contacts"],
+                    is_for_members=p["is_for_members"]
+                )
             else:
                 task = await offline_task_service.create_task_by_personal(
                     user_id=event.from_user.user_id, user_source=Sources.MAX,
-                    start_date=data["start_date"], duration=data["duration"],
-                    reward=data["reward"], title=data["title"],
-                    description=data["description"], location=data["location"],
-                    contacts=data["contacts"])
-
+                    start_date=p["start_date"],
+                    duration=p["duration"], reward=p["reward"], title=p["title"],
+                    description=p["description"],
+                    location=p["location"], contacts=p["contacts"],
+                    is_for_members=p["is_for_members"]
+                )
             await context.clear()
             admin_role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
-            return await event.message.answer(f"✅ Задача '#{task.id} {task.title}' создана!",
-                                              attachments=[
-                                                  get_role_menu_keyboard(admin_role).as_markup()])
+            return await event.message.answer(
+                f"✅ Оффлайн задача '#{task.id} {task.title}' успешно создана!", attachments=[
+                    get_role_menu_keyboard(admin_role).as_markup()])
     except ValueError:
-        return await event.message.answer("⚠️ Неверный формат. Попробуйте снова.",
+        return await event.message.answer("⚠️ Неверный формат данных. Попробуйте снова.",
                                           attachments=[get_cancel_keyboard().as_markup()])
     except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+        logger.error(f"Critical error in process_offline_fields: {e}", exc_info=True)
         await context.clear()
-        return await event.message.answer("❌ Произошла ошибка.", attachments=[
-            get_role_menu_keyboard(await user_service.get_user_role(event.from_user.user_id,
-                                                                    Sources.MAX)).as_markup()])
+        return await event.message.answer("❌ Произошла ошибка при создании задачи.")
 
 
 # ==================== ПРОВЕРКА ОФЛАЙН ЗАДАЧ ====================

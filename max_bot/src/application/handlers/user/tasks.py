@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+async def _get_task_filter(user_service: IUserService, user_id: int) -> bool | None:
+    """Определяет фильтр задач. Админы видят все (None), обычные юзеры - только под свой статус."""
+    try:
+        u = await user_service.get_user(user_id, Sources.MAX)
+        return bool(u.is_member)
+    except Exception:
+        return False
+
+
 # ==================== ВЫБОР ТИПА ЗАДАНИЯ ====================
 @router.message_created(F.message.body.text == "Выполнить задание")
 async def select_task_type(event: MessageCreated, context: MemoryContext):
@@ -33,18 +42,17 @@ async def select_task_type(event: MessageCreated, context: MemoryContext):
 async def online_list(event: MessageCallback, context: MemoryContext,
                       online_task_service: IOnlineTaskService, user_service: IUserService):
     await event.answer()
+    is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
     tasks, total_pages = await online_task_service.search_tasks(event.from_user.user_id,
-                                                                Sources.MAX, page=1)
+                                                                Sources.MAX, page=1, is_member=is_member_filter)
     if not tasks:
         role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
         await event.message.answer("Нет доступных онлайн заданий.",
                                    attachments=[get_role_menu_keyboard(role).as_markup()])
         await context.clear()
         return
-
     await event.message.answer(f"Доступные задания (стр. 1/{total_pages}):",
-                               attachments=[
-                                   get_online_tasks_keyboard(tasks, 1, total_pages).as_markup()])
+                               attachments=[get_online_tasks_keyboard(tasks, 1, total_pages).as_markup()])
     await context.update_data(page=1, total_pages=total_pages)
     await context.set_state(UserTaskStates.ONLINE_LIST)
 
@@ -52,18 +60,20 @@ async def online_list(event: MessageCallback, context: MemoryContext,
 @router.message_callback(F.callback.payload.startswith("next_online_"))
 @router.message_callback(F.callback.payload.startswith("prev_online_"))
 async def paginate_online(event: MessageCallback, context: MemoryContext,
-                          online_task_service: IOnlineTaskService):
+                          online_task_service: IOnlineTaskService, user_service: IUserService):
     await event.answer()
     page = int(event.callback.payload.split("_")[-1])
+    is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
     tasks, total_pages = await online_task_service.search_tasks(event.from_user.user_id,
-                                                                Sources.MAX, page=page)
+                                                                Sources.MAX, page=page, is_member=is_member_filter)
     if not tasks:
-        await event.message.answer("На этой странице заданий нет.")
-        return
-
+        await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                          message="На этой странице заданий нет.", random_id=0)
+        return await event.ctx_api.messages.send_message_event_answer(
+            event_id=event.object.event_id, user_id=event.object.user_id,
+            peer_id=event.object.peer_id)
     await event.message.answer(f"Доступные задания (стр. {page}/{total_pages}):",
-                               attachments=[
-                                   get_online_tasks_keyboard(tasks, page, total_pages).as_markup()])
+                               attachments=[get_online_tasks_keyboard(tasks, page, total_pages).as_markup()])
     await context.update_data(page=page, total_pages=total_pages)
 
 
@@ -195,14 +205,19 @@ async def confirm_submit(event: MessageCallback, context: MemoryContext,
 
 @router.message_callback(F.callback.payload == "back_online_list")
 async def back_online_list(event: MessageCallback, context: MemoryContext,
-                           online_task_service: IOnlineTaskService):
-    await event.answer()
+                           online_task_service: IOnlineTaskService, user_service: IUserService):
+    state = await context.get_data()
+    page = state.get("page", 1) if state else 1
+    is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
     tasks, total_pages = await online_task_service.search_tasks(event.from_user.user_id,
-                                                                Sources.MAX, page=1)
-    await event.message.answer(f"Доступные задания (стр. 1/{total_pages}):",
-                               attachments=[
-                                   get_online_tasks_keyboard(tasks, 1, total_pages).as_markup()])
-    await context.update_data(page=1, total_pages=total_pages)
+                                                                Sources.MAX, page=page, is_member=is_member_filter)
+    if not tasks and total_pages > 0:
+        tasks, total_pages = await online_task_service.search_tasks(event.from_user.user_id,
+                                                                    Sources.MAX, page=1, is_member=is_member_filter)
+        page = 1
+    await event.message.answer(f"Доступные задания (стр. {page}/{total_pages}):",
+                               attachments=[get_online_tasks_keyboard(tasks, page, total_pages).as_markup()])
+    await context.update_data(page=page, total_pages=total_pages)
     await context.set_state(UserTaskStates.ONLINE_LIST)
 
 
@@ -218,14 +233,15 @@ async def offline_list(event: MessageCallback, context: MemoryContext,
         await context.clear()
         return
 
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1)
+    is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1,
+                                                                     is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
     if not tasks:
         await event.message.answer("Нет заданий в вашем регионе.",
                                    attachments=[get_role_menu_keyboard(u.role).as_markup()])
         await context.clear()
         return
-
     await event.message.answer(f"Задания в вашем регионе (стр. 1/{total_pages}):",
                                attachments=[
                                    get_offline_tasks_keyboard(tasks, 1, total_pages).as_markup()])
@@ -240,12 +256,11 @@ async def paginate_offline(event: MessageCallback, context: MemoryContext,
     await event.answer()
     page = int(event.callback.payload.split("_")[-1])
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page)
+    is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page, is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-
     await event.message.answer(f"Задания в вашем регионе (стр. {page}/{total_pages}):",
-                               attachments=[get_offline_tasks_keyboard(tasks, page,
-                                                                       total_pages).as_markup()])
+                               attachments=[get_offline_tasks_keyboard(tasks, page, total_pages).as_markup()])
     await context.update_data(page=page, total_pages=total_pages)
 
 
@@ -294,14 +309,19 @@ async def accept_offline(event: MessageCallback, context: MemoryContext,
 @router.message_callback(F.callback.payload == "back_offline_list")
 async def back_offline_list(event: MessageCallback, context: MemoryContext,
                             offline_task_service: IOfflineTaskService, user_service: IUserService):
-    await event.answer()
+    state = await context.get_data()
+    page = state.get("page", 1) if state else 1
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
-    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1)
+    is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
+    all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page, is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-    await event.message.answer(f"Задания в регионе (стр. 1/{total_pages}):",
-                               attachments=[
-                                   get_offline_tasks_keyboard(tasks, 1, total_pages).as_markup()])
-    await context.update_data(page=1, total_pages=total_pages)
+    if not tasks and total_pages > 1:
+        all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1, is_member=is_member_filter)
+        tasks = [t for t in all_tasks if t.region == u.region]
+        page = 1
+    await event.message.answer(f"Задания в регионе (стр. {page}/{total_pages}):",
+                               attachments=[get_offline_tasks_keyboard(tasks, page, total_pages).as_markup()])
+    await context.update_data(page=page, total_pages=total_pages)
     await context.set_state(UserTaskStates.OFFLINE_LIST)
 
 

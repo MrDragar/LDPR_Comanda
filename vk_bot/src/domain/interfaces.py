@@ -153,8 +153,7 @@ class IVKPublicationRepository(ABC):
 
 class IOnlineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int) -> tuple[list[OnlineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int, is_member: bool | None = None) -> tuple[list[OnlineTask], int]: ...
 
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OnlineTask | None: ...
@@ -173,8 +172,7 @@ class IOnlineTaskRepository(ABC):
 
 class IOfflineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int) -> tuple[list[OfflineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int, is_member: bool | None = None) -> tuple[list[OfflineTask], int]: ...
 
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OfflineTask | None: ...

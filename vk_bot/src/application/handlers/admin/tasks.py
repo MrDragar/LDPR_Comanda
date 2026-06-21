@@ -4,6 +4,8 @@ from datetime import datetime, date
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
+
+from src.application.keyboards.boolean_keyboard import get_boolean_keyboard
 from src.application.states import AdminTaskStates
 from src.application.utils import handle_cancel, get_cancel_kb
 from src.domain.entities.task import TaskType, TaskStatus
@@ -18,7 +20,8 @@ PAGE_LIMIT = 5
 
 
 @router.message(text=["Создать онлайн задачу"])
-async def start_create_online(message: Message, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
+async def start_create_online(message: Message, user_service: IUserService,
+                              state_dispenser: BuiltinStateDispenser):
     if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]):
         return await message.answer("Недостаточно прав")
     await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="title")
@@ -80,10 +83,22 @@ async def process_online_fields(message: Message, state_dispenser: BuiltinStateD
             reward = int(text)
             if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.",
                                                         keyboard=get_cancel_kb())
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                                      reward=reward, step="is_for_members")
+            return await message.answer(
+                "Это задание предназначено только для членов партии ЛДПР? (Да/Нет)",
+                keyboard=get_boolean_keyboard())
+        elif step == "is_for_members":
+            text_lower = text.lower().strip()
+            if text_lower not in ['да', 'нет']:
+                return await message.answer("Пожалуйста, выберите вариант на клавиатуре:",
+                                            keyboard=get_boolean_keyboard())
+            is_for_members = (text_lower == 'да')
+
             await online_task_service.create_task(
                 date=payload["date"], duration=payload["duration"], type=payload["type"],
-                reward=reward, url=payload["url"], title=payload["title"],
-                description=payload["description"]
+                reward=payload["reward"], url=payload["url"], title=payload["title"],
+                description=payload["description"], is_for_members=is_for_members
             )
             await state_dispenser.delete(message.from_id)
             return await message.answer("✅ Онлайн задача успешно создана!")
@@ -100,15 +115,12 @@ async def set_online_type(event: GroupTypes.MessageEvent, state_dispenser: Built
     state = await state_dispenser.get(event.object.peer_id)
     payload = {k: v for k, v in state.payload.items() if k != 'step'}
     task_type = TaskType(event.object.payload["type"])
-
     await state_dispenser.set(event.object.peer_id, AdminTaskStates.CREATE_ONLINE, **payload,
                               type=task_type, step="url")
-
     if task_type == TaskType.OTHER:
         msg = "🔗 Введите ссылку на задание (или '-' если не требуется):"
     else:
         msg = "🔗 Введите ссылку на задание (URL поста ВК):"
-
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=msg, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
                                                            user_id=event.object.user_id,
@@ -163,17 +175,36 @@ async def process_offline_fields(message: Message, user_service: IUserService, o
             try:
                 reward = int(text)
                 if reward <= 0: return await message.answer("⚠️ Количество баллов должно быть больше 0.", keyboard=get_cancel_kb())
-                role = await user_service.get_user_role(message.from_id, Sources.VK)
-                new_payload = {**payload, "reward": reward}
-                if role == UserRole.STAFF_CA:
-                    new_payload["step"] = "region"
-                    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **new_payload)
-                    return await message.answer("🌍 Введите регион для задачи:", keyboard=get_cancel_kb())
-                else:
-                    new_payload["step"] = "confirm"
-                    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE, **new_payload)
-                    return await message.answer("✅ Регион будет определен автоматически. Подтвердите создание задачи? (Отправьте 'Да')", keyboard=get_cancel_kb())
+                new_payload = {**payload, "reward": reward, "step": "is_for_members"}
+                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                          **new_payload)
+                return await message.answer(
+                    "Это задание предназначено только для членов партии ЛДПР? (Да/Нет)",
+                    keyboard=get_boolean_keyboard()
+                )
             except ValueError: return await message.answer("⚠️ Введите целое число баллов.", keyboard=get_cancel_kb())
+        elif step == "is_for_members":
+            text_lower = text.lower().strip()
+            if text_lower not in ['да', 'нет']:
+                return await message.answer("Пожалуйста, выберите вариант на клавиатуре:",
+                                            keyboard=get_boolean_keyboard())
+            is_for_members = (text_lower == 'да')
+
+            new_payload = {**payload, "is_for_members": is_for_members}
+            role = await user_service.get_user_role(message.from_id, Sources.VK)
+            if role == UserRole.STAFF_CA:
+                new_payload["step"] = "region"
+                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                          **new_payload)
+                return await message.answer("🌍 Введите регион для задачи:",
+                                            keyboard=get_cancel_kb())
+            else:
+                new_payload["step"] = "confirm"
+                await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_OFFLINE,
+                                          **new_payload)
+                return await message.answer(
+                    "✅ Регион будет определен автоматически. Подтвердите создание задачи? (Отправьте 'Да')",
+                    keyboard=get_cancel_kb())
         elif step == "region":
             region_input = text.strip()
             similar = await user_service.get_similar_regions(region_input)
@@ -191,10 +222,15 @@ async def process_offline_fields(message: Message, user_service: IUserService, o
             role = await user_service.get_user_role(message.from_id, Sources.VK)
             if role == UserRole.STAFF_CA:
                 task = await offline_task_service.create_task_by_admin(
-                    region=p["region"], start_date=p["start_date"], duration=p["duration"], reward=p["reward"], title=p["title"], description=p["description"], location=p["location"], contacts=p["contacts"]
+                    region=p["region"], start_date=p["start_date"], duration=p["duration"], 
+                    reward=p["reward"], title=p["title"], description=p["description"], 
+                    location=p["location"], contacts=p["contacts"], is_for_members=p["is_for_members"]
                 )
             else:
-                task = await offline_task_service.create_task_by_personal(user_id=message.from_id, user_source=Sources.VK, start_date=p["start_date"], duration=p["duration"], reward=p["reward"], title=p["title"], description=p["description"], location=p["location"], contacts=p["contacts"])
+                task = await offline_task_service.create_task_by_personal(
+                    user_id=message.from_id, user_source=Sources.VK, start_date=p["start_date"], 
+                    duration=p["duration"], reward=p["reward"], title=p["title"], description=p["description"],
+                    location=p["location"], contacts=p["contacts"], is_for_members=p["is_for_members"])
             await state_dispenser.delete(message.from_id)
             return await message.answer(f"✅ Оффлайн задача '#{task.id} {task.title}' успешно создана!")
     except Exception as e:
