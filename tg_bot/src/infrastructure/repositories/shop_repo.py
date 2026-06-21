@@ -113,7 +113,7 @@ class OrderRepository(IOrderRepository):
         stmt = select(func.count()).select_from(OrderORM).where(
             OrderORM.user_id == user_id,
             OrderORM.user_source == user_source,
-            OrderORM.product_id == product_id
+            OrderORM.product_id == product_id, OrderORM.status != OrderStatus.CANCELLED
         )
         return (await session.scalar(stmt) or 0) > 0
 
