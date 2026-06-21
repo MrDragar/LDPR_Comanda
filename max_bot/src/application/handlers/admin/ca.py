@@ -23,9 +23,11 @@ ROLE_HIERARCHY = {
 
 @router.message_created(F.message.body.text == "Управление пользователями")
 async def start_search(event: MessageCreated, context: MemoryContext, user_service: IUserService):
+    # Админ всегда находится в том источнике, откуда он пишет (в данном случае MAX)
     role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
-    if role != UserRole.STAFF_CA:
+    if role != UserRole.STAFF_CA and role != UserRole.COORDINATOR_RO:
         return await event.message.answer("Недостаточно прав.")
+
     await event.message.answer("Введите фамилию пользователя для поиска:",
                                attachments=[get_cancel_keyboard().as_markup()])
     await context.set_state(AdminCAStates.SEARCH_FIO)
@@ -60,8 +62,9 @@ async def _render_search(event, users: list, page: int, user_service: IUserServi
     else:
         text = "Выберите пользователя:"
         for u in users:
+            # Передаем source пользователя в payload
             builder.row(CallbackButton(text=f"{u.surname} {u.name} ({u.role.value})",
-                                       payload=f"ca_sel_{u.id}"))
+                                       payload=f"ca_sel_{u.id}_{u.source.value}"))
     builder.row(CallbackButton(text="🔙 В меню", payload="ca_cancel"))
 
     await event.message.answer(text, attachments=[builder.as_markup()])
@@ -79,23 +82,30 @@ async def cancel_search(event: MessageCallback, context: MemoryContext, user_ser
 @router.message_callback(F.callback.payload.startswith("ca_sel_"))
 async def select_user(event: MessageCallback, user_service: IUserService):
     await event.answer()
-    uid = int(event.callback.payload.split("_")[-1])
+    parts = event.callback.payload.split("_")
+    uid = int(parts[2])
+    source_str = parts[3]
+    source = Sources(source_str)
+
     admin_role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
     admin_level = ROLE_HIERARCHY.get(admin_role, 0)
 
     try:
-        target_user = await user_service.get_user(uid, Sources.MAX)
+        # Используем извлеченный source для получения пользователя
+        target_user = await user_service.get_user(uid, source)
     except Exception:
         return await event.message.answer("Пользователь не найден")
 
     target_level = ROLE_HIERARCHY.get(target_user.role, 0)
     text = (f"👤 {target_user.surname} {target_user.name} {target_user.patronymic or ''}\n"
             f"🌍 {target_user.region}\n"
-            f"🎯 Текущая роль: {target_user.role.value}")
+            f"🎯 Текущая роль: {target_user.role.value}\n"
+            f"📱 Источник: {source.value.upper()}")
 
     builder = InlineKeyboardBuilder()
     if admin_level > target_level:
-        builder.row(CallbackButton(text="🔄 Поменять роль", payload=f"ca_chg_{uid}"))
+        # Передаем source в кнопку смены роли
+        builder.row(CallbackButton(text="🔄 Поменять роль", payload=f"ca_chg_{uid}_{source_str}"))
     else:
         builder.row(CallbackButton(text="🔄 Поменять роль (недоступно)", payload="ca_no_perm"))
     builder.row(CallbackButton(text="🔙 Назад", payload="ca_cancel"))
@@ -113,15 +123,20 @@ async def no_perm(event: MessageCallback):
 @router.message_callback(F.callback.payload.startswith("ca_chg_"))
 async def change_role_menu(event: MessageCallback, user_service: IUserService):
     await event.answer()
-    uid = int(event.callback.payload.split("_")[-1])
+    parts = event.callback.payload.split("_")
+    uid = int(parts[2])
+    source_str = parts[3]
+
     admin_role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
     admin_level = ROLE_HIERARCHY.get(admin_role, 0)
 
     builder = InlineKeyboardBuilder()
     for r in UserRole:
         if ROLE_HIERARCHY.get(r, 0) < admin_level:
-            builder.row(CallbackButton(text=r.value, payload=f"ca_set_{uid}_{r.value}"))
-    builder.row(CallbackButton(text="❌ Отмена", payload=f"ca_sel_{uid}"))
+            # Передаем source и название роли в payload
+            builder.row(CallbackButton(text=r.value, payload=f"ca_set_{uid}_{source_str}_{r.value}"))
+    # Кнопка отмены возвращает к просмотру пользователя
+    builder.row(CallbackButton(text="❌ Отмена", payload=f"ca_sel_{uid}_{source_str}"))
 
     await event.message.answer("Выберите новую роль:", attachments=[builder.as_markup()])
 
@@ -132,8 +147,9 @@ async def set_role(event: MessageCallback, user_service: IUserService,
     await event.answer()
     parts = event.callback.payload.split("_")
     uid = int(parts[2])
-    # Исправление бага ТГ бота: роли содержат пробелы (напр. "Сотрудник ЦА"), поэтому берем всё после 3-го элемента
-    role_name = "_".join(parts[3:])
+    source_str = parts[3]
+    source = Sources(source_str)
+    role_name = "_".join(parts[4:])
 
     admin_role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
     admin_level = ROLE_HIERARCHY.get(admin_role, 0)
@@ -146,7 +162,8 @@ async def set_role(event: MessageCallback, user_service: IUserService,
     if ROLE_HIERARCHY.get(new_role, 0) >= admin_level:
         return await event.message.answer("❌ Нельзя установить роль равную или выше вашей.")
 
-    await user_service.update_user_role(uid, Sources.MAX, new_role)
-    await notification_service.notify_user(uid, Sources.MAX,
+    # Обновляем роль и отправляем уведомление с учетом правильного source
+    await user_service.update_user_role(uid, source, new_role)
+    await notification_service.notify_user(uid, source,
                                            f"Ваша роль изменена на: {new_role.value}")
     await event.message.answer(f"✅ Роль пользователя изменена на {new_role.value}")

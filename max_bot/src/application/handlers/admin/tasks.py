@@ -2,8 +2,10 @@ import logging
 import re
 from datetime import datetime, date
 from maxapi import Router, F
-from maxapi.types import MessageCreated, MessageCallback
+from maxapi.types import MessageCreated, MessageCallback, CallbackButton
 from maxapi.context import MemoryContext
+from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
+
 from src.application.states import AdminTaskStates
 from src.application.keyboards.task_keyboard import get_task_type_admin_keyboard, \
     get_admin_verify_task_keyboard, get_admin_verify_users_keyboard
@@ -24,6 +26,20 @@ async def _cancel_and_exit(event, context: MemoryContext, user_service: IUserSer
     role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
     await event.message.answer("Действие отменено.",
                                attachments=[get_role_menu_keyboard(role).as_markup()])
+
+
+def _get_verify_keyboard(tasks, page: int, total_pages: int) -> InlineKeyboardBuilder:
+    builder = InlineKeyboardBuilder()
+    for t in tasks:
+        title = t.title[:15] + "..." if len(t.title) > 15 else t.title
+        builder.row(CallbackButton(text=f"#{t.id} {title}", payload=f"view_task_{t.id}"))
+    if page > 1:
+        builder.row(CallbackButton(text="⬅️ Назад", payload=f"prev_verify_{page}"))
+    if page < total_pages:
+        builder.row(CallbackButton(text="Вперёд ➡️", payload=f"next_verify_{page}"))
+
+    builder.row(CallbackButton(text="🔙 В меню", payload="back_to_menu"))
+    return builder
 
 
 # ==================== СОЗДАНИЕ ОНЛАЙН ЗАДАЧИ ====================
@@ -103,7 +119,6 @@ async def set_online_type(event: MessageCallback, context: MemoryContext):
     await context.update_data(type=task_type, step="date")
     await event.message.answer("Введите дату начала (ДД.ММ.ГГГГ):",
                                attachments=[get_cancel_keyboard().as_markup()])
-    await event.callback.answer()
 
 
 # ==================== СОЗДАНИЕ ОФЛАЙН ЗАДАЧИ ====================
@@ -246,13 +261,32 @@ async def start_verify(event: MessageCreated, user_service: IUserService,
     if not tasks:
         return await event.message.answer("Нет активных задач для проверки.")
 
-    from maxapi.types import CallbackButton
-    from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    for t in tasks:
-        builder.row(CallbackButton(text=f"#{t.id} {t.title[:15]}...", payload=f"view_task_{t.id}"))
+    await event.message.answer(
+        f"Выберите задачу для проверки (стр. 1/{total_pages}):",
+        attachments=[_get_verify_keyboard(tasks, 1, total_pages).as_markup()]
+    )
 
-    await event.message.answer(f"Выберите задачу для проверки:", attachments=[builder.as_markup()])
+
+@router.message_callback(F.callback.payload.startswith("next_verify_"))
+@router.message_callback(F.callback.payload.startswith("prev_verify_"))
+async def paginate_verify(event: MessageCallback, user_service: IUserService,
+                          offline_task_service: IOfflineTaskService):
+    page = int(event.callback.payload.split("_")[-1])
+    u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
+
+    tasks, total_pages = await offline_task_service.search_tasks(event.from_user.user_id,
+                                                                 Sources.MAX, page=page)
+    region_filter = u.region if u.role != UserRole.STAFF_CA else None
+    tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
+
+    if not tasks:
+        await event.message.answer("На этой странице задач нет.")
+        return
+
+    await event.message.answer(
+        f"Выберите задачу для проверки (стр. {page}/{total_pages}):",
+        attachments=[_get_verify_keyboard(tasks, page, total_pages).as_markup()]
+    )
 
 
 @router.message_callback(F.callback.payload.startswith("view_task_"))
@@ -267,7 +301,6 @@ async def view_task(event: MessageCallback, offline_task_service: IOfflineTaskSe
     text = f"📋 {task.title}\n📍 {task.location}\n📅 Период: {period_str}\n🏆 {task.reward} баллов"
 
     await event.message.answer(text, attachments=[get_admin_verify_task_keyboard(tid).as_markup()])
-    await event.message.answer()
 
 
 @router.message_callback(F.callback.payload.startswith("list_users_"))
@@ -281,7 +314,6 @@ async def list_users(event: MessageCallback, offline_task_service: IOfflineTaskS
     tasks_list, total = await offline_task_service.get_users_for_task(tid, page, PAGE_LIMIT)
     total_pages = (total + PAGE_LIMIT - 1) // PAGE_LIMIT
     if not tasks_list:
-        await event.message.answer()
         return await event.message.answer("Участников нет.")
 
     from maxapi.types import CallbackButton
@@ -305,7 +337,6 @@ async def list_users(event: MessageCallback, offline_task_service: IOfflineTaskS
 
     await event.message.answer("Участники со статусом IN_PROGRESS:",
                                attachments=[builder.as_markup()])
-    await event.message.answer()
 
 
 @router.message_callback(F.callback.payload.startswith("check_user_"))
@@ -321,7 +352,6 @@ async def select_user_verify(event: MessageCallback, user_service: IUserService)
 
     await event.message.answer(text, attachments=[
         get_admin_verify_users_keyboard(tid, uid, source.value, 1, 1).as_markup()])
-    await event.message.answer()
 
 
 @router.message_callback(F.callback.payload.startswith("verify_action_"))
@@ -340,9 +370,9 @@ async def verify_action(event: MessageCallback, offline_task_service: IOfflineTa
     await notification_service.notify_user(uid, source,
                                            f"Ваша офлайн задача #{tid} была {status_msg} администратором.")
 
-    await event.message.answer()
     await event.message.answer(
         f"Статус задачи #{tid} для пользователя {uid} изменён на {action.value}")
+    await event.message.edit(attachments=[])
 
 
 # ==================== ВЕРИФИКАЦИЯ ТГ/МАКС ОНЛАЙН ЗАДАЧ ====================
@@ -379,23 +409,17 @@ async def tg_verify_action(event: MessageCallback, online_task_service: IOnlineT
 @router.message_callback(F.callback.payload == "back_to_verify")
 async def back_to_verify(event: MessageCallback, user_service: IUserService,
                          offline_task_service: IOfflineTaskService):
-    await event.answer()
-    # Просто возвращаемся к списку задач
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
-    tasks, _ = await offline_task_service.search_tasks(event.from_user.user_id, Sources.MAX, page=1)
+    tasks, total_pages = await offline_task_service.search_tasks(event.from_user.user_id,
+                                                                 Sources.MAX, page=1)
     region_filter = u.region if u.role != UserRole.STAFF_CA else None
     tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
 
     if not tasks:
         await event.message.answer("Нет активных задач для проверки.")
-        await event.message.answer()
         return
 
-    from maxapi.types import CallbackButton
-    from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    for t in tasks:
-        builder.row(CallbackButton(text=f"#{t.id} {t.title[:15]}...", payload=f"view_task_{t.id}"))
-
-    await event.message.answer("Выберите задачу для проверки:", attachments=[builder.as_markup()])
-    await event.message.answer()
+    await event.message.answer(
+        f"Выберите задачу для проверки (стр. 1/{total_pages}):",
+        attachments=[_get_verify_keyboard(tasks, 1, total_pages).as_markup()]
+    )

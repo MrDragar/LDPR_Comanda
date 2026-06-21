@@ -240,11 +240,74 @@ async def start_verify(message: types.Message, user_service: IUserService,
     builder = InlineKeyboardBuilder()
     for t in tasks:
         builder.button(text=f"#{t.id} {t.title[:15]}...", callback_data=f"view_task_{t.id}")
+
+    # ИСПРАВЛЕНО: Добавляем кнопки пагинации и возврата в меню
+    if total_pages > 1:
+        builder.button(text="Вперёд ➡️", callback_data=f"next_verify_2")
+    builder.button(text="🔙 В меню", callback_data="back_to_menu")
     builder.adjust(1)
 
     await message.answer(f"Выберите задачу для проверки (стр. 1/{total_pages}):",
                          reply_markup=builder.as_markup())
 
+
+@router.callback_query(F.data.startswith("next_verify_"))
+@router.callback_query(F.data.startswith("prev_verify_"))
+async def paginate_verify(query: types.CallbackQuery, user_service: IUserService,
+                          offline_task_service: IOfflineTaskService):
+    page = int(query.data.split("_")[-1])
+    u = await user_service.get_user(query.from_user.id, Sources.TG)
+
+    tasks, total_pages = await offline_task_service.search_tasks(query.from_user.id, Sources.TG,
+                                                                 page=page)
+    region_filter = u.region if u.role != UserRole.STAFF_CA else None
+    tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
+
+    if not tasks:
+        await query.answer("На этой странице задач нет.", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+    for t in tasks:
+        builder.button(text=f"#{t.id} {t.title[:15]}...", callback_data=f"view_task_{t.id}")
+
+    if page > 1:
+        builder.button(text="⬅️ Назад", callback_data=f"prev_verify_{page - 1}")
+    if page < total_pages:
+        builder.button(text="Вперёд ➡️", callback_data=f"next_verify_{page + 1}")
+    builder.button(text="🔙 В меню", callback_data="back_to_menu")
+    builder.adjust(1)
+
+    await query.answer()
+    await query.message.answer(f"Выберите задачу для проверки (стр. {page}/{total_pages}):",
+                               reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data == "back_to_verify")
+async def back_to_verify(query: types.CallbackQuery, user_service: IUserService,
+                         offline_task_service: IOfflineTaskService):
+    u = await user_service.get_user(query.from_user.id, Sources.TG)
+    tasks, total_pages = await offline_task_service.search_tasks(query.from_user.id, Sources.TG,
+                                                                 page=1)
+    region_filter = u.region if u.role != UserRole.STAFF_CA else None
+    tasks = [t for t in tasks if region_filter is None or t.region == region_filter]
+
+    if not tasks:
+        await query.answer()
+        return await query.message.answer("Нет активных задач для проверки.")
+
+    builder = InlineKeyboardBuilder()
+    for t in tasks:
+        builder.button(text=f"#{t.id} {t.title[:15]}...", callback_data=f"view_task_{t.id}")
+
+    if total_pages > 1:
+        builder.button(text="Вперёд ➡️", callback_data=f"next_verify_2")
+    builder.button(text="🔙 В меню", callback_data="back_to_menu")
+    builder.adjust(1)
+
+    await query.answer()
+    await query.message.answer(f"Выберите задачу для проверки (стр. 1/{total_pages}):",
+                               reply_markup=builder.as_markup())
 
 @router.callback_query(F.data.startswith("view_task_"))
 async def view_task(query: types.CallbackQuery, offline_task_service: IOfflineTaskService):
