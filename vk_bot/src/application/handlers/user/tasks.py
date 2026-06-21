@@ -335,14 +335,6 @@ async def view_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
     u = await user_service.get_user(event.object.user_id, Sources.VK)
     active_tasks, _ = await offline_task_service.get_user_tasks(u.id, u.source, 1)
 
-    if len(active_tasks) >= 2:
-        await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                          message="❌ Нельзя взять более 2 активных офлайн задач одновременно.",
-                                          random_id=0)
-        return await event.ctx_api.messages.send_message_event_answer(
-            event_id=event.object.event_id, user_id=event.object.user_id,
-            peer_id=event.object.peer_id)
-
     period_str = f"{task.start_date.strftime('%d.%m.%Y')} - {task.end_date.strftime('%d.%m.%Y')}"
     text = (f"📋 {task.title}\n"
             f"📅 Период: {period_str}\n"

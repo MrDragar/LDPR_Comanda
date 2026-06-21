@@ -314,7 +314,6 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
                      user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     tid = event.object.payload["tid"]
     page = event.object.payload.get("page", 1)
-
     tasks_list, total = await offline_task_service.get_users_for_task(tid, page, PAGE_LIMIT)
     if not tasks_list:
         return await event.ctx_api.messages.send(
@@ -322,12 +321,11 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
             message="Нет пользователей в статусе 'in_progress'",
             random_id=0
         )
-
     kb = Keyboard(inline=True)
     for t in tasks_list:
-        # Получаем пользователя для отображения ФИО
+        # Получаем пользователя для отображения ФИО с учетом его реального источника
         try:
-            u = await user_service.get_user(t.user_id, Sources.VK)
+            u = await user_service.get_user(t.user_id, t.user_source)
             fio = f"{u.surname} {u.name}"
         except Exception:
             fio = f"Пользователь {t.user_id}"
@@ -336,7 +334,9 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
         if len(fio) > 40:
             fio = fio[:37] + "..."
 
-        kb.add(Callback(fio, {"cmd": "check_user", "tid": tid, "uid": t.user_id}))
+        # Передаем source пользователя в payload
+        kb.add(Callback(fio, {"cmd": "check_user", "tid": tid, "uid": t.user_id,
+                              "src": t.user_source.value}))
         kb.row()
 
     kb.row()
@@ -344,7 +344,6 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
         kb.add(Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": page - 1}))
     if len(tasks_list) == PAGE_LIMIT:
         kb.add(Callback("Вперёд ➡️", {"cmd": "list_users", "tid": tid, "page": page + 1}))
-
     kb.add(Callback("К задаче", {"cmd": "view_task", "tid": tid}))
 
     await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_USERS, tid=tid,
@@ -363,26 +362,63 @@ async def list_users(event: GroupTypes.MessageEvent, offline_task_service: IOffl
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("check_user"))
-async def select_user(event: GroupTypes.MessageEvent, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
-    uid = event.object.payload["uid"]; tid = event.object.payload["tid"]
-    u = await user_service.get_user(uid, Sources.VK)
-    text = f"👤 {u.surname} {u.name} {u.patronymic or ''}\n🏙 {u.region}, {u.city}\n📞 {u.phone_number}"
-    kb = Keyboard(inline=True).add(Callback("✅ Принять", {"cmd": "verify_action", "tid": tid, "uid": uid, "act": "accept"})).add(Callback("❌ Отклонить", {"cmd": "verify_action", "tid": tid, "uid": uid, "act": "decline"})).row().add(Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": 1}))
+async def select_user(event: GroupTypes.MessageEvent, user_service: IUserService,
+                      state_dispenser: BuiltinStateDispenser):
+    uid = event.object.payload["uid"]
+    src = Sources(event.object.payload["src"])
+    tid = event.object.payload["tid"]
+
+    u = await user_service.get_user(uid, src)
+    text = (f"👤 {u.surname} {u.name} {u.patronymic or ''}\n"
+            f"🏙 {u.region}, {u.city}\n"
+            f"📞 {u.phone_number}")
+
+    # Передаем source в кнопки принятия/отклонения
+    kb = Keyboard(inline=True).add(
+        Callback("✅ Принять", {"cmd": "verify_action", "tid": tid, "uid": uid, "act": "accept",
+                               "src": src.value})
+    ).add(
+        Callback("❌ Отклонить", {"cmd": "verify_action", "tid": tid, "uid": uid, "act": "decline",
+                                 "src": src.value})
+    ).row().add(
+        Callback("⬅️ Назад", {"cmd": "list_users", "tid": tid, "page": 1})
+    )
+
     await state_dispenser.set(event.object.peer_id, AdminTaskStates.VERIFY_ACTION, tid=tid, uid=uid)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text, keyboard=kb.get_json(), random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text,
+                                      keyboard=kb.get_json(), random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
+                                                           user_id=event.object.user_id,
+                                                           peer_id=event.object.peer_id)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("verify_action"))
-async def verify_action(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService, notification_service: INotificationService, state_dispenser: BuiltinStateDispenser):
+async def verify_action(event: GroupTypes.MessageEvent, offline_task_service: IOfflineTaskService,
+                        notification_service: INotificationService,
+                        state_dispenser: BuiltinStateDispenser):
     p = event.object.payload
     action = TaskStatus.ACCEPTED if p["act"] == "accept" else TaskStatus.DECLINED
-    await offline_task_service.check_task(p["uid"], Sources.VK, p["tid"], action)
+
+    uid = p["uid"]
+    src = Sources(p["src"])
+    tid = p["tid"]
+
+    await offline_task_service.check_task(uid, src, tid, action)
     status_msg = "принята" if action == TaskStatus.ACCEPTED else "отклонена"
-    await notification_service.notify_user_vk(p["uid"], f"Ваша офлайн задача #{p['tid']} была {status_msg} администратором.")
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Статус задачи #{p['tid']} для пользователя {p['uid']} изменён на {action.value}", random_id=0)
-    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
-    await list_users(event, offline_task_service=offline_task_service, state_dispenser=state_dispenser)
+
+    # Используем универсальный метод notify_user, чтобы уведомление ушло в нужный мессенджер (ВК/TG/MAX)
+    await notification_service.notify_user(uid, src,
+                                           f"Ваша офлайн задача #{tid} была {status_msg} администратором.")
+
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                      message=f"Статус задачи #{tid} для пользователя {uid} изменён на {action.value}",
+                                      random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
+                                                           user_id=event.object.user_id,
+                                                           peer_id=event.object.peer_id)
+
+    await list_users(event, offline_task_service=offline_task_service,
+                     state_dispenser=state_dispenser)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("back_to_tasks"))

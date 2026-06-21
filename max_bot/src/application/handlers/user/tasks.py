@@ -258,9 +258,6 @@ async def view_offline(event: MessageCallback, context: MemoryContext,
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
 
     active_tasks, _ = await offline_task_service.get_user_tasks(u.id, u.source, 1)
-    if len(active_tasks) >= 2:
-        await event.message.answer("❌ Нельзя взять более 2 активных офлайн задач одновременно.")
-        return
 
     period_str = f"{task.start_date.strftime('%d.%m.%Y')} - {task.end_date.strftime('%d.%m.%Y')}"
     text = (f"📋 {task.title}\n"

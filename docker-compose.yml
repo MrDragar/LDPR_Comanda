@@ -45,6 +45,7 @@ services:
       VK_BOT_LINK: ${VK_BOT_LINK}
       TG_BOT_LINK: ${TG_BOT_LINK}
       MAX_BOT_LINK: ${MAX_BOT_LINK}
+      VERIFY_CHAT_ID: ${VK_VERIFY_CHAT_ID}
       ADMIN_IDS: ${ADMIN_IDS}
       LOG_CHAT: ${LOG_CHAT}
       LOG_LEVEL: ${LOG_LEVEL}
