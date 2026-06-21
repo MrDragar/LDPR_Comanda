@@ -48,18 +48,18 @@ async def _handle_start_payload(event, context: MemoryContext, bot: Bot, payload
 
     if await user_service.is_user_exists(user_id, Sources.MAX):
         role = await user_service.get_user_role(user_id, Sources.MAX)
-        await event.message.answer("Главное меню:",
+        await event.send("Главное меню:",
                                    attachments=[get_role_menu_keyboard(role).as_markup()])
         return
 
     try:
         media = InputMedia("docs/sokol_stay.webp")
         attachment = await bot.upload_media(media)
-        await event.message.answer(attachments=[attachment])
+        await event.send(attachments=[attachment])
     except Exception as e:
         logger.error(f"Media upload error: {e}")
 
-    await event.message.answer(
+    await event.send(
         "Здравствуйте!\n"
         "Я — Соколёнок Русик, ваш цифровой помощник команды ЛДПР. 🦅\n"
         "Вы на шаг ближе к тому, чтобы стать частью большой команды, "
@@ -72,7 +72,7 @@ async def _handle_start_payload(event, context: MemoryContext, bot: Bot, payload
         "обучение и доступ в магазин подарков.\n"
         "Готовы? Давайте знакомиться!"
     )
-    await event.message.answer(
+    await event.send(
         "Для начала дайте согласие на обработку персональных данных",
         attachments=[get_personal_data_keyboard().as_markup()]
     )
@@ -85,6 +85,7 @@ async def on_bot_started(event: BotStarted, context: MemoryContext, bot: Bot,
                          active_user_service: IActiveUserService,
                          headliner_service: IHeadlinerService):
     payload = getattr(event, 'payload', None)
+
     await _handle_start_payload(event, context, bot, payload, user_service, referral_service,
                                 active_user_service, headliner_service)
 

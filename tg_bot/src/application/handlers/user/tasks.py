@@ -89,10 +89,12 @@ async def view_online(query: types.CallbackQuery, state: FSMContext,
         await query.answer("Ошибка: задание не найдено", show_alert=True)
         return
 
-    text = (f"📋 Задание #{task.id}\n"
-            f"📌 Тип: {task.type.value}\n"
-            f"🏆 Награда: {task.reward} баллов\n"
-            f"🔗 Ссылка на задание: {task.url}")
+    text = f"📋 {task.title}\n"
+    text += f"📝 {task.description}\n"
+    text += f"📌 Тип: {task.type.value}\n"
+    text += f"🏆 Награда: {task.reward} баллов\n"
+    if task.url:
+        text += f"🔗 Ссылка на задание: {task.url}"
 
     await query.answer()
     await query.message.answer(text, reply_markup=get_online_task_view_keyboard(tid))
@@ -173,7 +175,6 @@ async def confirm_submit(query: types.CallbackQuery, state: FSMContext,
             f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, TG)\n"
             f"📌 Тип: {task.type.value}\n"
             f"🏆 Награда: {task.reward} баллов\n"
-            f"🔗 Ссылка на задание: {task.url}"
         )
 
         builder = InlineKeyboardBuilder()

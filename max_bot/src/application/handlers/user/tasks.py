@@ -1,3 +1,5 @@
+import asyncio
+import json
 import logging
 from maxapi import Router, F, Bot
 from maxapi.types import MessageCreated, MessageCallback
@@ -75,10 +77,12 @@ async def view_online(event: MessageCallback, context: MemoryContext,
         await event.message.answer("Ошибка: задание не найдено")
         return
 
-    text = (f"📋 Задание #{task.id}\n"
-            f"📌 Тип: {task.type.value}\n"
-            f"🏆 Награда: {task.reward} баллов\n"
-            f"🔗 Ссылка на задание: {task.url}")
+    text = f"📋 {task.title}\n"
+    text += f"📝 {task.description}\n"
+    text += f"📌 Тип: {task.type.value}\n"
+    text += f"🏆 Награда: {task.reward} баллов\n"
+    if task.url:
+        text += f"🔗 Ссылка на задание: {task.url}\n"
 
     await event.message.answer(text, attachments=[get_online_task_view_keyboard(tid).as_markup()])
     await context.update_data(tid=tid)
@@ -91,7 +95,7 @@ async def check_online(event: MessageCallback, context: MemoryContext):
     await event.answer()
     tid = int(event.callback.payload.split("_")[-1])
     await context.update_data(tid=tid)
-    await event.message.answer("Отправьте текст или ссылку, подтверждающую выполнение задания:")
+    await event.message.answer("Отправьте текст, ссылку или скриншот, подтверждающий выполнение задания:")
     await context.set_state(UserTaskStates.TG_ONLINE_AWAIT_PROOF)
 
 
@@ -104,7 +108,11 @@ async def receive_proof(event: MessageCreated, context: MemoryContext, user_serv
                                    attachments=[get_role_menu_keyboard(role).as_markup()])
         return
 
-    await context.update_data(proof_text=event.message.body.text)
+    proof_text = event.message.body.text or ""
+    # ✅ Сохраняем вложения из сообщения пользователя (скриншоты, фото и т.д.)
+    user_attachments = getattr(event.message.body, 'attachments', []) or []
+
+    await context.update_data(proof_text=proof_text, user_attachments=user_attachments)
 
     from maxapi.types import CallbackButton
     from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
@@ -141,17 +149,29 @@ async def confirm_submit(event: MessageCallback, context: MemoryContext,
 
         task = await online_task_service.get_task(tid)
         user = await user_service.get_user(uid, source)
-        proof_text = data.get('proof_text', 'Не указано')
 
+        proof_text = data.get('proof_text', '')
+        user_attachments = data.get('user_attachments', [])
+
+        # 1. ПЕРЕСЫЛАЕМ сообщение пользователя (текст и вложения) в чат проверки
+        if proof_text or user_attachments:
+            await bot.send_message(
+                chat_id=verify_chat_id,
+                text=proof_text if proof_text else "Доказательство выполнения",
+                attachments=user_attachments
+            )
+            await asyncio.sleep(0.5)
+
+        # 2. Отправляем информацию о задании с кнопками "ПОД НИМ" (следующим сообщением)
         info_text = (
             f"#in_progress\n"
             f"📋 Онлайн задание #{task.id} на проверку\n"
             f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, MAX)\n"
             f"📌 Тип: {task.type.value}\n"
             f"🏆 Награда: {task.reward} баллов\n"
-            f"🔗 Ссылка: {task.url}\n"
-            f"📝 Доказательство: {proof_text}"
         )
+        if task.url:
+            info_text += f"🔗 Ссылка: {task.url}\n"
 
         from maxapi.types import CallbackButton
         from maxapi.utils.inline_keyboard import InlineKeyboardBuilder

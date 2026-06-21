@@ -32,7 +32,6 @@ class OnlineTaskRepository(IOnlineTaskRepository):
                 text("date(date, '+' || duration || ' days') >= :today").bindparams(today=today)
             )
         )
-
         # Исключаем уже принятые/в процессе
         subquery = (
             select(AcceptedOnlineTaskORM.task_id)
@@ -43,19 +42,19 @@ class OnlineTaskRepository(IOnlineTaskRepository):
             )
         )
         final_stmt = base_stmt.where(OnlineTaskORM.id.notin_(subquery)).order_by(OnlineTaskORM.date)
-
         # Пагинация и подсчёт
         count_stmt = select(func.count()).select_from(final_stmt.subquery())
         total = await session.scalar(count_stmt) or 0
-
         paginated_stmt = final_stmt.offset(skip).limit(limit)
         result = await session.execute(paginated_stmt)
         tasks_orm = result.scalars().all()
 
+        # ✅ ИСПРАВЛЕНО: Добавлены title и description
         tasks = [
             OnlineTask(
                 id=t.id, date=t.date, duration=t.duration,
-                type=t.type, reward=t.reward, url=t.url
+                type=t.type, reward=t.reward, url=t.url,
+                title=t.title, description=t.description
             ) for t in tasks_orm
         ]
         logger.debug(f"Found {len(tasks)} active online tasks for user {user_id}")
@@ -66,8 +65,10 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         stmt = select(OnlineTaskORM).where(OnlineTaskORM.id == task_id)
         orm = await session.scalar(stmt)
         if not orm: return None
+
         return OnlineTask(id=orm.id, date=orm.date, duration=orm.duration, type=orm.type,
-                          reward=orm.reward, url=orm.url)
+                          reward=orm.reward, url=orm.url,
+                          title=orm.title, description=orm.description)
 
     async def create_task(self, task: OnlineTask) -> OnlineTask:
         session = self.__uow.get_session()

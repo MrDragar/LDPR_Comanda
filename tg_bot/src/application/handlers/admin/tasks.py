@@ -42,10 +42,11 @@ async def start_create_online(message: types.Message, state: FSMContext,
                               user_service: IUserService):
     if not await check_role_tg(user_service, message.from_user.id, [UserRole.STAFF_CA], Sources.TG):
         return await message.answer("Недостаточно прав")
-    await message.answer("🔗 Введите ссылку на задание (URL поста ВК):",
+
+    await message.answer("📝 Введите название онлайн задачи:",
                          reply_markup=get_cancel_keyboard())
     await state.set_state(AdminTaskStates.create_online)
-    await state.update_data(step="url")
+    await state.update_data(step="title")
 
 
 @router.message(AdminTaskStates.create_online)
@@ -60,34 +61,64 @@ async def process_online_fields(message: types.Message, state: FSMContext,
     text = message.text.strip()
 
     try:
-        if step == "url":
-            pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
-            if not pattern.match(text):
-                return await message.answer(
-                    "⚠️ Ссылка должна быть валидной ссылкой на пост ВК. Попробуйте снова.",
-                    reply_markup=get_cancel_keyboard())
-            await state.update_data(url=text, step="type")
+        if step == "title":
+            await state.update_data(title=text, step="description")
+            return await message.answer("📄 Введите описание задачи:",
+                                        reply_markup=get_cancel_keyboard())
+
+        elif step == "description":
+            await state.update_data(description=text, step="type")
             return await message.answer("📌 Выберите тип задания:",
                                         reply_markup=get_task_type_admin_keyboard())
+
+        elif step == "url":
+            task_type = data.get("type")
+            url = text if text != "-" else None
+
+            # Если тип не "другое", проверяем ссылку на пост ВК
+            if task_type != TaskType.OTHER.value:
+                pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
+                if not url or not pattern.match(url):
+                    return await message.answer(
+                        "⚠️ Ссылка должна быть валидной ссылкой на пост ВК.",
+                        reply_markup=get_cancel_keyboard())
+
+            await state.update_data(url=url, step="date")
+            return await message.answer("📅 Введите дату начала (ДД.ММ.ГГГГ):",
+                                        reply_markup=get_cancel_keyboard())
+
         elif step == "date":
             d = datetime.strptime(text, "%d.%m.%Y").date()
-            if d < date.today(): return await message.answer(
-                "⚠️ Дата начала не может быть в прошлом.", reply_markup=get_cancel_keyboard())
+            if d < date.today():
+                return await message.answer(
+                    "⚠️ Дата начала не может быть в прошлом.",
+                    reply_markup=get_cancel_keyboard())
             await state.update_data(date=d, step="duration")
             return await message.answer("⏱ Введите количество дней активности (число):",
                                         reply_markup=get_cancel_keyboard())
+
         elif step == "duration":
             dur = int(text)
             await state.update_data(duration=dur, step="reward")
             return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):",
                                         reply_markup=get_cancel_keyboard())
+
         elif step == "reward":
             reward = int(text)
-            if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.",
-                                                        reply_markup=get_cancel_keyboard())
-            await online_task_service.create_task(date=data["date"], duration=data["duration"],
-                                                  type=TaskType(data["type"]), reward=reward,
-                                                  url=data["url"])
+            if reward <= 0:
+                return await message.answer("Вознаграждение должно быть больше 0.",
+                                            reply_markup=get_cancel_keyboard())
+
+            await online_task_service.create_task(
+                date=data["date"],
+                duration=data["duration"],
+                type=TaskType(data["type"]),
+                reward=reward,
+                url=data.get("url"),
+                title=data["title"],
+                description=data["description"]
+            )
+
             await state.clear()
             role = await user_service.get_user_role(message.from_user.id, Sources.TG)
             return await message.answer("✅ Онлайн задача успешно создана!",
@@ -96,16 +127,25 @@ async def process_online_fields(message: types.Message, state: FSMContext,
         return await message.answer("⚠️ Неверный формат данных. Попробуйте снова.",
                                     reply_markup=get_cancel_keyboard())
     except Exception as e:
-        return await message.answer(f"❌ Произошла ошибка: {e}", reply_markup=get_cancel_keyboard())
+        logger.error(f"Error creating online task: {e}")
+        return await message.answer(f"❌ Произошла ошибка: {e}",
+                                    reply_markup=get_cancel_keyboard())
 
 
 @router.callback_query(F.data.startswith("set_type_"), AdminTaskStates.create_online)
 async def set_online_type(query: types.CallbackQuery, state: FSMContext):
-    task_type = query.data.split("_")[-1]
-    await state.update_data(type=task_type, step="date")
     await query.answer()
-    await query.message.answer("Введите дату начала (ДД.ММ.ГГГГ):",
-                               reply_markup=get_cancel_keyboard())
+    task_type_str = query.data.split("_")[-1]
+    task_type = TaskType(task_type_str)
+
+    await state.update_data(type=task_type.value, step="url")
+
+    if task_type == TaskType.OTHER:
+        msg = "🔗 Введите ссылку на задание (или '-', если не требуется):"
+    else:
+        msg = "🔗 Введите ссылку на задание (URL поста ВК):"
+
+    await query.message.answer(msg, reply_markup=get_cancel_keyboard())
 
 
 # --- CREATE OFFLINE TASK ---

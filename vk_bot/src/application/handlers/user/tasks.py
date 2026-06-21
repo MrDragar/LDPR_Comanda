@@ -1,8 +1,12 @@
+import json
 import logging
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes, Text
 from vkbottle.dispatch import BuiltinStateDispenser
+
 from src.application.states import UserTaskStates
+from src.application.utils import handle_cancel
+from src.domain.entities.task import TaskType
 from src.domain.exceptions import DomainError
 from src.services.interfaces import IOnlineTaskService, IOfflineTaskService, IUserService, \
     INotificationService
@@ -187,16 +191,137 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
         return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                                  message="Ошибка: задание не найдено", random_id=0)
     kb = Keyboard(inline=True)
-    kb.add(Callback("Проверить", {"cmd": "check_online", "tid": tid}))
+    if task.type == TaskType.OTHER:
+        kb.add(Callback("📤 Отправить подтверждение", {"cmd": "submit_proof_online", "tid": tid}))
+    else:
+        kb.add(Callback("✅ Проверить", {"cmd": "check_online", "tid": tid}))
     kb.row().add(Callback("Назад к списку", {"cmd": "back_online_list"}))
 
-    text = (f"📋 Задание #{task.id}\n"
+    text = (f"📋 {task.title}\n"
+            f"📝 {task.description}\n"
             f"📌 Тип: {task.type.value}\n"
-            f"🏆 Награда: {task.reward} баллов\n"
-            f"🔗 Ссылка на задание: {task.url}")
+            f"🏆 Награда: {task.reward} баллов\n")
+    if task.url:
+        text += f"🔗 Ссылка на задание: {task.url}"
+
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_VIEW, tid=tid)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=text,
                                       keyboard=kb.get_json(), random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
+                                                           user_id=event.object.user_id,
+                                                           peer_id=event.object.peer_id)
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent,
+                  CMDRule("submit_proof_online"))
+async def submit_proof_online(event: GroupTypes.MessageEvent,
+                              state_dispenser: BuiltinStateDispenser):
+    tid = event.object.payload["tid"]
+    await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_AWAIT_PROOF, tid=tid)
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                      message="Отправьте текст или ссылку, подтверждающую выполнение задания:",
+                                      random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
+                                                           user_id=event.object.user_id,
+                                                           peer_id=event.object.peer_id)
+
+
+@router.message(state=UserTaskStates.ONLINE_AWAIT_PROOF)
+async def receive_proof(message: Message, state_dispenser: BuiltinStateDispenser,
+                        user_service: IUserService):
+    if await handle_cancel(message, state_dispenser, user_service): return
+
+    state = await state_dispenser.get(message.from_id)
+    tid = state.payload.get("tid")
+
+    cm_id = message.conversation_message_id
+
+    await state_dispenser.set(message.from_id, UserTaskStates.ONLINE_CONFIRM_PROOF,
+                              tid=tid, cm_id=cm_id)
+
+    kb = Keyboard(inline=True)
+    kb.add(Callback("✅ Да, отправить", {"cmd": "confirm_submit_online"})).row()
+    kb.add(Callback("❌ Нет, отмена", {"cmd": "cancel_submit_online"}))
+
+    await message.answer("Вы уверены, что хотите отправить это сообщение на проверку?",
+                         keyboard=kb.get_json())
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("cancel_submit_online"))
+async def cancel_submit_online(event: GroupTypes.MessageEvent, state_dispenser: BuiltinStateDispenser, user_service: IUserService):
+    await state_dispenser.delete(event.object.peer_id)
+    role = await user_service.get_user_role(event.object.user_id, Sources.VK)
+    from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+    kb = get_role_menu_keyboard(role)
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="Главное меню", keyboard=kb, random_id=0)
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent,
+                  CMDRule("confirm_submit_online"))
+async def confirm_submit_online(event: GroupTypes.MessageEvent,
+                                state_dispenser: BuiltinStateDispenser,
+                                online_task_service: IOnlineTaskService, user_service: IUserService,
+                                verify_chat_id: int):
+    state = await state_dispenser.get(event.object.peer_id)
+    tid = state.payload.get("tid")
+    uid = event.object.user_id
+    source = Sources.VK
+    cm_id = state.payload.get("cm_id")
+
+    try:
+        await online_task_service.submit_tg_online_task(uid, source, tid)
+        task = await online_task_service.get_task(tid)
+        user = await user_service.get_user(uid, source)
+
+        # 1. ПЕРЕСЫЛАЕМ сообщение пользователя в чат проверки (сохраняет текст, фото, документы и т.д.)
+        forward_data = json.dumps({
+            "peer_id": event.object.peer_id,
+            "conversation_message_ids": [cm_id]
+        })
+
+        await event.ctx_api.messages.send(
+            peer_id=verify_chat_id,
+            message=f"📋 Онлайн задание #{task.id} на проверку",
+            forward=forward_data,
+            random_id=0
+        )
+
+        # 2. Отправляем информацию о задании с кнопками "ПОД НИМ" (следующим сообщением в чате)
+        info_text = (
+            f"#in_progress\n"
+            f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, VK)\n"
+            f"📌 Тип: {task.type.value}\n"
+            f"🏆 Награда: {task.reward} баллов\n"
+        )
+        if task.url:
+            info_text += f"🔗 Ссылка: {task.url}\n"
+
+        kb = Keyboard(inline=True)
+        kb.add(Callback("✅ Принять", {"cmd": "vk_verify_accept", "uid": uid, "tid": tid})).row()
+        kb.add(Callback("❌ Отклонить", {"cmd": "vk_verify_decline", "uid": uid, "tid": tid}))
+
+        await event.ctx_api.messages.send(
+            peer_id=verify_chat_id,
+            message=info_text,
+            keyboard=kb.get_json(),
+            random_id=0
+        )
+
+        # Уведомляем пользователя и очищаем стейт
+        await state_dispenser.delete(event.object.peer_id)
+        role = await user_service.get_user_role(uid, source)
+        from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
+        await event.ctx_api.messages.send(
+            peer_id=event.object.peer_id,
+            message="✅ Задание отправлено на проверку. Ожидайте решения администратора.",
+            keyboard=get_role_menu_keyboard(role),
+            random_id=0
+        )
+    except Exception as e:
+        await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Ошибка: {e}",
+                                          random_id=0)
+
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
                                                            user_id=event.object.user_id,
                                                            peer_id=event.object.peer_id)
@@ -244,7 +369,7 @@ async def check_online(event: GroupTypes.MessageEvent, online_task_service: IOnl
     try:
         await online_task_service.check_task(event.object.user_id, Sources.VK, tid)
         task = await online_task_service.get_task(tid)
-        await notification_service.notify_user_vk(event.object.peer_id,
+        await notification_service.notify_user(event.object.peer_id, Sources.VK,
                                                   f"✅ Задание #{tid} принято. Начислено {task.reward} баллов.")
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                           message=f"Вы успешно выполнили задание! +{task.reward} баллов",
@@ -265,7 +390,7 @@ async def accept_offline(event: GroupTypes.MessageEvent, offline_task_service: I
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                           message="✅ Задача принята. Свяжитесь с местным отделением по контактам в описании.",
                                           random_id=0)
-        await notification_service.notify_user_vk(event.object.peer_id,
+        await notification_service.notify_user(event.object.peer_id, Sources.VK,
                                                   f"Вы взяли офлайн задачу #{tid}. Ожидает проверки.")
     except DomainError as e:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=str(e), random_id=0)

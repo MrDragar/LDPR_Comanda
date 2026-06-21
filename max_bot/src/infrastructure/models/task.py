@@ -13,7 +13,9 @@ class OnlineTaskORM(Base):
     duration: Mapped[int] = mapped_column(nullable=False)
     type: Mapped[TaskType] = mapped_column(SQLEnum(TaskType), nullable=False)
     reward: Mapped[int] = mapped_column(nullable=False)
-    url: Mapped[str] = mapped_column(nullable=False)
+    url: Mapped[str | None] = mapped_column(nullable=True)
+    title: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(nullable=False)
 
 
 class OfflineTaskORM(Base):
@@ -41,7 +43,7 @@ class AcceptedOnlineTaskORM(Base):
         ForeignKeyConstraint(['user_id', 'user_source'], ['users.id', 'users.source'],
                              ondelete="CASCADE"),
         ForeignKeyConstraint(['task_id'], ['online_tasks.id'], ondelete="CASCADE"),
-        Index('idx_accepted_online_pk', 'user_id', 'user_source', 'task_id', unique=True)
+        Index('idx_accepted_online_pk', 'user_id', 'user_source', 'task_id', unique=False)
     )
 
 
@@ -57,7 +59,7 @@ class AcceptedOfflineTaskORM(Base):
         ForeignKeyConstraint(['user_id', 'user_source'], ['users.id', 'users.source'],
                              ondelete="CASCADE"),
         ForeignKeyConstraint(['task_id'], ['offline_tasks.id'], ondelete="CASCADE"),
-        Index('idx_accepted_offline_pk', 'user_id', 'user_source', 'task_id', unique=True)
+        Index('idx_accepted_offline_pk', 'user_id', 'user_source', 'task_id', unique=False)
     )
 
 

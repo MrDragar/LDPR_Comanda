@@ -84,10 +84,10 @@ class OnlineTaskService(IOnlineTaskService):
             return await self.__task_repo.get_task_by_id(task_id)
 
     async def create_task(self, date: date, duration: int, type: TaskType, reward: int,
-                          url: str) -> OnlineTask:
+                          url: str | None, title: str, description: str) -> OnlineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
         if duration <= 0: raise DomainError("Длительность должна быть больше нуля")
-        if not url.startswith("https://vk.com/"):
+        if type != TaskType.OTHER and url and not url.startswith("https://vk.com/"):
             raise DomainError("Ссылка должна быть валидным URL ВКонтакте")
         async with self.__uow.atomic():
             task = OnlineTask(
@@ -96,7 +96,9 @@ class OnlineTaskService(IOnlineTaskService):
                 duration=duration,
                 type=type,
                 reward=reward,
-                url=url
+                url=url,
+                title=title,
+                description=description
             )
             return await self.__task_repo.create_task(task)
 

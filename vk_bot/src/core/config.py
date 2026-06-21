@@ -9,6 +9,7 @@ load_dotenv(BASE_DIR / ".env", override=True)
 load_dotenv(override=True)
 VK_API_TOKEN = os.getenv("VK_API_TOKEN")
 VK_PUBLICATION_TOKEN = os.getenv("VK_PUBLICATION_TOKEN") or os.getenv("VK_MARKET_TOKEN")
+VERIFY_CHAT_ID = int(os.getenv("VERIFY_CHAT_ID", "0"))
 TG_API_TOKEN = os.getenv("TG_API_TOKEN")
 MAX_API_TOKEN = os.getenv("MAX_API_TOKEN")
 

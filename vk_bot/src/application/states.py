@@ -20,16 +20,6 @@ class RegistrationStates(BaseStateGroup):
     CHECK_SUBSCRIPTION = "check_subscription"
 
 
-class LotteryStates(BaseStateGroup):
-    INTRO = "lottery_intro"
-    IS_MEMBER = "lottery_is_member"
-    EMAIL = "lottery_email"
-    GENDER = "lottery_gender"
-    CITY = "lottery_city"
-    WISH_TO_JOIN = "lottery_wish_to_join"
-    HOME_ADDRESS = "lottery_home_address"
-
-
 class PostsStates(BaseStateGroup):
     GET_MESSAGE = "get_message"
     CONFIRM = "confirm"
@@ -71,6 +61,8 @@ class UserTaskStates(BaseStateGroup):
     SELECT_TYPE = "user_select_type"
     ONLINE_LIST = "user_online_list"
     ONLINE_VIEW = "user_online_view"
+    ONLINE_AWAIT_PROOF = "user_online_await_proof"
+    ONLINE_CONFIRM_PROOF = "user_online_confirm_proof"
     OFFLINE_LIST = "user_offline_list"
     OFFLINE_VIEW = "user_offline_view"
     MY_TASKS = "user_my_tasks"

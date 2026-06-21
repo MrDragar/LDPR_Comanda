@@ -21,12 +21,14 @@ PAGE_LIMIT = 5
 async def start_create_online(message: Message, user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     if not await check_role(user_service, message.from_id, [UserRole.STAFF_CA]):
         return await message.answer("Недостаточно прав")
-    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="url")
-    await message.answer("🔗 Введите ссылку на задание (URL поста ВК):", keyboard=get_cancel_kb())
+    await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, step="title")
+    await message.answer("📝 Введите название онлайн задачи:", keyboard=get_cancel_kb())
 
 
 @router.message(state=AdminTaskStates.CREATE_ONLINE)
-async def process_online_fields(message: Message, state_dispenser: BuiltinStateDispenser, online_task_service: IOnlineTaskService, user_service: IUserService):
+async def process_online_fields(message: Message, state_dispenser: BuiltinStateDispenser,
+                                online_task_service: IOnlineTaskService,
+                                user_service: IUserService):
     if await handle_cancel(message, state_dispenser, user_service): return
     state = await state_dispenser.get(message.from_id)
     if not state: return
@@ -34,30 +36,60 @@ async def process_online_fields(message: Message, state_dispenser: BuiltinStateD
     payload = {k: v for k, v in state.payload.items() if k != 'step'}
     text = message.text.strip()
     try:
-        if step == "url":
-            pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
-            if not pattern.match(text): return await message.answer("⚠️ Ссылка должна быть валидной ссылкой на пост ВК.", keyboard=get_cancel_kb())
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload, url=text, step="type")
+        if step == "title":
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                                      title=text, step="description")
+            return await message.answer("📄 Введите описание онлайн задачи:",
+                                        keyboard=get_cancel_kb())
+        elif step == "description":
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                                      description=text, step="type")
             kb = Keyboard(inline=True)
-            for t in TaskType: kb.add(Callback(t.value, {"cmd": "set_type", "type": t.value})); kb.row()
+            for t in TaskType:
+                kb.add(Callback(t.value, {"cmd": "set_type", "type": t.value}))
+                kb.row()
             return await message.answer("📌 Выберите тип задания:", keyboard=kb.get_json())
+        elif step == "url":
+            task_type = payload.get("type")
+            url = text if text != "-" else None
+            if task_type != TaskType.OTHER:
+                pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
+                if not url or not pattern.match(url):
+                    return await message.answer(
+                        "⚠️ Ссылка должна быть валидной ссылкой на пост ВК.",
+                        keyboard=get_cancel_kb())
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                                      url=url, step="date")
+            return await message.answer("📅 Введите дату начала (ДД.ММ.ГГГГ):",
+                                        keyboard=get_cancel_kb())
         elif step == "date":
             d = datetime.strptime(text, "%d.%m.%Y").date()
-            if d < date.today(): return await message.answer("⚠️ Дата начала не может быть в прошлом.", keyboard=get_cancel_kb())
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload, date=d, step="duration")
-            return await message.answer("⏱ Введите количество дней активности (число):", keyboard=get_cancel_kb())
+            if d < date.today(): return await message.answer(
+                "⚠️ Дата начала не может быть в прошлом.", keyboard=get_cancel_kb())
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                                      date=d, step="duration")
+            return await message.answer("⏱ Введите количество дней активности (число):",
+                                        keyboard=get_cancel_kb())
         elif step == "duration":
             dur = int(text)
-            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload, duration=dur, step="reward")
-            return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):", keyboard=get_cancel_kb())
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                                      duration=dur, step="reward")
+            return await message.answer("💰 Введите размер вознаграждения за выполнение (в баллах):",
+                                        keyboard=get_cancel_kb())
         elif step == "reward":
             reward = int(text)
-            if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.", keyboard=get_cancel_kb())
-            await online_task_service.create_task(date=payload["date"], duration=payload["duration"], type=payload["type"], reward=reward, url=payload["url"])
+            if reward <= 0: return await message.answer("Вознаграждение должно быть больше 0.",
+                                                        keyboard=get_cancel_kb())
+            await online_task_service.create_task(
+                date=payload["date"], duration=payload["duration"], type=payload["type"],
+                reward=reward, url=payload["url"], title=payload["title"],
+                description=payload["description"]
+            )
             await state_dispenser.delete(message.from_id)
             return await message.answer("✅ Онлайн задача успешно создана!")
     except ValueError:
-        return await message.answer("⚠️ Неверный формат данных. Попробуйте снова.", keyboard=get_cancel_kb())
+        return await message.answer("⚠️ Неверный формат данных. Попробуйте снова.",
+                                    keyboard=get_cancel_kb())
     except Exception as e:
         logger.error(f"Error creating online task: {e}")
         return await message.answer(f"❌ Произошла ошибка: {e}")
@@ -66,11 +98,18 @@ async def process_online_fields(message: Message, state_dispenser: BuiltinStateD
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("set_type"))
 async def set_online_type(event: GroupTypes.MessageEvent, state_dispenser: BuiltinStateDispenser):
     state = await state_dispenser.get(event.object.peer_id)
-    del state.payload['step']
-    await state_dispenser.set(event.object.peer_id, AdminTaskStates.CREATE_ONLINE, **state.payload,
-                              type=TaskType(event.object.payload["type"]), step="date")
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message="Введите дату начала (ДД.ММ.ГГГГ):", random_id=0)
+    payload = {k: v for k, v in state.payload.items() if k != 'step'}
+    task_type = TaskType(event.object.payload["type"])
+
+    await state_dispenser.set(event.object.peer_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                              type=task_type, step="url")
+
+    if task_type == TaskType.OTHER:
+        msg = "🔗 Введите ссылку на задание (или '-' если не требуется):"
+    else:
+        msg = "🔗 Введите ссылку на задание (URL поста ВК):"
+
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=msg, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
                                                            user_id=event.object.user_id,
                                                            peer_id=event.object.peer_id)
@@ -397,3 +436,58 @@ async def back_to_tasks(event: GroupTypes.MessageEvent, user_service: IUserServi
         user_id=event.object.user_id,
         peer_id=event.object.peer_id
     )
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent,
+                  CMDRule("vk_verify_accept"))
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent,
+                  CMDRule("vk_verify_decline"))
+async def vk_verify_action(event: GroupTypes.MessageEvent, online_task_service: IOnlineTaskService,
+                           notification_service: INotificationService, verify_chat_id: int):
+    if verify_chat_id and event.object.peer_id != verify_chat_id:
+        return
+
+    cmd = event.object.payload.get("cmd")
+    uid = event.object.payload.get("uid")
+    tid = event.object.payload.get("tid")
+    source = Sources.VK
+
+    try:
+        # Получаем исходное сообщение, чтобы отредактировать его и убрать кнопки
+        msgs = await event.ctx_api.messages.get_by_conversation_message_id(
+            peer_id=event.object.peer_id,
+            conversation_message_ids=[event.object.conversation_message_id]
+        )
+        old_text = msgs.items[0].text if msgs.items else ""
+        msg_id = msgs.items[0].id if msgs.items else None
+
+        if cmd == "vk_verify_accept":
+            await online_task_service.accept_tg_online_task(uid, source, tid)
+            await notification_service.notify_user(uid, source,
+                                                   f"✅ Ваша онлайн задача #{tid} принята! Баллы начислены.")
+            new_text = old_text.replace("#in_progress", "#accepted")
+        else:
+            await online_task_service.decline_tg_online_task(uid, source, tid)
+            await notification_service.notify_user(uid, source,
+                                                   f"❌ Ваша онлайн задача #{tid} отклонена.")
+            new_text = old_text.replace("#in_progress", "#declined")
+
+        if msg_id:
+            await event.ctx_api.messages.edit(
+                peer_id=event.object.peer_id,
+                message_id=msg_id,
+                message=new_text,
+                keyboard="{}"
+            )
+        else:
+            await event.ctx_api.messages.send(peer_id=event.object.peer_id,
+                                              message=f"ОБРАБОТАНО\n{new_text}", random_id=0)
+
+    except Exception as e:
+        logger.error(e)
+        await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Ошибка: {e}",
+                                          random_id=0)
+
+    await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
+                                                           user_id=event.object.user_id,
+                                                           peer_id=event.object.peer_id)

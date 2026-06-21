@@ -49,11 +49,10 @@ async def start_create_online(event: MessageCreated, context: MemoryContext,
     role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
     if role != UserRole.STAFF_CA:
         return await event.message.answer("Недостаточно прав")
-
-    await event.message.answer("🔗 Введите ссылку на задание (URL поста ВК):",
+    await event.message.answer("📝 Введите название онлайн задачи:",
                                attachments=[get_cancel_keyboard().as_markup()])
     await context.set_state(AdminTaskStates.CREATE_ONLINE)
-    await context.update_data(step="url")
+    await context.update_data(step="title")
 
 
 @router.message_created(AdminTaskStates.CREATE_ONLINE)
@@ -68,15 +67,27 @@ async def process_online_fields(event: MessageCreated, context: MemoryContext,
     text = event.message.body.text.strip()
 
     try:
-        if step == "url":
-            pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
-            if not pattern.match(text):
-                return await event.message.answer(
-                    "⚠️ Ссылка должна быть валидной ссылкой на пост ВК.",
-                    attachments=[get_cancel_keyboard().as_markup()])
-            await context.update_data(url=text, step="type")
+        if step == "title":
+            await context.update_data(title=text, step="description")
+            return await event.message.answer("📄 Введите описание задачи:",
+                                              attachments=[get_cancel_keyboard().as_markup()])
+        elif step == "description":
+            await context.update_data(description=text, step="type")
             return await event.message.answer("📌 Выберите тип задания:", attachments=[
                 get_task_type_admin_keyboard().as_markup()])
+        elif step == "url":
+            task_type = data.get("type")
+            url = text if text != "-" else None
+            # Если тип не "другое", проверяем ссылку на пост ВК
+            if task_type != TaskType.OTHER.value:
+                pattern = re.compile(r'^https?://(vk\.com|m\.vk\.com)/wall-?\d+_\d+.*$')
+                if not url or not pattern.match(url):
+                    return await event.message.answer(
+                        "⚠️ Ссылка должна быть валидной ссылкой на пост ВК (или введите '-' если нет ссылки).",
+                        attachments=[get_cancel_keyboard().as_markup()])
+            await context.update_data(url=url, step="date")
+            return await event.message.answer("📅 Введите дату начала (ДД.ММ.ГГГГ):",
+                                              attachments=[get_cancel_keyboard().as_markup()])
         elif step == "date":
             d = datetime.strptime(text, "%d.%m.%Y").date()
             if d < date.today():
@@ -97,9 +108,11 @@ async def process_online_fields(event: MessageCreated, context: MemoryContext,
                 return await event.message.answer("Вознаграждение должно быть больше 0.",
                                                   attachments=[get_cancel_keyboard().as_markup()])
 
-            await online_task_service.create_task(date=data["date"], duration=data["duration"],
-                                                  type=TaskType(data["type"]), reward=reward,
-                                                  url=data["url"])
+            await online_task_service.create_task(
+                date=data["date"], duration=data["duration"],
+                type=TaskType(data["type"]), reward=reward,
+                url=data.get("url"), title=data["title"], description=data["description"]
+            )
             await context.clear()
             role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
             return await event.message.answer("✅ Онлайн задача успешно создана!", attachments=[
@@ -115,10 +128,15 @@ async def process_online_fields(event: MessageCreated, context: MemoryContext,
 @router.message_callback(F.callback.payload.startswith("set_type_"))
 async def set_online_type(event: MessageCallback, context: MemoryContext):
     await event.answer()
-    task_type = event.callback.payload.split("_")[-1]
-    await context.update_data(type=task_type, step="date")
-    await event.message.answer("Введите дату начала (ДД.ММ.ГГГГ):",
-                               attachments=[get_cancel_keyboard().as_markup()])
+    task_type_str = event.callback.payload.split("_")[-1]
+    task_type = TaskType(task_type_str)
+    await context.update_data(type=task_type.value, step="url")
+
+    if task_type == TaskType.OTHER:
+        msg = "🔗 Введите ссылку на задание (или '-', если не требуется):"
+    else:
+        msg = "🔗 Введите ссылку на задание (URL поста ВК):"
+    await event.message.answer(msg, attachments=[get_cancel_keyboard().as_markup()])
 
 
 # ==================== СОЗДАНИЕ ОФЛАЙН ЗАДАЧИ ====================

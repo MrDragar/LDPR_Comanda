@@ -8,6 +8,7 @@ class TaskType(enum.Enum):
     REPOST = "репост"
     COMMENT = "комментарий"
     LIKE = "лайк"
+    OTHER = "другое"
 
 
 class TaskStatus(enum.Enum):
@@ -23,7 +24,9 @@ class OnlineTask:
     duration: int
     type: TaskType
     reward: int
-    url: str 
+    url: str | None
+    title: str
+    description: str 
 
 
 @dataclass
