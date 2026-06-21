@@ -13,7 +13,8 @@ def get_task_type_keyboard() -> InlineKeyboardBuilder:
 def get_online_tasks_keyboard(tasks: list[OnlineTask], page: int, total_pages: int) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
     for t in tasks:
-        builder.row(CallbackButton(text=f"#{t.id} {t.type.value}", payload=f"view_online_{t.id}"))
+        title = t.title[:20] + "..." if len(t.title) > 20 else t.title
+        builder.row(CallbackButton(text=f"#{t.id} {title}", payload=f"view_online_{t.id}"))
     if page > 1:
         builder.row(CallbackButton(text="⬅️ Назад", payload=f"prev_online_{page - 1}"))
     if page < total_pages:

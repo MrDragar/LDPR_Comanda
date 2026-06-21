@@ -15,7 +15,8 @@ def get_online_tasks_keyboard(tasks: list[OnlineTask], page: int,
                               total_pages: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for t in tasks:
-        builder.button(text=f"#{t.id} {t.type.value}", callback_data=f"view_online_{t.id}")
+        title = t.title[:20] + "..." if len(t.title) > 20 else t.title
+        builder.button(text=f"#{t.id} {title}", callback_data=f"view_online_{t.id}")
 
     if page > 1:
         builder.button(text="⬅️ Назад", callback_data=f"prev_online_{page - 1}")
