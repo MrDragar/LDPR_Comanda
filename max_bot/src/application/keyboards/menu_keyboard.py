@@ -5,12 +5,13 @@ from src.domain.entities.user import UserRole
 
 def get_role_menu_keyboard(role: UserRole | None) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
-    builder.row(MessageButton(text="Выполнить задание"))
-    builder.row(MessageButton(text="Мои задания"))
-    builder.row(MessageButton(text="Личный кабинет"))
-    builder.row(MessageButton(text="Обучение"))
-    builder.row(MessageButton(text="Магазин"))
-    builder.row(MessageButton(text="Закрытые мероприятия"))
+    if role == UserRole.USER:
+        builder.row(MessageButton(text="Выполнить задание"))
+        builder.row(MessageButton(text="Мои задания"))
+        builder.row(MessageButton(text="Личный кабинет"))
+        builder.row(MessageButton(text="Обучение"))
+        builder.row(MessageButton(text="Магазин"))
+        builder.row(MessageButton(text="Закрытые мероприятия"))
 
     if role in (UserRole.STAFF_RO, UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
         builder.row(MessageButton(text="Проверить офлайн задачи"))
