@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def finish_registration(
         event: MessageCreated, context: MemoryContext, bot: Bot,
-        user_service: IUserService, tg_bot: TgBot, log_chat: str,
+        user_service: IUserService, tg_bot: TgBot, log_chat: str, group_link: str,
         headliner_service: IHeadlinerService
 ):
     peer_id = event.from_user.user_id
@@ -66,6 +66,10 @@ async def finish_registration(
                 f"Сообщение от хедлайнера {referral_headliner.fio}:\n"
                 f"{referral_headliner.welcome_message}"
             )
+        await event.message.answer(
+            "Отправьте заявку на вступление в нашу закрытую группу, чтобы стать частью нашей большой команды\n"
+            f"{group_link}"
+        )
 
         await event.message.answer("Меню",
                                    attachments=[get_role_menu_keyboard(user.role).as_markup()])

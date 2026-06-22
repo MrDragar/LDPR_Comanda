@@ -16,7 +16,7 @@ router = Router()
 async def get_news_sub(
         event: MessageCreated, context: MemoryContext, bot: Bot,
         user_service: IUserService, tg_bot: TgBot, log_chat: str,
-        headliner_service: IHeadlinerService
+        headliner_service: IHeadlinerService, group_link: str
 ):
     text = event.message.body.text.lower().strip() if event.message.body.text else ""
     if text not in ['да', 'нет']:
@@ -24,5 +24,5 @@ async def get_news_sub(
                                           attachments=[get_boolean_keyboard().as_markup()])
 
     await context.update_data(news_subscription=(text == 'да'))
-    await finish_registration(event, context, bot, user_service, tg_bot, log_chat,
+    await finish_registration(event, context, bot, user_service, tg_bot, log_chat, group_link,
                               headliner_service)

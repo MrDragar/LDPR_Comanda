@@ -27,3 +27,5 @@ S3_REGION = os.getenv("S3_REGION", "ru-central1")
 S3_KEY = os.getenv("S3_KEY")
 S3_SECRET = os.getenv("S3_SECRET")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
+
+GROUP_LINK = os.getenv("GROUP_LINK")

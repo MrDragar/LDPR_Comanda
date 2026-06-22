@@ -27,6 +27,7 @@ services:
       S3_KEY: ${S3_KEY}
       S3_SECRET: ${S3_SECRET}
       S3_ENDPOINT: ${S3_ENDPOINT}
+      GROUP_LINK: ${GROUP_LINK}
     restart: always
   vk_bot:
     command: python3 -m src.main
@@ -58,6 +59,7 @@ services:
       S3_KEY: ${S3_KEY}
       S3_SECRET: ${S3_SECRET}
       S3_ENDPOINT: ${S3_ENDPOINT}
+      GROUP_LINK: ${GROUP_LINK}
     restart: always
   max_bot:
     command: python3 -m src.main
@@ -89,6 +91,7 @@ services:
       S3_KEY: ${S3_KEY}
       S3_SECRET: ${S3_SECRET}
       S3_ENDPOINT: ${S3_ENDPOINT}
+      GROUP_LINK: ${GROUP_LINK}
     restart: always
 networks:
   app_network:

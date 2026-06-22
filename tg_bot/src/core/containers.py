@@ -151,6 +151,7 @@ class Container(DeclarativeContainer):
     group_id: providers.Object[int] = providers.Object(config.group_id)
     service_token: providers.Object[str] = providers.Object(config.SERVICE_TOKEN)
     verify_chat_id: providers.Object[int] = providers.Object(config.VERIFY_CHAT_ID)
+    group_link: providers.Object[str] = providers.Object(config.GROUP_LINK)
 
     learning_service: providers.Factory[ILearningService] = providers.Factory(
         LearningService, uow=uow, repo=learning_repository, 

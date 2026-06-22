@@ -8,7 +8,7 @@ from src.services.interfaces import IUserService, IHeadlinerService
 
 async def finish_registration(
     user_service: IUserService, state: FSMContext, message: types.Message,
-    log_chat: str, headliner_service: IHeadlinerService,
+    log_chat: str, group_link: str, headliner_service: IHeadlinerService,
 ):
     data = await state.get_data()
     news_subscription = data['news_subscription']
@@ -55,6 +55,10 @@ async def finish_registration(
             f"Сообщение от хедлайнера {referral_headliner.fio}:\n\n"
             f"{referral_headliner.welcome_message}"
         )
+    await message.answer(
+        "Отправьте заявку на вступление в нашу закрытую группу, чтобы стать частью нашей большой команды\n"
+        f"{group_link}"
+    )
     await message.answer("Меню", reply_markup=get_role_menu_keyboard(user.role))
     await state.clear()
     await message.bot.send_message(chat_id=log_chat, text=f"""
