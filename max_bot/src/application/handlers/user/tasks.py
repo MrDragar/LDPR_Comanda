@@ -47,7 +47,7 @@ async def online_list(event: MessageCallback, context: MemoryContext,
                                                                 Sources.MAX, page=1, is_member=is_member_filter)
     if not tasks:
         role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
-        await event.message.answer("Нет доступных онлайн заданий.",
+        await event.message.answer("Нет доступных онлайн заданий. Загляните к нам снова — скоро будут новые.",
                                    attachments=[get_role_menu_keyboard(role).as_markup()])
         await context.clear()
         return
@@ -238,7 +238,7 @@ async def offline_list(event: MessageCallback, context: MemoryContext,
                                                                      is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
     if not tasks:
-        await event.message.answer("Нет заданий в вашем регионе.",
+        await event.message.answer("Нет заданий в вашем регионе. Загляните к нам снова — скоро будут новые.",
                                    attachments=[get_role_menu_keyboard(u.role).as_markup()])
         await context.clear()
         return

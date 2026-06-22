@@ -43,7 +43,7 @@ async def online_list(query: types.CallbackQuery, state: FSMContext,
     if not tasks:
         role = await user_service.get_user_role(query.from_user.id, Sources.TG)
         await query.answer()
-        await query.message.answer("Нет доступных онлайн заданий.",
+        await query.message.answer("Нет доступных онлайн заданий. Загляните к нам снова — скоро будут новые.",
                                    reply_markup=get_role_menu_keyboard(role))
         await state.clear()
         return
@@ -245,7 +245,7 @@ async def offline_list(query: types.CallbackQuery, state: FSMContext,
 
     if not tasks:
         await query.answer()
-        await query.message.answer("Нет заданий в вашем регионе.",
+        await query.message.answer("Нет заданий в вашем регионе. Загляните к нам снова — скоро будут новые.",
                                    reply_markup=get_role_menu_keyboard(u.role))
         await state.clear()
         return

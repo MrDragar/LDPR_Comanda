@@ -46,7 +46,7 @@ async def online_list(message: Message, online_task_service: IOnlineTaskService,
     is_member_filter = await _get_task_filter(user_service, message.from_id)
     tasks, total_pages = await online_task_service.search_tasks(message.from_id, Sources.VK, page=1, is_member=is_member_filter)
     if not tasks:
-        return await message.answer("Нет доступных онлайн заданий.")
+        return await message.answer("Нет доступных онлайн заданий. Загляните к нам снова — скоро будут новые.")
     kb = _build_task_keyboard(tasks, 1, total_pages, "online")
     await state_dispenser.set(message.from_id, UserTaskStates.ONLINE_LIST, page=1, total_pages=total_pages)
     await message.answer(f"Доступные задания (стр. 1/{total_pages}):", keyboard=kb)
@@ -98,7 +98,7 @@ async def offline_list(message: Message, offline_task_service: IOfflineTaskServi
     tasks = [t for t in all_tasks if t.region == u.region]
 
     if not tasks:
-        return await message.answer("Нет заданий в вашем регионе.")
+        return await message.answer("Нет заданий в вашем регионе. Загляните к нам снова — скоро будут новые.")
     kb = _build_task_keyboard(tasks, 1, total_pages, "offline")
     await state_dispenser.set(message.from_id, UserTaskStates.OFFLINE_LIST, page=1,
                               total_pages=total_pages)
