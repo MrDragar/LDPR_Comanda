@@ -60,14 +60,19 @@ class UserService(IUserService):
         is_member: bool | None = None, 
         home_address: str | None = None
     ) -> User:
-        updates = {
-            'email': email,
-            'gender': gender,
-            'city': city,
-            'wish_to_join': wish_to_join,
-            'is_member': is_member,
-            'home_address': home_address
-        }
+        updates = {}
+        if email is not None:
+            updates['email'] = email
+        if gender is not None:
+            updates['gender'] = gender
+        if city is not None:
+            updates['city'] = city
+        if wish_to_join is not None:
+            updates['wish_to_join'] = wish_to_join
+        if is_member is not None:
+            updates['is_member'] = is_member
+        if home_address is not None:
+            updates['home_address'] = home_address
         if birth_date is not None:
             updates['birth_date'] = birth_date
         async with self.__uow.atomic():
@@ -111,7 +116,7 @@ class UserService(IUserService):
             raise PhoneBadCountryError
 
         async with self.__uow.atomic():
-            is_existing = await self.__user_repo.is_phone_number_existing(phone_number)
+            is_existing = await self.__user_repo.is_phone_number_existing(phone_number, self.__source)
             if is_existing:
                 raise PhoneAlreadyExistsError
         return phone_number
@@ -124,7 +129,7 @@ class UserService(IUserService):
             raise EmailBadFormatError()
 
         async with self.__uow.atomic():
-            is_existing = await self.__user_repo.is_email_existing(email)
+            is_existing = await self.__user_repo.is_email_existing(email, self.__source)
             if is_existing:
                 raise EmailAlreadyExistsError
         return email.strip()

@@ -54,16 +54,16 @@ class UserRepository(IUserRepository):
         logger.debug(f"Found user {await user_orm.to_domain()}")
         return await user_orm.to_domain()
 
-    async def is_phone_number_existing(self, phone_number: str) -> bool:
+    async def is_phone_number_existing(self, phone_number: str, source: Sources) -> bool:
         session = self.__uow.get_session()
-        stmt = select(UserORM).where(UserORM.phone_number == phone_number)
+        stmt = select(UserORM).where(UserORM.phone_number == phone_number, UserORM.source == source)
         user_orm = await session.scalar(stmt)
         logger.debug(user_orm)
         return user_orm is not None
 
-    async def is_email_existing(self, email: str) -> bool:
+    async def is_email_existing(self, email: str, source: Sources) -> bool:
         session = self.__uow.get_session()
-        stmt = select(UserORM).where(UserORM.email == email)
+        stmt = select(UserORM).where(UserORM.email == email, UserORM.source == source)
         user_orm = await session.scalar(stmt)
         logger.debug(user_orm)
         return user_orm is not None

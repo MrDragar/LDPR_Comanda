@@ -29,11 +29,11 @@ class IUserRepository(ABC):
         ...
 
     @abstractmethod
-    async def is_phone_number_existing(self, phone_number: str) -> bool:
+    async def is_phone_number_existing(self, phone_number: str, source: Sources) -> bool:
         ...
 
     @abstractmethod
-    async def is_email_existing(self, email: str) -> bool:
+    async def is_email_existing(self, email: str, source: Sources) -> bool:
         ...
 
     @abstractmethod
