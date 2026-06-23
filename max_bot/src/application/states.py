@@ -54,13 +54,6 @@ class ClosedEventStates(StatesGroup):
     BROWSE_USER = State()
 
 
-class PostsStates(StatesGroup):
-    GET_MESSAGE = State()
-    CONFIRM = State()
-    GET_COORD_MESSAGE = State()
-    CONFIRM_COORD = State()
-
-
 class AdminShopStates(StatesGroup):
     ADD_NAME = State()
     ADD_DESC = State()
@@ -88,3 +81,8 @@ class ProfileStates(StatesGroup):
     ORDERS = State()
     EVENTS = State()
     RATING = State()
+
+
+class PostsStates(StatesGroup):
+    get_message = State()
+    confirm = State()

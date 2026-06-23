@@ -25,7 +25,7 @@ from .admin.tasks import router as admin_tasks_router
 from .admin.ca import router as admin_ca_router
 from .admin.closed_events import router as admin_closed_events_router
 from .admin.orders import router as admin_orders_router
-# from .admin.post import router as admin_post_router
+from .admin.post import router as admin_post_router
 from .admin.shop import router as admin_shop_router
 
 full_router = Router()
@@ -37,7 +37,7 @@ full_router.include_routers(
     profile_router, user_tasks_router, learning_router,
     user_closed_events_router, user_shop_router,
     admin_tasks_router, admin_ca_router, admin_closed_events_router,
-    admin_orders_router, admin_shop_router
+    admin_orders_router, admin_shop_router, admin_post_router
 )
 
 full_router.include_routers(catch_all_router)
