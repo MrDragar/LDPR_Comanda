@@ -32,7 +32,35 @@ async def _get_task_filter(user_service: IUserService, user_id: int) -> bool | N
 
 # ==================== ВЫБОР ТИПА ЗАДАНИЯ ====================
 @router.message_created(F.message.body.text == "Выполнить задание")
-async def select_task_type(event: MessageCreated, context: MemoryContext):
+async def select_task_type(event: MessageCreated, context: MemoryContext,
+                           user_service: IUserService):
+    u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
+    if u.is_member is None:
+        from maxapi.types import CallbackButton
+        from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
+
+        builder = InlineKeyboardBuilder()
+        builder.row(CallbackButton(text="Да", payload="set_member_yes"))
+        builder.row(CallbackButton(text="Нет", payload="set_member_no"))
+
+        await event.message.answer("Вы являетесь членом партии ЛДПР?",
+                                   attachments=[builder.as_markup()])
+        return
+
+    await event.message.answer("Выберите тип задания:",
+                               attachments=[get_task_type_keyboard().as_markup()])
+    await context.set_state(UserTaskStates.SELECT_TYPE)
+
+
+@router.message_callback(F.callback.payload == "set_member_yes")
+@router.message_callback(F.callback.payload == "set_member_no")
+async def set_member_callback(event: MessageCallback, context: MemoryContext,
+                              user_service: IUserService):
+    await event.answer()
+    is_member = (event.callback.payload == "set_member_yes")
+    await user_service.update_user_profile(event.from_user.user_id, Sources.MAX,
+                                           is_member=is_member)
+
     await event.message.answer("Выберите тип задания:",
                                attachments=[get_task_type_keyboard().as_markup()])
     await context.set_state(UserTaskStates.SELECT_TYPE)

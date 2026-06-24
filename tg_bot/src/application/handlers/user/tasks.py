@@ -29,12 +29,32 @@ async def _get_task_filter(user_service: IUserService, user_id: int) -> bool | N
 
 
 @router.message(F.text == "Выполнить задание")
-async def select_task_type(message: types.Message, state: FSMContext):
+async def select_task_type(message: types.Message, state: FSMContext, user_service: IUserService):
+    u = await user_service.get_user(message.from_user.id, Sources.TG)
+
+    if u.is_member is None:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="Да", callback_data="set_member_yes")
+        builder.button(text="Нет", callback_data="set_member_no")
+        await message.answer("Вы являетесь членом партии ЛДПР?", reply_markup=builder.as_markup())
+        return
+
     await message.answer("Выберите тип задания:", reply_markup=get_task_type_keyboard())
     await state.set_state(UserTaskStates.select_type)
 
 
-@router.callback_query(F.data == "task_type_online", UserTaskStates.select_type)
+@router.callback_query(F.data.in_(["set_member_yes", "set_member_no"]))
+async def set_member_callback(query: types.CallbackQuery, user_service: IUserService,
+                              state: FSMContext):
+    is_member = (query.data == "set_member_yes")
+    await user_service.update_user_profile(query.from_user.id, Sources.TG, is_member=is_member)
+
+    await query.answer()
+    await query.message.answer("Выберите тип задания:", reply_markup=get_task_type_keyboard())
+    await state.set_state(UserTaskStates.select_type)
+
+
+@router.callback_query(F.data == "task_type_online")
 async def online_list(query: types.CallbackQuery, state: FSMContext,
                       online_task_service: IOnlineTaskService, user_service: IUserService):
     is_member_filter = await _get_task_filter(user_service, query.from_user.id)
@@ -224,7 +244,7 @@ async def back_online_list(query: types.CallbackQuery, state: FSMContext,
     await state.set_state(UserTaskStates.online_list)
 
 
-@router.callback_query(F.data == "task_type_offline", UserTaskStates.select_type)
+@router.callback_query(F.data == "task_type_offline")
 async def offline_list(query: types.CallbackQuery, state: FSMContext,
                        offline_task_service: IOfflineTaskService, user_service: IUserService):
     u = await user_service.get_user(query.from_user.id, Sources.TG)

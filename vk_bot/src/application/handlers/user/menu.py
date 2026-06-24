@@ -113,10 +113,45 @@ async def back_to_role_interface(message: Message, user_service: IUserService) -
 
 
 @router.message(text=["Выполнить задание"])
-async def select_task_type(message: Message, state_dispenser):
+async def select_task_type(message: Message, user_service: IUserService,
+                           state_dispenser: BuiltinStateDispenser):
+    u = await user_service.get_user(message.from_id, Sources.VK)
+    if u.is_member is None:
+        kb = Keyboard(inline=True)
+        kb.add(Callback("Да", {"cmd": "set_member", "val": "yes"}))
+        kb.add(Callback("Нет", {"cmd": "set_member", "val": "no"}))
+        await state_dispenser.set(message.from_id, UserTaskStates.SELECT_TYPE, ask_membership=True)
+        await message.answer("Вы являетесь членом партии ЛДПР?", keyboard=kb.get_json())
+        return
+
     kb = Keyboard(inline=True).add(Text("Онлайн")).add(Text("Офлайн"))
     await state_dispenser.set(message.from_id, UserTaskStates.SELECT_TYPE)
     await message.answer("Выберите тип задания:", keyboard=kb.get_json())
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("set_member"))
+async def set_member_callback(event: GroupTypes.MessageEvent, user_service: IUserService,
+                              state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(event.object.peer_id)
+    if not state or not state.payload.get("ask_membership"):
+        return await event.ctx_api.messages.send_message_event_answer(
+            event_id=event.object.event_id, user_id=event.object.user_id,
+            peer_id=event.object.peer_id
+        )
+
+    is_member = event.object.payload.get("val") == "yes"
+    await user_service.update_user_profile(event.object.user_id, Sources.VK, is_member=is_member)
+
+    kb = Keyboard(inline=True).add(Text("Онлайн")).add(Text("Офлайн"))
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message="Выберите тип задания:",
+        keyboard=kb.get_json(),
+        random_id=0
+    )
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id
+    )
 
 
 @router.message(text=["Мои задания"])
