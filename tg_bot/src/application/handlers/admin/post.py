@@ -45,7 +45,8 @@ async def confirm_post(message: types.Message, state: FSMContext, user_service: 
             await bot.copy_message(
                 chat_id=user.id,
                 from_chat_id=data['from_chat_id'],
-                message_id=data['message_id']
+                message_id=data['message_id'],
+                reply_markup=get_role_menu_keyboard(user.role)
             )
             success_count += 1
         except Exception as e:

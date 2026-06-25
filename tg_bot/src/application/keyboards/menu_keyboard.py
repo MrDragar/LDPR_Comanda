@@ -22,12 +22,14 @@ def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
         builder.button(text="Проверить офлайн задачи")
         builder.button(text="Управление заказами")
         builder.button(text="Список участников мероприятия")
+        builder.adjust(1, 1, 1)
 
     # Кнопки для координаторов РО и ЦА
     if role in (UserRole.COORDINATOR_RO, UserRole.STAFF_CA):
         builder.button(text="Создать офлайн задачу")
         builder.button(text="Управление пользователями")
         builder.button(text="Создать закрытое мероприятие")
+        builder.adjust(1, 1, 1)
 
     # Кнопки только для сотрудников ЦА
     if role == UserRole.STAFF_CA:
@@ -35,5 +37,6 @@ def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
         builder.button(text="Добавить товар")
         builder.button(text="Скрыть товар")
         builder.button(text="Рассылка координаторам РО")
+        builder.adjust(1, 1, 1, 1)
 
     return builder.as_markup(resize_keyboard=True)
