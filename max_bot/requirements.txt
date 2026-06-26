@@ -8,5 +8,7 @@ fuzzywuzzy~=0.18.0
 python-levenshtein~=0.27.3
 aiohttp-socks~=0.11.0
 aioboto3~=15.5.0 
-maxapi~=1.1.0
+maxapi~=1.2.0
 vkbottle
+pandas
+openpyxl
