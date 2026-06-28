@@ -11,11 +11,12 @@ def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
     if role == UserRole.USER:
         builder.button(text="Выполнить задание")
         builder.button(text="Личный кабинет")
+        builder.button(text="Реферальная ссылка")
         builder.button(text="Обучение")
         builder.button(text="Мои задания")
         builder.button(text="Магазин")
         builder.button(text="Закрытые мероприятия")
-        builder.adjust(1, 1, 2, 2)
+        builder.adjust(1, 2, 2, 2)
 
     # Кнопки для сотрудников РО, координаторов и ЦА
     if role in (UserRole.STAFF_RO, UserRole.COORDINATOR_RO, UserRole.STAFF_CA):

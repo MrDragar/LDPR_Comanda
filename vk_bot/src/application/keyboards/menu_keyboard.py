@@ -10,8 +10,9 @@ def get_user_menu_keyboard() -> str:
     kb.add(Text("Выполнить задание", payload=f"{random.randint(0, 1000000)}"))
     kb.add(Text("Мои задания")).row()
     kb.add(Text("Личный кабинет"))
-    kb.add(Text("Обучение")).row()
-    kb.add(Text("Магазин"))
+    kb.add(Text("Реферальная ссылка")).row()
+    kb.add(Text("Обучение"))
+    kb.add(Text("Магазин")).row()
     kb.add(Text("Закрытые мероприятия")).row()
     return kb.get_json()
 

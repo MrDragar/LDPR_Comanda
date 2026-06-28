@@ -67,6 +67,7 @@ async def profile(message: Message, state: FSMContext, user_service: IUserServic
 
 # ==================== РЕФЕРАЛЬНАЯ ССЫЛКА ====================
 @router.message(ProfileStates.menu, F.text == "Реферальная ссылка")
+@router.message(F.text == "Реферальная ссылка")
 async def referral_link(message: Message, state: FSMContext,
                         referral_link_service: IReferralLinkService):
     repost_data = referral_link_service.generate_post(message.from_user.id)

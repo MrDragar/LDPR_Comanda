@@ -86,6 +86,7 @@ async def profile(message: Message, user_service: IUserService, referral_service
 # ==================== ПОДМЕНЮ ЛК ====================
 
 @router.message(state=ProfileStates.MAIN, text=["Реферальная ссылка"])
+@router.message(text=["Реферальная ссылка"])
 async def referral_link(message: Message, referral_link_service: IReferralLinkService,
                         photo_uploader: PhotoMessageUploader,
                         headliner_service: IHeadlinerService,
