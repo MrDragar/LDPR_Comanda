@@ -15,7 +15,7 @@ def get_online_tasks_keyboard(tasks: list[OnlineTask], page: int,
                               total_pages: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for t in tasks:
-        title = t.title[:20] + "..." if len(t.title) > 20 else t.title
+        title = t.title[:30] + "..." if len(t.title) > 30 else t.title
         builder.button(text=f"#{t.id} {title}", callback_data=f"view_online_{t.id}")
 
     if page > 1:
@@ -31,7 +31,7 @@ def get_offline_tasks_keyboard(tasks: list[OfflineTask], page: int,
                                total_pages: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for t in tasks:
-        title = t.title[:20] + "..." if len(t.title) > 20 else t.title
+        title = t.title[:30] + "..." if len(t.title) > 30 else t.title
         builder.button(text=f"#{t.id} {title}", callback_data=f"view_offline_{t.id}")
 
     if page > 1:
@@ -63,7 +63,7 @@ def get_my_tasks_keyboard(tasks: list, page: int = 1) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for t in tasks:
         status_text = t.status.value
-        title = t.task.title[:15] + "..." if len(t.task.title) > 15 else t.task.title
+        title = t.task.title[:25] + "..." if len(t.task.title) > 25 else t.task.title
         builder.button(text=f"#{t.task.id} {title} ({status_text})",
                        callback_data=f"view_my_task_{t.task.id}")
     builder.button(text="🔙 В меню", callback_data="back_to_menu")

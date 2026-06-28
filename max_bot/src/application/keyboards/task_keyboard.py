@@ -13,7 +13,7 @@ def get_task_type_keyboard() -> InlineKeyboardBuilder:
 def get_online_tasks_keyboard(tasks: list[OnlineTask], page: int, total_pages: int) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
     for t in tasks:
-        title = t.title[:20] + "..." if len(t.title) > 20 else t.title
+        title = t.title[:30] + "..." if len(t.title) > 30 else t.title
         builder.row(CallbackButton(text=f"#{t.id} {title}", payload=f"view_online_{t.id}"))
     if page > 1:
         builder.row(CallbackButton(text="⬅️ Назад", payload=f"prev_online_{page - 1}"))
@@ -26,7 +26,7 @@ def get_online_tasks_keyboard(tasks: list[OnlineTask], page: int, total_pages: i
 def get_offline_tasks_keyboard(tasks: list[OfflineTask], page: int, total_pages: int) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
     for t in tasks:
-        title = t.title[:20] + "..." if len(t.title) > 20 else t.title
+        title = t.title[:30] + "..." if len(t.title) > 30 else t.title
         builder.row(CallbackButton(text=f"#{t.id} {title}", payload=f"view_offline_{t.id}"))
     if page > 1:
         builder.row(CallbackButton(text="⬅️ Назад", payload=f"prev_offline_{page - 1}"))
@@ -54,7 +54,7 @@ def get_my_tasks_keyboard(tasks: list) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
     for t in tasks:
         status_text = t.status.value
-        title = t.task.title[:15] + "..." if len(t.task.title) > 15 else t.task.title
+        title = t.task.title[:25] + "..." if len(t.task.title) > 25 else t.task.title
         builder.row(CallbackButton(text=f"#{t.task.id} {title} ({status_text})", payload=f"view_my_task_{t.task.id}"))
     builder.row(CallbackButton(text="🔙 В меню", payload="back_to_menu"))
     return builder

@@ -21,7 +21,7 @@ def _build_task_keyboard(tasks, current_page: int, total_pages: int, prefix: str
     """Генерирует клавиатуру с задачами и однострочной навигацией."""
     kb = Keyboard(inline=True)
     for t in tasks:
-        title = f"#{t.id} {t.title[:15]}"
+        title = f"#{t.id} {t.title[:30]}"
         kb.add(Callback(title, {"cmd": f"view_{prefix}", "tid": t.id}))
         kb.row()
 
