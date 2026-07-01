@@ -12,3 +12,5 @@ python-levenshtein~=0.27.3
 aiohttp-socks~=0.11.0
 pandas
 openpyxl
+aiomysql~=0.3.2
+cryptography~=49.0.0

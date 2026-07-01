@@ -13,3 +13,5 @@ aioboto3~=15.5.0
 certifi>=2024.8.30
 pandas
 openpyxl
+aiomysql~=0.3.2
+cryptography~=49.0.0

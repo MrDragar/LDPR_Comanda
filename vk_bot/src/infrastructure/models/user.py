@@ -1,5 +1,5 @@
 from datetime import date, datetime, UTC
-from sqlalchemy import Date, DateTime, Enum as SQLEnum
+from sqlalchemy import Date, DateTime, Enum as SQLEnum, String
 from sqlalchemy.orm import Mapped, mapped_column
 from src.domain.entities.user import User, Sources, UserRole, UserGrade
 from src.infrastructure.database import Base
@@ -10,18 +10,18 @@ class UserORM(Base):
     id: Mapped[int] = mapped_column("id", primary_key=True)
     source: Mapped[Sources] = mapped_column(SQLEnum(Sources), name="source", primary_key=True)
     is_member: Mapped[bool] = mapped_column("is_member", nullable=True)
-    username: Mapped[str] = mapped_column("username", nullable=True)
-    surname: Mapped[str] = mapped_column("surname", nullable=False)
-    name: Mapped[str] = mapped_column("name", nullable=True)
-    patronymic: Mapped[str] = mapped_column("patronymic", nullable=True)
+    username: Mapped[str] = mapped_column("username", String(255), nullable=True)
+    surname: Mapped[str] = mapped_column("surname", String(255), nullable=False)
+    name: Mapped[str] = mapped_column("name", String(255), nullable=True)
+    patronymic: Mapped[str] = mapped_column("patronymic", String(255), nullable=True)
     birth_date: Mapped[date] = mapped_column("birth_date", Date, nullable=True)
-    phone_number: Mapped[str] = mapped_column("phone_number", nullable=False)
-    region: Mapped[str] = mapped_column("region", nullable=True)
-    email: Mapped[str] = mapped_column("email", nullable=True)
-    gender: Mapped[str] = mapped_column("gender", nullable=True)
-    city: Mapped[str] = mapped_column("city", nullable=True)
+    phone_number: Mapped[str] = mapped_column("phone_number", String(50), nullable=False)
+    region: Mapped[str] = mapped_column("region", String(255), nullable=True)
+    email: Mapped[str] = mapped_column("email", String(255), nullable=True)
+    gender: Mapped[str] = mapped_column("gender", String(50), nullable=True)
+    city: Mapped[str] = mapped_column("city", String(255), nullable=True)
     wish_to_join: Mapped[bool] = mapped_column("wish_to_join", nullable=True)
-    home_address: Mapped[str] = mapped_column("home_address", nullable=True)
+    home_address: Mapped[str] = mapped_column("home_address", String(512), nullable=True)
     news_subscription: Mapped[bool] = mapped_column("news_subscription", nullable=False)
     balance: Mapped[int] = mapped_column("balance", nullable=False, default=0)
     role: Mapped[UserRole] = mapped_column(SQLEnum(UserRole), nullable=False, default=UserRole.USER)

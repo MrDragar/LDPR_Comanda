@@ -1,8 +1,6 @@
 from datetime import datetime, UTC
-
-from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKeyConstraint, Index
+from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKeyConstraint, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
-
 from src.domain.entities.headliner import Headliner, HeadlinerFollower
 from src.domain.entities.user import Sources
 from src.infrastructure.database import Base
@@ -10,22 +8,20 @@ from src.infrastructure.database import Base
 
 class HeadlinerORM(Base):
     __tablename__ = "headliners"
-
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(nullable=False)
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
-    fio: Mapped[str] = mapped_column(nullable=False)
-    position: Mapped[str] = mapped_column(nullable=False)
-    topic: Mapped[str] = mapped_column(nullable=False)
-    group_link: Mapped[str] = mapped_column(nullable=False)
-    photo: Mapped[str | None] = mapped_column(nullable=True)
-    welcome_message: Mapped[str | None] = mapped_column(nullable=True)
+    fio: Mapped[str] = mapped_column(String(255), nullable=False)
+    position: Mapped[str] = mapped_column(String(255), nullable=False)
+    topic: Mapped[str] = mapped_column(String(255), nullable=False)
+    group_link: Mapped[str] = mapped_column(String(512), nullable=False)
+    photo: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    welcome_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
         default=lambda: datetime.now(UTC)
     )
-
     __table_args__ = (
         ForeignKeyConstraint(
             ['user_id', 'user_source'],
@@ -67,7 +63,6 @@ class HeadlinerORM(Base):
 
 class HeadlinerFollowerORM(Base):
     __tablename__ = "headliner_followers"
-
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     headliner_id: Mapped[int] = mapped_column(nullable=False)
     follower_id: Mapped[int] = mapped_column(nullable=False)
@@ -77,7 +72,6 @@ class HeadlinerFollowerORM(Base):
         nullable=False,
         default=lambda: datetime.now(UTC)
     )
-
     __table_args__ = (
         ForeignKeyConstraint(['headliner_id'], ['headliners.id'], ondelete="CASCADE"),
         Index('idx_headliner_follower_unique', 'follower_id', 'follower_source', unique=True),

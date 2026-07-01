@@ -31,3 +31,5 @@ S3_SECRET = os.getenv("S3_SECRET")
 S3_ENDPOINT = os.getenv("S3_ENDPOINT")
 
 GROUP_LINK = os.getenv("GROUP_LINK")
+
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///db.sqlite3")

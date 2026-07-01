@@ -12,3 +12,5 @@ maxapi~=1.2.0
 vkbottle
 pandas
 openpyxl
+aiomysql~=0.3.2
+cryptography~=49.0.0

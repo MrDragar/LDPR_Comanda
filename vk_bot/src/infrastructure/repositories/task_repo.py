@@ -29,8 +29,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         base_stmt = select(OnlineTaskORM).where(
             and_(
                 OnlineTaskORM.date <= today,
-                text("date(date, '+' || duration || ' days') >= :today").bindparams(today=today)
-            )
+                text("DATE_ADD(date, INTERVAL duration DAY) >= :today").bindparams(today=today)            )
         )
 
         # Фильтрация по членству в партии
@@ -345,7 +344,7 @@ class AcceptedTaskRepository(IAcceptedTaskRepository):
             AcceptedOnlineTaskORM.user_id == user_id,
             AcceptedOnlineTaskORM.user_source == user_source,
             AcceptedOnlineTaskORM.task_id == task_id
-        )
+        ).order_by(AcceptedOnlineTaskORM.id.desc()).limit(1)
         orm = await session.scalar(stmt)
         if orm:
             orm.status = status
