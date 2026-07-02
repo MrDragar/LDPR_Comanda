@@ -1,5 +1,6 @@
 from datetime import datetime, UTC
-from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKeyConstraint, Index, String, Text
+from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKeyConstraint, Index, String, Text, \
+    BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
 from src.domain.entities.headliner import Headliner, HeadlinerFollower
 from src.domain.entities.user import Sources
@@ -9,7 +10,7 @@ from src.infrastructure.database import Base
 class HeadlinerORM(Base):
     __tablename__ = "headliners"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     fio: Mapped[str] = mapped_column(String(255), nullable=False)
     position: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -65,7 +66,7 @@ class HeadlinerFollowerORM(Base):
     __tablename__ = "headliner_followers"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     headliner_id: Mapped[int] = mapped_column(nullable=False)
-    follower_id: Mapped[int] = mapped_column(nullable=False)
+    follower_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     follower_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

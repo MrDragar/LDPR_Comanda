@@ -1,5 +1,5 @@
 from datetime import datetime, UTC
-from sqlalchemy import DateTime, Enum as SQLEnum, Index, String, Text
+from sqlalchemy import DateTime, Enum as SQLEnum, Index, String, Text, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
 from src.domain.entities.shop import OrderStatus
 from src.domain.entities.user import Sources
@@ -20,7 +20,7 @@ class ProductORM(Base):
 class OrderORM(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     product_id: Mapped[int] = mapped_column(nullable=False)
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)

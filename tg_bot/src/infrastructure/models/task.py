@@ -1,5 +1,6 @@
 from datetime import date, datetime, UTC
-from sqlalchemy import Date, DateTime, Enum as SQLEnum, ForeignKeyConstraint, Index, String, Text
+from sqlalchemy import Date, DateTime, Enum as SQLEnum, ForeignKeyConstraint, Index, String, Text, \
+    BigInteger
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.domain.entities.task import TaskType, TaskStatus
 from src.domain.entities.user import Sources
@@ -36,7 +37,7 @@ class OfflineTaskORM(Base):
 class AcceptedOnlineTaskORM(Base):
     __tablename__ = "accepted_online_tasks"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     task_id: Mapped[int] = mapped_column(nullable=False)
     status: Mapped[TaskStatus] = mapped_column(SQLEnum(TaskStatus), nullable=False)
@@ -51,7 +52,7 @@ class AcceptedOnlineTaskORM(Base):
 class AcceptedOfflineTaskORM(Base):
     __tablename__ = "accepted_offline_tasks"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     task_id: Mapped[int] = mapped_column(nullable=False)
     status: Mapped[TaskStatus] = mapped_column(SQLEnum(TaskStatus), nullable=False)
@@ -66,7 +67,7 @@ class AcceptedOfflineTaskORM(Base):
 class TransactionORM(Base):
     __tablename__ = "transactions"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     amount: Mapped[int] = mapped_column(nullable=False)
     description: Mapped[str] = mapped_column(String(512), nullable=False)

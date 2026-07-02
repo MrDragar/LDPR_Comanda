@@ -1,5 +1,5 @@
 from datetime import date, datetime, UTC
-from sqlalchemy import Date, DateTime, Enum as SQLEnum, String
+from sqlalchemy import Date, DateTime, Enum as SQLEnum, String, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
 from src.domain.entities.user import User, Sources, UserRole, UserGrade
 from src.infrastructure.database import Base
@@ -7,7 +7,7 @@ from src.infrastructure.database import Base
 
 class UserORM(Base):
     __tablename__ = "users"
-    id: Mapped[int] = mapped_column("id", primary_key=True)
+    id: Mapped[int] = mapped_column("id", BigInteger(), primary_key=True)
     source: Mapped[Sources] = mapped_column(SQLEnum(Sources), name="source", primary_key=True)
     is_member: Mapped[bool] = mapped_column("is_member", nullable=True)
     username: Mapped[str] = mapped_column("username", String(255), nullable=True)

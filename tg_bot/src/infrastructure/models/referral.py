@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKeyConstraint, Index, Enum as SQLEnum
+from sqlalchemy import ForeignKeyConstraint, Index, Enum as SQLEnum, BigInteger
 from sqlalchemy.orm import Mapped, mapped_column
 from src.domain.entities.user import Sources
 from src.infrastructure.database import Base
@@ -8,11 +8,11 @@ class ReferralORM(Base):
     __tablename__ = "referrals"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    inviter_id: Mapped[int] = mapped_column(nullable=False)
+    inviter_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     inviter_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
 
     # Не FK, но уникально (в связке с source)
-    invitee_id: Mapped[int] = mapped_column(nullable=False)
+    invitee_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     invitee_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
 
     __table_args__ = (

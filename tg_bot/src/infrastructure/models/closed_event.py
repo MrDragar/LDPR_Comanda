@@ -1,5 +1,5 @@
 from datetime import date, time as py_time, UTC
-from sqlalchemy import Date, Time, ForeignKeyConstraint, Index, String, Text
+from sqlalchemy import Date, Time, ForeignKeyConstraint, Index, String, Text, BigInteger
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column
 from src.domain.entities.user import Sources
@@ -20,7 +20,7 @@ class ClosedEventORM(Base):
 class EventRegistrationORM(Base):
     __tablename__ = "event_registrations"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger(), nullable=False)
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     event_id: Mapped[int] = mapped_column(nullable=False)
     __table_args__ = (
