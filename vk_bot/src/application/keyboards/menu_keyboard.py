@@ -7,8 +7,8 @@ from src.domain.entities.user import UserRole
 
 def get_user_menu_keyboard() -> str:
     kb = Keyboard(one_time=False)
-    kb.add(Text("Выполнить задание", payload=f"{random.randint(0, 1000000)}"))
-    kb.add(Text("Мои задания")).row()
+    kb.add(Text("Выполнить действие", payload=f"{random.randint(0, 1000000)}"))
+    kb.add(Text("Мои действия")).row()
     kb.add(Text("Личный кабинет"))
     kb.add(Text("Реферальная ссылка")).row()
     kb.add(Text("Обучение"))

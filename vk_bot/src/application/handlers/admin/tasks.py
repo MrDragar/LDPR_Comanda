@@ -440,11 +440,12 @@ async def verify_action(event: GroupTypes.MessageEvent, offline_task_service: IO
     tid = p["tid"]
 
     await offline_task_service.check_task(uid, src, tid, action)
-    status_msg = "принята" if action == TaskStatus.ACCEPTED else "отклонена"
+    status_msg = "принято" if action == TaskStatus.ACCEPTED else "отклонено"
 
     # Используем универсальный метод notify_user, чтобы уведомление ушло в нужный мессенджер (ВК/TG/MAX)
     await notification_service.notify_user(uid, src,
-                                           f"Ваша офлайн задача #{tid} была {status_msg} администратором.")
+                                           f"Ваше офлайн действие #{tid} было "
+                                           f"{status_msg} администратором.")
 
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                       message=f"Статус задачи #{tid} для пользователя {uid} изменён на {action.value}",
@@ -536,12 +537,13 @@ async def vk_verify_action(event: GroupTypes.MessageEvent, online_task_service: 
         if cmd == "vk_verify_accept":
             await online_task_service.accept_tg_online_task(uid, source, tid)
             await notification_service.notify_user(uid, source,
-                                                   f"✅ Ваша онлайн задача #{tid} принята! Баллы начислены.")
+                                                   f"✅ Ваше онлайн действие #{tid} принято! Баллы "
+                                                   f"начислены.")
             new_text = old_text.replace("#in_progress", "#accepted")
         else:
             await online_task_service.decline_tg_online_task(uid, source, tid)
             await notification_service.notify_user(uid, source,
-                                                   f"❌ Ваша онлайн задача #{tid} отклонена.")
+                                                   f"❌ Ваше онлайн действие #{tid} отклонено.")
             new_text = old_text.replace("#in_progress", "#declined")
 
         if msg_id:

@@ -41,20 +41,21 @@ class OnlineTaskService(IOnlineTaskService):
     async def check_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Задача не найдена")
+            if not task: raise DomainError("Действие не найдено")
 
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
-                raise DomainError("Вы уже взяли эту задачу или она в процессе")
+                raise DomainError("Вы уже взяли это действие или она в процессе")
             try:
                 group_id, post_id = self.__task_repo._parse_vk_url(task.url)
             except ValueError as e:
-                raise DomainError(f"Ошибка парсинга ссылки задания: {e}")
+                raise DomainError(f"Ошибка парсинга ссылки действия: {e}")
 
             is_completed = await self.__vk_verify_repo.verify_task(
                 task.type, user_id, group_id, post_id
             )
             if not is_completed:
-                raise TaskNotCompletedError("Задание не выполнено. Пожалуйста, выполните действие в ВК и попробуйте снова.")
+                raise TaskNotCompletedError("Действие не выполнено. Пожалуйста, выполните "
+                                            "действие в ВК и попробуйте снова.")
 
             accepted = AcceptedOnlineTask(user_id=user_id, user_source=user_source, task=task,
                                           status=TaskStatus.ACCEPTED)
@@ -62,7 +63,7 @@ class OnlineTaskService(IOnlineTaskService):
 
             # Начисляем награду
             await self.__balance_svc.add_balance(user_id, user_source, task.reward,
-                                                 f"Выполнение онлайн-задачи #{task_id}")
+                                                 f"Выполнение онлайн-действия #{task_id}")
             logger.info(f"Task {task_id} checked and accepted for user {user_id}")
             
             # --- Логика повышения грейда ---
@@ -98,9 +99,9 @@ class OnlineTaskService(IOnlineTaskService):
     async def submit_tg_online_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Задача не найдена")
+            if not task: raise DomainError("Действие не найдено")
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
-                raise DomainError("Вы уже взяли эту задачу или она в процессе")
+                raise DomainError("Вы уже взяли это действие или она в процессе")
 
             accepted = AcceptedOnlineTask(
                 user_id=user_id, user_source=user_source, task=task, status=TaskStatus.IN_PROGRESS
@@ -111,11 +112,11 @@ class OnlineTaskService(IOnlineTaskService):
     async def accept_tg_online_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Задача не найдена")
+            if not task: raise DomainError("Действие не найдено")
             await self.__accepted_repo.update_online_task_status(user_id, user_source, task_id,
                                                                  TaskStatus.ACCEPTED)
             await self.__balance_svc.add_balance(user_id, user_source, task.reward,
-                                                 f"Выполнение онлайн-задачи #{task_id} (ТГ)")
+                                                 f"Выполнение онлайн-действия #{task_id} (ТГ)")
 
             # Логика повышения грейда (аналогично ВК)
             user = await self.__user_svc.get_user(user_id, user_source)

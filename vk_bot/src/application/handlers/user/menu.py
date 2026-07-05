@@ -112,7 +112,7 @@ async def back_to_role_interface(message: Message, user_service: IUserService) -
     await message.answer(f"Интерфейс роли: {role.value}", keyboard=get_role_tools_keyboard(role))
 
 
-@router.message(text=["Выполнить задание"])
+@router.message(text=["Выполнить действие"])
 async def select_task_type(message: Message, user_service: IUserService,
                            state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
@@ -126,7 +126,7 @@ async def select_task_type(message: Message, user_service: IUserService,
 
     kb = Keyboard(inline=True).add(Text("Онлайн")).add(Text("Офлайн"))
     await state_dispenser.set(message.from_id, UserTaskStates.SELECT_TYPE)
-    await message.answer("Выберите тип задания:", keyboard=kb.get_json())
+    await message.answer("Выберите тип действия:", keyboard=kb.get_json())
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("set_member"))
@@ -145,7 +145,7 @@ async def set_member_callback(event: GroupTypes.MessageEvent, user_service: IUse
     kb = Keyboard(inline=True).add(Text("Онлайн")).add(Text("Офлайн"))
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
-        message="Выберите тип задания:",
+        message="Выберите тип действия:",
         keyboard=kb.get_json(),
         random_id=0
     )
@@ -154,13 +154,13 @@ async def set_member_callback(event: GroupTypes.MessageEvent, user_service: IUse
     )
 
 
-@router.message(text=["Мои задания"])
+@router.message(text=["Мои действия"])
 async def my_tasks(message: Message, offline_task_service, user_service,
                    state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
     tasks, _ = await offline_task_service.get_user_tasks(u.id, u.source, page=1)
     if not tasks:
-        return await message.answer("У вас нет активных заданий.")
+        return await message.answer("У вас нет активных действий.")
 
     kb = Keyboard(inline=True)
     for t in tasks:
@@ -171,7 +171,7 @@ async def my_tasks(message: Message, offline_task_service, user_service,
         ))
         kb.row()
     await state_dispenser.set(message.from_id, UserTaskStates.MY_TASKS)
-    await message.answer("Ваши задания:", keyboard=kb.get_json())
+    await message.answer("Ваши действия:", keyboard=kb.get_json())
 
 
 # Новый хендлер: просмотр задачи из "Моих заданий" с кнопкой отмены
@@ -183,7 +183,7 @@ async def view_my_task(event: GroupTypes.MessageEvent, offline_task_service, use
     if not task:
         return await event.ctx_api.messages.send(
             peer_id=event.object.peer_id,
-            message="Ошибка: задание не найдено",
+            message="Ошибка: действие не найдено",
             random_id=0,
         )
 
@@ -196,7 +196,7 @@ async def view_my_task(event: GroupTypes.MessageEvent, offline_task_service, use
     accepted = next((t for t in user_tasks if t.task and t.task.id == tid), None)
 
     text = (
-        f"Задание: {task.title}\n"
+        f"Действие: {task.title}\n"
         f"Описание: {task.description}\n"
         f"Место: {task.location}\n"
         f"Контакты: {task.contacts}\n"
@@ -205,7 +205,7 @@ async def view_my_task(event: GroupTypes.MessageEvent, offline_task_service, use
 
     kb = Keyboard(inline=True)
     if accepted and accepted.status == TaskStatus.IN_PROGRESS:
-        kb.add(Callback("Отменить задание", {"cmd": "cancel_my_task", "tid": tid}))
+        kb.add(Callback("Отменить действие", {"cmd": "cancel_my_task", "tid": tid}))
         kb.row()
     kb.add(Callback("Назад", {"cmd": "back_to_my_tasks"}))
 
@@ -230,11 +230,11 @@ async def cancel_my_task(event: GroupTypes.MessageEvent, offline_task_service, n
         await offline_task_service.cancel_task(event.object.user_id, Sources.VK, tid)
         await notification_service.notify_user_vk(
             event.object.peer_id,
-            f"Задание #{tid} отменено.",
+            f"Действие #{tid} отменено.",
         )
         await event.ctx_api.messages.send(
             peer_id=event.object.peer_id,
-            message=f"Задание #{tid} успешно отменено.",
+            message=f"Действие #{tid} успешно отменено.",
             random_id=0,
         )
     except Exception as e:
@@ -259,7 +259,7 @@ async def back_to_my_tasks(event: GroupTypes.MessageEvent, offline_task_service,
     if not tasks:
         return await event.ctx_api.messages.send(
             peer_id=event.object.peer_id,
-            message="У вас нет активных заданий.",
+            message="У вас нет активных дейсвтий.",
             random_id=0,
         )
 
@@ -272,7 +272,7 @@ async def back_to_my_tasks(event: GroupTypes.MessageEvent, offline_task_service,
         kb.row()
     await event.ctx_api.messages.send(
         peer_id=event.object.peer_id,
-        message="Ваши задания:",
+        message="Ваши действия:",
         keyboard=kb.get_json(),
         random_id=0,
     )

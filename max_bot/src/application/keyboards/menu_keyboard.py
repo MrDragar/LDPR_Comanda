@@ -6,8 +6,8 @@ from src.domain.entities.user import UserRole
 def get_role_menu_keyboard(role: UserRole | None) -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
     if role == UserRole.USER:
-        builder.row(MessageButton(text="Выполнить задание"))
-        builder.row(MessageButton(text="Мои задания"))
+        builder.row(MessageButton(text="Выполнить действие"))
+        builder.row(MessageButton(text="Мои действия"))
         builder.row(MessageButton(text="Личный кабинет"))
         builder.row(MessageButton(text="Обучение"), MessageButton(text="Реферальная ссылка"))
         builder.row(MessageButton(text="Магазин"))

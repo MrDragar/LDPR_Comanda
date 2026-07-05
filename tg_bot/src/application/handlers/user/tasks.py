@@ -28,7 +28,7 @@ async def _get_task_filter(user_service: IUserService, user_id: int) -> bool | N
         return False
 
 
-@router.message(F.text == "Выполнить задание")
+@router.message(F.text == "Выполнить действие")
 async def select_task_type(message: types.Message, state: FSMContext, user_service: IUserService):
     u = await user_service.get_user(message.from_user.id, Sources.TG)
 
@@ -39,7 +39,7 @@ async def select_task_type(message: types.Message, state: FSMContext, user_servi
         await message.answer("Вы являетесь членом партии ЛДПР?", reply_markup=builder.as_markup())
         return
 
-    await message.answer("Выберите тип задания:", reply_markup=get_task_type_keyboard())
+    await message.answer("Выберите тип действия:", reply_markup=get_task_type_keyboard())
     await state.set_state(UserTaskStates.select_type)
 
 
@@ -50,7 +50,7 @@ async def set_member_callback(query: types.CallbackQuery, user_service: IUserSer
     await user_service.update_user_profile(query.from_user.id, Sources.TG, is_member=is_member)
 
     await query.answer()
-    await query.message.answer("Выберите тип задания:", reply_markup=get_task_type_keyboard())
+    await query.message.answer("Выберите тип действия:", reply_markup=get_task_type_keyboard())
     await state.set_state(UserTaskStates.select_type)
 
 
@@ -63,13 +63,14 @@ async def online_list(query: types.CallbackQuery, state: FSMContext,
     if not tasks:
         role = await user_service.get_user_role(query.from_user.id, Sources.TG)
         await query.answer()
-        await query.message.answer("Нет доступных онлайн заданий. Загляните к нам снова — скоро будут новые.",
+        await query.message.answer("Нет доступных онлайн действий. Загляните к нам снова — скоро "
+                                   "будут новые.",
                                    reply_markup=get_role_menu_keyboard(role))
         await state.clear()
         return
     await query.answer()
     await query.message.answer(
-        f"Доступные задания (стр. 1/{total_pages}):",
+        f"Доступные действия (стр. 1/{total_pages}):",
         reply_markup=get_online_tasks_keyboard(tasks, 1, total_pages)
     )
     await state.update_data(page=1, total_pages=total_pages)
@@ -84,11 +85,11 @@ async def next_online(query: types.CallbackQuery, state: FSMContext,
     tasks, total_pages = await online_task_service.search_tasks(query.from_user.id, Sources.TG,
                                                                 page=page, is_member=is_member_filter)
     if not tasks:
-        await query.answer("На этой странице заданий нет.", show_alert=True)
+        await query.answer("На этой странице действий нет.", show_alert=True)
         return
     await query.answer()
     await query.message.answer(
-        f"Доступные задания (стр. {page}/{total_pages}):",
+        f"Доступные действия (стр. {page}/{total_pages}):",
         reply_markup=get_online_tasks_keyboard(tasks, page, total_pages)
     )
     await state.update_data(page=page, total_pages=total_pages)
@@ -103,7 +104,7 @@ async def prev_online(query: types.CallbackQuery, state: FSMContext,
                                                                 page=page, is_member=is_member_filter)
     await query.answer()
     await query.message.answer(
-        f"Доступные задания (стр. {page}/{total_pages}):",
+        f"Доступные действия (стр. {page}/{total_pages}):",
         reply_markup=get_online_tasks_keyboard(tasks, page, total_pages)
     )
     await state.update_data(page=page, total_pages=total_pages)
@@ -115,7 +116,7 @@ async def view_online(query: types.CallbackQuery, state: FSMContext,
     tid = int(query.data.split("_")[-1])
     task = await online_task_service.get_task(tid)
     if not task:
-        await query.answer("Ошибка: задание не найдено", show_alert=True)
+        await query.answer("Ошибка: действие не найдено", show_alert=True)
         return
 
     text = f"📋 {task.title}\n"
@@ -123,7 +124,7 @@ async def view_online(query: types.CallbackQuery, state: FSMContext,
     text += f"📌 Тип: {task.type.value}\n"
     text += f"🏆 Награда: {task.reward} баллов\n"
     if task.url:
-        text += f"🔗 Ссылка на задание: {task.url}"
+        text += f"🔗 Ссылка: {task.url}"
 
     await query.answer()
     await query.message.answer(text, reply_markup=get_online_task_view_keyboard(tid))
@@ -137,7 +138,7 @@ async def check_online(query: types.CallbackQuery, state: FSMContext):
     tid = int(query.data.split("_")[-1])
     await state.update_data(tid=tid)
     await query.message.answer(
-        "Отправьте сообщение (текст, ссылку или фото), подтверждающее выполнение задания:",
+        "Отправьте сообщение (текст, ссылку или фото), подтверждающее выполнение действия:",
         reply_markup=get_cancel_keyboard())
     await state.set_state(UserTaskStates.tg_online_await_proof)
     await query.answer()
@@ -200,7 +201,7 @@ async def confirm_submit(query: types.CallbackQuery, state: FSMContext,
 
         info_text = (
             f"#in_progress\n"
-            f"📋 Онлайн задание #{task.id} на проверку\n"
+            f"📋 Онлайн действие #{task.id} на проверку\n"
             f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, TG)\n"
             f"📌 Тип: {task.type.value}\n"
             f"🏆 Награда: {task.reward} баллов\n"
@@ -220,7 +221,7 @@ async def confirm_submit(query: types.CallbackQuery, state: FSMContext,
         )
 
         await query.message.answer(
-            "✅ Задание отправлено на проверку. Ожидайте решения администратора.")
+            "✅ Действие отправлено на проверку. Ожидайте решения администратора.")
         role = await user_service.get_user_role(uid, source)
         await query.message.answer("Главное меню", reply_markup=get_role_menu_keyboard(role))
         await state.clear()
@@ -237,7 +238,7 @@ async def back_online_list(query: types.CallbackQuery, state: FSMContext,
                                                                 page=1, is_member=is_member_filter)
     await query.answer()
     await query.message.answer(
-        f"Доступные задания (стр. 1/{total_pages}):",
+        f"Доступные действия (стр. 1/{total_pages}):",
         reply_markup=get_online_tasks_keyboard(tasks, 1, total_pages)
     )
     await state.update_data(page=1, total_pages=total_pages)
@@ -251,7 +252,7 @@ async def offline_list(query: types.CallbackQuery, state: FSMContext,
     if u.grade not in (UserGrade.AGITATOR, UserGrade.RESERVE):
         await query.answer()
         await query.message.answer(
-            "Этот тип заданий открывается при достижении ранга 'Агитатор'. "
+            "Этот тип действий открывается при достижении ранга 'Агитатор'. "
             "Для его прохождения необходимо пройти обучение.",
             reply_markup=get_role_menu_keyboard(u.role)
         )
@@ -265,13 +266,14 @@ async def offline_list(query: types.CallbackQuery, state: FSMContext,
 
     if not tasks:
         await query.answer()
-        await query.message.answer("Нет заданий в вашем регионе. Загляните к нам снова — скоро будут новые.",
+        await query.message.answer("Нет действий в вашем регионе. Загляните к нам снова — скоро "
+                                   "будут новые.",
                                    reply_markup=get_role_menu_keyboard(u.role))
         await state.clear()
         return
     await query.answer()
     await query.message.answer(
-        f"Задания в вашем регионе (стр. 1/{total_pages}):",
+        f"Действия в вашем регионе (стр. 1/{total_pages}):",
         reply_markup=get_offline_tasks_keyboard(tasks, 1, total_pages)
     )
     await state.update_data(page=1, total_pages=total_pages)
@@ -288,11 +290,11 @@ async def next_offline(query: types.CallbackQuery, state: FSMContext,
                                                                      is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
     if not tasks:
-        await query.answer("Больше заданий в вашем регионе нет.", show_alert=True)
+        await query.answer("Больше действий в вашем регионе нет.", show_alert=True)
         return
     await query.answer()
     await query.message.answer(
-        f"Задания в вашем регионе (стр. {page}/{total_pages}):",
+        f"Действия в вашем регионе (стр. {page}/{total_pages}):",
         reply_markup=get_offline_tasks_keyboard(tasks, page, total_pages)
     )
     await state.update_data(page=page, total_pages=total_pages)
@@ -309,7 +311,7 @@ async def prev_offline(query: types.CallbackQuery, state: FSMContext,
     tasks = [t for t in all_tasks if t.region == u.region]
     await query.answer()
     await query.message.answer(
-        f"Задания в вашем регионе (стр. {page}/{total_pages}):",
+        f"Действия в вашем регионе (стр. {page}/{total_pages}):",
         reply_markup=get_offline_tasks_keyboard(tasks, page, total_pages)
     )
     await state.update_data(page=page, total_pages=total_pages)
@@ -348,11 +350,12 @@ async def accept_offline(query: types.CallbackQuery, state: FSMContext,
         role = await user_service.get_user_role(query.from_user.id, Sources.TG)
         await query.answer()
         await query.message.answer(
-            "✅ Задача принята. Свяжитесь с местным отделением по контактам в описании.",
+            "✅ Действие принято. Свяжитесь с местным отделением по контактам в описании.",
             reply_markup=get_role_menu_keyboard(role)
         )
         await notification_service.notify_user(query.from_user.id, Sources.TG,
-                                               f"Вы взяли офлайн задачу #{tid}. Ожидает проверки.")
+                                               f"Вы взяли офлайн действие #{tid}. Ожидает "
+                                               f"проверки.")
         await state.clear()
     except DomainError as e:
         await query.answer(str(e), show_alert=True)
@@ -367,24 +370,24 @@ async def back_offline_list(query: types.CallbackQuery, state: FSMContext,
     tasks = [t for t in all_tasks if t.region == u.region]
     await query.answer()
     await query.message.answer(
-        f"Задания в регионе (стр. 1/{total_pages}):",
+        f"Действия в регионе (стр. 1/{total_pages}):",
         reply_markup=get_offline_tasks_keyboard(tasks, 1, total_pages)
     )
     await state.update_data(page=1, total_pages=total_pages)
     await state.set_state(UserTaskStates.offline_list)
 
 
-@router.message(F.text == "Мои задания")
+@router.message(F.text == "Мои действия")
 async def my_tasks(message: types.Message, state: FSMContext,
                    offline_task_service: IOfflineTaskService, user_service: IUserService):
     u = await user_service.get_user(message.from_user.id, Sources.TG)
     tasks, _ = await offline_task_service.get_user_tasks(u.id, u.source, page=1)
     if not tasks:
-        await message.answer("У вас нет активных заданий.",
+        await message.answer("У вас нет активных действий.",
                              reply_markup=get_role_menu_keyboard(u.role))
         return
 
-    await message.answer("Ваши задания:", reply_markup=get_my_tasks_keyboard(tasks))
+    await message.answer("Ваши действия:", reply_markup=get_my_tasks_keyboard(tasks))
     await state.set_state(UserTaskStates.my_tasks)
 
 
@@ -394,7 +397,7 @@ async def view_my_task(query: types.CallbackQuery, state: FSMContext,
     tid = int(query.data.split("_")[-1])
     task = await offline_task_service.get_task(tid)
     if not task:
-        await query.answer("Ошибка: задание не найдено", show_alert=True)
+        await query.answer("Ошибка: действие не найдено", show_alert=True)
         return
 
     user_tasks, _ = await offline_task_service.get_user_tasks(query.from_user.id, Sources.TG,
@@ -421,10 +424,10 @@ async def cancel_my_task(query: types.CallbackQuery, state: FSMContext,
     try:
         await offline_task_service.cancel_task(query.from_user.id, Sources.TG, tid)
         await notification_service.notify_user(query.from_user.id, Sources.TG,
-                                               f"Задание #{tid} отменено.")
+                                               f"Действие #{tid} отменено.")
         role = await user_service.get_user_role(query.from_user.id, Sources.TG)
         await query.answer()
-        await query.message.answer(f"✅ Задание #{tid} успешно отменено.",
+        await query.message.answer(f"✅ Действие #{tid} успешно отменено.",
                                    reply_markup=get_role_menu_keyboard(role))
         await state.clear()
     except Exception as e:
@@ -438,13 +441,13 @@ async def back_to_my_tasks(query: types.CallbackQuery, state: FSMContext,
     tasks, _ = await offline_task_service.get_user_tasks(u.id, u.source, page=1)
     if not tasks:
         await query.answer()
-        await query.message.answer("У вас нет активных заданий.",
+        await query.message.answer("У вас нет активных действий.",
                                    reply_markup=get_role_menu_keyboard(u.role))
         await state.clear()
         return
 
     await query.answer()
-    await query.message.answer("Ваши задания:", reply_markup=get_my_tasks_keyboard(tasks))
+    await query.message.answer("Ваши действия:", reply_markup=get_my_tasks_keyboard(tasks))
 
 
 @router.callback_query(F.data == "back_to_menu")

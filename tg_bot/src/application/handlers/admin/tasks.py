@@ -448,9 +448,10 @@ async def verify_action(query: types.CallbackQuery, offline_task_service: IOffli
     action = TaskStatus.ACCEPTED if action_str == "accept" else TaskStatus.DECLINED
     await offline_task_service.check_task(uid, source, tid, action)
 
-    status_msg = "принята" if action == TaskStatus.ACCEPTED else "отклонена"
+    status_msg = "принято" if action == TaskStatus.ACCEPTED else "отклонено"
     await notification_service.notify_user(uid, source,
-                                           f"Ваша офлайн задача #{tid} была {status_msg} администратором.")
+                                           f"Ваша офлайн действие #{tid} было {status_msg} "
+                                           f"администратором.")
 
     await query.answer()
     await query.message.answer(
@@ -481,7 +482,8 @@ async def tg_verify_action(query: types.CallbackQuery,
         if action == "accept":
             await online_task_service.accept_tg_online_task(uid, source, tid)
             await notification_service.notify_user(uid, source,
-                                                   f"✅ Ваша онлайн задача #{tid} принята! Баллы начислены.")
+                                                   f"✅ Ваша онлайн действие #{tid} принято! Баллы "
+                                                   f"начислены.")
 
             # Меняем текст и убираем кнопки
             final_text = f"✅ ПРИНЯТО\n{new_text}"
@@ -491,7 +493,7 @@ async def tg_verify_action(query: types.CallbackQuery,
         else:
             await online_task_service.decline_tg_online_task(uid, source, tid)
             await notification_service.notify_user(uid, source,
-                                                   f"❌ Ваша онлайн задача #{tid} отклонена.")
+                                                   f"❌ Ваша онлайн действие #{tid} отклонено.")
 
             # Меняем текст и убираем кнопки
             final_text = f"❌ ОТКЛОНЕНО\n{new_text}"

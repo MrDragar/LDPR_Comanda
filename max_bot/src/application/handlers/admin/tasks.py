@@ -406,12 +406,13 @@ async def verify_action(event: MessageCallback, offline_task_service: IOfflineTa
     action = TaskStatus.ACCEPTED if action_str == "accept" else TaskStatus.DECLINED
 
     await offline_task_service.check_task(uid, source, tid, action)
-    status_msg = "принята" if action == TaskStatus.ACCEPTED else "отклонена"
+    status_msg = "принято" if action == TaskStatus.ACCEPTED else "отклонено"
     await notification_service.notify_user(uid, source,
-                                           f"Ваша офлайн задача #{tid} была {status_msg} администратором.")
+                                           f"Ваше офлайн действие #{tid} было {status_msg} "
+                                           f"администратором.")
 
     await event.message.answer(
-        f"Статус задачи #{tid} для пользователя {uid} изменён на {action.value}")
+        f"Статус действия #{tid} для пользователя {uid} изменён на {action.value}")
     await event.message.edit(attachments=[])
 
 
@@ -434,12 +435,13 @@ async def tg_verify_action(event: MessageCallback, online_task_service: IOnlineT
         if action == "accept":
             await online_task_service.accept_tg_online_task(uid, source, tid)
             await notification_service.notify_user(uid, source,
-                                                   f"✅ Ваша онлайн задача #{tid} принята! Баллы начислены.")
+                                                   f"✅ Ваше онлайн действие #{tid} принято! Баллы "
+                                                   f"начислены.")
             await event.message.edit(text=f"✅ ПРИНЯТО\n{event.message.body.text}", attachments=[])
         else:
             await online_task_service.decline_tg_online_task(uid, source, tid)
             await notification_service.notify_user(uid, source,
-                                                   f"❌ Ваша онлайн задача #{tid} отклонена.")
+                                                   f"❌ Ваше онлайн действие #{tid} отклонено.")
             await event.message.edit(text=f"❌ ОТКЛОНЕНО\n{event.message.body.text}", attachments=[])
     except Exception as e:
         logger.error(e)
