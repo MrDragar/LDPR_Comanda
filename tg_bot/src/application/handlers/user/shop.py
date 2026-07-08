@@ -59,7 +59,7 @@ async def _render_shop(event: types.Message | types.CallbackQuery, prods, page, 
         await event.answer(text, reply_markup=builder.as_markup())
 
 
-@router.message(F.text == "Магазин")
+# @router.message(F.text == "Магазин")
 async def open_shop(message: types.Message, product_service: IProductService, balance_service: IBalanceService, state: FSMContext):
     bal = await balance_service.get_balance(message.from_user.id, Sources.TG)
     prods, total = await product_service.list_products(1)

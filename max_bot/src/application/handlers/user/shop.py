@@ -42,7 +42,7 @@ async def _render_shop(event, prods, page, total, balance):
     await event.message.answer(text, attachments=[builder.as_markup()])
 
 
-@router.message_created(F.message.body.text == "Магазин")
+# @router.message_created(F.message.body.text == "Магазин")
 async def open_shop(event: MessageCreated, product_service: IProductService,
                     balance_service: IBalanceService, context: MemoryContext):
     bal = await balance_service.get_balance(event.from_user.user_id, Sources.MAX)

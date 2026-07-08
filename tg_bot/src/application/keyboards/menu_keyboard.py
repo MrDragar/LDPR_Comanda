@@ -14,7 +14,7 @@ def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
         builder.button(text="Реферальная ссылка")
         builder.button(text="Обучение")
         builder.button(text="Мои действия")
-        builder.button(text="Магазин")
+        # builder.button(text="Магазин")
         builder.button(text="Закрытые мероприятия")
         builder.adjust(1, 2, 2, 2)
 

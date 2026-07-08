@@ -10,7 +10,7 @@ def get_role_menu_keyboard(role: UserRole | None) -> InlineKeyboardBuilder:
         builder.row(MessageButton(text="Мои действия"))
         builder.row(MessageButton(text="Личный кабинет"))
         builder.row(MessageButton(text="Обучение"), MessageButton(text="Реферальная ссылка"))
-        builder.row(MessageButton(text="Магазин"))
+        # builder.row(MessageButton(text="Магазин"))
         builder.row(MessageButton(text="Закрытые мероприятия"))
 
     if role in (UserRole.STAFF_RO, UserRole.COORDINATOR_RO, UserRole.STAFF_CA):

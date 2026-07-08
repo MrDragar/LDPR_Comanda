@@ -12,7 +12,7 @@ def get_user_menu_keyboard() -> str:
     kb.add(Text("Личный кабинет"))
     kb.add(Text("Реферальная ссылка")).row()
     kb.add(Text("Обучение"))
-    kb.add(Text("Магазин")).row()
+    # kb.add(Text("Магазин")).row()
     kb.add(Text("Закрытые мероприятия")).row()
     return kb.get_json()
 

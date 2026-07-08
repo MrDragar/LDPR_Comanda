@@ -28,7 +28,7 @@ def _shop_kb(prods, page, total, prefix="shop"):
     return kb.get_json()
 
 
-@router.message(text=["Магазин"])
+# @router.message(text=["Магазин"])
 async def open_shop(message: Message, product_service: IProductService, balance_service: IBalanceService, state_dispenser: BuiltinStateDispenser):
     bal = await balance_service.get_balance(message.from_id, Sources.VK)
     prods, total = await product_service.list_products(1)
