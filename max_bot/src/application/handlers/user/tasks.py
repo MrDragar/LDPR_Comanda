@@ -119,7 +119,7 @@ async def view_online(event: MessageCallback, context: MemoryContext,
     text = f"📋 {task.title}\n"
     text += f"📝 {task.description}\n"
     text += f"📌 Тип: {task.type.value}\n"
-    text += f"🏆 Награда: {task.reward} баллов\n"
+    text += f"🏆 Вознаграждение: {task.reward} очков\n"
     if task.url:
         text += f"🔗 Ссылка на действие: {task.url}\n"
 
@@ -208,7 +208,7 @@ async def confirm_submit(event: MessageCallback, context: MemoryContext,
             f"📋 Онлайн действие #{task.id} на проверку\n"
             f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, MAX)\n"
             f"📌 Тип: {task.type.value}\n"
-            f"🏆 Награда: {task.reward} баллов\n"
+            f"🏆 Вознаграждение: {task.reward} очков\n"
         )
         if task.url:
             info_text += f"🔗 Ссылка: {task.url}\n"
@@ -311,7 +311,7 @@ async def view_offline(event: MessageCallback, context: MemoryContext,
             f"📝 {task.description}\n"
             f"📍 {task.location}\n"
             f"📞 {task.contacts}\n"
-            f"🏆 {task.reward} баллов")
+            f"🏆 {task.reward} очков")
 
     await event.message.answer(text, attachments=[get_offline_task_view_keyboard(tid).as_markup()])
     await context.update_data(tid=tid)
@@ -390,7 +390,7 @@ async def view_my_task(event: MessageCallback, context: MemoryContext,
             f"📝 {task.description}\n"
             f"📍 {task.location}\n"
             f"📞 {task.contacts}\n"
-            f"💰 {task.reward} баллов")
+            f"💰 {task.reward} очков")
 
     is_in_progress = accepted and accepted.status == TaskStatus.IN_PROGRESS
     await event.message.answer(text, attachments=[

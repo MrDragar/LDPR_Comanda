@@ -181,7 +181,7 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     text = (f"📋 {task.title}\n"
             f"📝 {task.description}\n"
             f"📌 Тип: {task.type.value}\n"
-            f"🏆 Награда: {task.reward} баллов\n")
+            f"🏆 Вознаграждение: {task.reward} очков\n")
     if task.url:
         text += f"🔗 Ссылка: {task.url}"
 
@@ -274,7 +274,7 @@ async def confirm_submit_online(event: GroupTypes.MessageEvent,
             f"#in_progress\n"
             f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, VK)\n"
             f"📌 Тип: {task.type.value}\n"
-            f"🏆 Награда: {task.reward} баллов\n"
+            f"🏆 Вознаграждение: {task.reward} очков\n"
         )
         if task.url:
             info_text += f"🔗 Ссылка: {task.url}\n"
@@ -323,7 +323,7 @@ async def view_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
             f"📝 {task.description}\n"
             f"📍 {task.location}\n"
             f"📞 {task.contacts}\n"
-            f"🏆 {task.reward} баллов")
+            f"🏆 {task.reward} очков")
     kb = Keyboard(inline=True)
     kb.add(Callback("Принять", {"cmd": "accept_offline", "tid": tid}))
     kb.row().add(Callback("Назад к списку", {"cmd": "back_offline_list"}))
@@ -345,10 +345,10 @@ async def check_online(event: GroupTypes.MessageEvent, online_task_service: IOnl
         task = await online_task_service.get_task(tid)
         await notification_service.notify_user(event.object.peer_id, Sources.VK,
                                                   f"✅ Действие #{tid} принято. Начислено"
-                                                  f" {task.reward} баллов.")
+                                                  f" {task.reward} очков.")
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                           message=f"Вы успешно выполнили действие! +{task.reward} "
-                                                  f"баллов",
+                                                  f"очков",
                                           random_id=0)
     except Exception as e:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=str(e), random_id=0)
