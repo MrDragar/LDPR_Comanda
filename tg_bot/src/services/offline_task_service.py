@@ -41,7 +41,7 @@ class OfflineTaskService(IOfflineTaskService):
                          new_status: TaskStatus) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Офлайн действие не найдено")
+            if not task: raise DomainError("Оффлайн задача не найдена")
 
             if new_status not in [TaskStatus.ACCEPTED, TaskStatus.DECLINED]:
                 raise DomainError("Неподдерживаемый статус для проверки")
@@ -52,7 +52,7 @@ class OfflineTaskService(IOfflineTaskService):
 
             if new_status == TaskStatus.ACCEPTED:
                 await self.__balance_svc.add_balance(user_id, user_source, task.reward,
-                                                     f"Подтверждение офлайн-действия #{task_id}")
+                                                     f"Подтверждение оффлайн-задачи #{task_id}")
                 logger.info(f"Offline task {task_id} status set to ACCEPTED for user {user_id}")
                 user = await self.__user_svc.get_user(user_id, user_source)
                 if user.grade == UserGrade.AGITATOR:
@@ -131,19 +131,18 @@ class OfflineTaskService(IOfflineTaskService):
             # 1. Проверка существования задачи
             task = await self.__task_repo.get_task_by_id(task_id)
             if not task:
-                raise DomainError("Офлайн действие не найдено")
+                raise DomainError("Оффлайн задача не найдена")
 
             # 2. Проверка на дубликат (уже принята/в процессе)
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
-                raise DomainError("Вы уже приняли это действие или оно находится в процессе "
-                                  "выполнения")
+                raise DomainError("Вы уже приняли эту задачу или она находится в процессе выполнения")
 
             # 3. Проверка лимита активных задач (максимум 2)
             # Получаем все задачи пользователя и считаем только IN_PROGRESS
             all_user_tasks, _ = await self.__accepted_repo.get_user_accepted_offline_tasks(user_id, user_source, skip=0, limit=100)
             active_count = sum(1 for t in all_user_tasks if t.status == TaskStatus.IN_PROGRESS)
             if active_count >= 2:
-                raise DomainError("Нельзя взять более 2 активных офлайн действий одновременно")
+                raise DomainError("Нельзя взять более 2 активных офлайн задач одновременно")
 
             # 4. Создание записи со статусом IN_PROGRESS
             accepted = AcceptedOfflineTask(

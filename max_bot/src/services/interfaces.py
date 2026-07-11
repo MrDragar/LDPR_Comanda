@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from datetime import date, time
 from src.domain.entities import Repost, Sources, User, OrderStatus, Order, Product, \
-    EventRegistration, ClosedEvent
+    EventRegistration, ClosedEvent, Petition
 from src.domain.entities.headliner import Headliner, HeadlinerFollower
 from src.domain.entities.task import OnlineTask, OfflineTask, AcceptedOfflineTask, TaskStatus, \
     TaskType
@@ -296,3 +296,108 @@ class IParticipationService(ABC):
     @abstractmethod
     async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
         ...
+
+
+class IAuthService(ABC):
+    @abstractmethod
+    async def authenticate_tg(self, auth_data: str) -> str: ...
+    @abstractmethod
+    async def authenticate_vk(self, auth_data: str) -> str: ...
+    @abstractmethod
+    async def authenticate_max(self, auth_data: str) -> str: ...
+    @abstractmethod
+    async def get_user_by_token(self, token: str) -> User: ...
+    @abstractmethod
+    async def update_user_profile(self, user_id: int, source: Sources, **kwargs) -> User: ...
+    @abstractmethod
+    async def register(self, auth_data: str, source: str, user_data: dict) -> str: ...
+
+
+class IPetitionService(ABC):
+    @abstractmethod
+    async def create_petition(self, user_id: int, source: Sources, title: str, description: str, image_url: str | None, scope: str) -> Petition: ...
+    @abstractmethod
+    async def get_petition(self, petition_id: int, user_id: int | None, source: Sources | None) -> dict: ...
+
+    @abstractmethod
+    async def get_feed(self, user_id: int, source: Sources, scope: str | None, region: str | None, limit: int) -> list[dict]: ...
+
+    @abstractmethod
+    async def skip_petition(self, petition_id: int, user_id: int, source: Sources) -> dict: ...
+    @abstractmethod
+    async def get_all(self, scope: str | None, status: str | None, region: str | None, page: int, limit: int) -> dict: ...
+    @abstractmethod
+    async def get_my(self, user_id: int, source: Sources, page: int, limit: int) -> dict: ...
+    @abstractmethod
+    async def get_supported(self, user_id: int, source: Sources, page: int, limit: int) -> dict: ...
+    @abstractmethod
+    async def support_petition(self, petition_id: int, user_id: int, source: Sources) -> int: ...
+    @abstractmethod
+    async def share_petition(self, petition_id: int) -> dict: ...
+
+
+class ICandidateService(ABC):
+    @abstractmethod
+    async def get_candidates(self, region: str | None, page: int, limit: int) -> dict: ...
+    @abstractmethod
+    async def get_candidate_by_id(self, candidate_id: int) -> dict: ...
+    @abstractmethod
+    async def ask_question(self, candidate_id: int, author_id: int, author_source: Sources,
+                           text: str, is_anonymous: bool) -> dict: ...
+    @abstractmethod
+    async def get_my_questions(self, user_id: int, source: Sources, page: int,
+                               limit: int) -> dict: ...
+
+
+class IAdminPetitionService(ABC):
+    @abstractmethod
+    async def approve_petition(self, petition_id: int) -> dict: ...
+    @abstractmethod
+    async def reject_petition(self, petition_id: int, reason: str) -> dict: ...
+
+
+class IStatsService(ABC):
+    @abstractmethod
+    async def get_region_counter(self, region: str) -> dict: ...
+    @abstractmethod
+    async def get_weekly_report(self, user_id: int, source: Sources) -> dict: ...
+    
+
+class IAdminCandidateService(ABC):
+    @abstractmethod
+    async def create_candidate(self, user_id: int, source: Sources, fio: str, region: str, 
+                               photo_url: str | None, 
+                               bio: str | None, topics: list[str], social_links: dict[str, str]) -> dict: ...
+
+
+class ICabinetPetitionService(ABC):
+    @abstractmethod
+    async def get_petitions(self, user_id: int, source: Sources, status: str, page: int, limit: int) -> dict: ...
+    @abstractmethod
+    async def take_petition(self, user_id: int, source: Sources, petition_id: int, initial_comment: str) -> dict: ...
+    @abstractmethod
+    async def update_progress(self, user_id: int, source: Sources, petition_id: int, comment: str) -> dict: ...
+    @abstractmethod
+    async def complete_petition(self, user_id: int, source: Sources, petition_id: int, result: str, result_image_url: str | None) -> dict: ...
+
+
+class ICabinetQuestionService(ABC):
+    @abstractmethod
+    async def get_questions(self, user_id: int, source: Sources, status: str | None, page: int, limit: int) -> dict: ...
+    @abstractmethod
+    async def answer_question(self, user_id: int, source: Sources, question_id: int, text: str | None, voice_url: str | None, video_url: str | None) -> dict: ...
+
+
+class IUploadService(ABC):
+    @abstractmethod
+    async def get_presigned_url(self, filename: str, content_type: str) -> dict: ...
+
+
+class IHillService(ABC):
+    @abstractmethod
+    async def get_battle(self, user_id: int, source: Sources) -> dict: ...
+    @abstractmethod
+    async def make_choice(self, user_id: int, source: Sources, left_id: int, right_id: int,
+                          winner_id: int) -> dict: ...
+    @abstractmethod
+    async def get_stats(self, user_id: int, source: Sources) -> dict: ...

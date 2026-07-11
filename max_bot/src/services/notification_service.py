@@ -32,12 +32,12 @@ class NotificationService(INotificationService):
         except Exception as e:
             logger.error(f"Failed to send TG notification to {chat_id}: {e}")
 
-    async def notify_user_max(self, chat_id: int, text: str) -> None:
+    async def notify_user_max(self, user_id: int, text: str) -> None:
         try:
-            await self.max_bot.send_message(user_id=chat_id, text=text)
-            logger.info(f"MAX notification sent to {chat_id}")
+            await self.max_bot.send_message(user_id=user_id, text=text)
+            logger.info(f"MAX notification sent to {user_id}")
         except Exception as e:
-            logger.error(f"Failed to send MAX notification to {chat_id}: {e}")
+            logger.error(f"Failed to send MAX notification to {user_id}: {e}")
 
     async def notify_user(self, user_id: int, source: Sources, text: str) -> None:
         """Общий метод для отправки уведомлений во все поддерживаемые источники."""

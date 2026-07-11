@@ -3,7 +3,7 @@ from contextlib import _AsyncGeneratorContextManager
 from datetime import date
 
 from .entities import User, Sources, LearningTestAttempt, Product, Order, OrderStatus, ClosedEvent, \
-    EventRegistration
+    EventRegistration, Petition, PetitionStatus, CandidateQuestion, Candidate, HillVote
 from .entities.headliner import Headliner, HeadlinerFollower
 from .entities.task import OnlineTask, OfflineTask, AcceptedOnlineTask, AcceptedOfflineTask, \
     Transaction, TaskStatus, TaskType
@@ -153,7 +153,9 @@ class IVKPublicationRepository(ABC):
 
 class IOnlineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int, is_member: bool | None = None) -> tuple[list[OnlineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
+                                        skip: int, limit: int, is_member: bool | None = None) -> \
+    tuple[list[OnlineTask], int]: ...
 
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OnlineTask | None: ...
@@ -172,7 +174,9 @@ class IOnlineTaskRepository(ABC):
 
 class IOfflineTaskRepository(ABC):
     @abstractmethod
-    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date, skip: int, limit: int, is_member: bool | None = None) -> tuple[list[OfflineTask], int]: ...
+    async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
+                                        skip: int, limit: int, is_member: bool | None = None) -> \
+    tuple[list[OfflineTask], int]: ...
 
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OfflineTask | None: ...
@@ -223,12 +227,15 @@ class IAcceptedTaskRepository(ABC):
         ...
 
     @abstractmethod
-    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
+    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int,
+                                        status: TaskStatus) -> None:
         ...
+
 
 class ITransactionRepository(ABC):
     @abstractmethod
     async def add_transaction(self, transaction: Transaction) -> Transaction: ...
+
     @abstractmethod
     async def get_user_rating(self, user_id: int, user_source: Sources) -> int: ...
 
@@ -307,6 +314,8 @@ class IOrderRepository(ABC):
 class IS3Storage(ABC):
     @abstractmethod
     async def upload_photo(self, file_bytes: bytes, filename: str) -> str: ...
+    @abstractmethod
+    async def generate_presigned_put_url(self, object_key: str, content_type: str, expires_in: int = 3600) -> str: ...
 
 
 class IClosedEventRepository(ABC):
@@ -354,3 +363,124 @@ class IParticipationRepository(ABC):
     @abstractmethod
     async def get_all_participation_ids(self, user_id: int, user_source: Sources) -> list[int]:
         ...
+
+
+class IJWTRepository(ABC):
+    @abstractmethod
+    async def create_access_token(self, user_id: int, source: Sources,
+                                  expires_delta: int | None = None) -> str: ...
+
+    @abstractmethod
+    async def decode_access_token(self, token: str) -> tuple[int, Sources]: ...
+
+
+class IVKAuthRepository(ABC):
+    @abstractmethod
+    async def verify_data(self, auth_data: str) -> int: ...
+
+
+class ITelegramAuthRepository(ABC):
+    @abstractmethod
+    async def verify_data(self, auth_data: str) -> int: ...
+
+
+class IMaxAuthRepository(ABC):
+    @abstractmethod
+    async def verify_data(self, auth_data: str) -> int: ...
+
+
+class IPetitionRepository(ABC):
+    @abstractmethod
+    async def create(self, petition: Petition) -> Petition: ...
+
+    @abstractmethod
+    async def get_by_id(self, petition_id: int) -> Petition | None: ...
+
+    @abstractmethod
+    async def get_feed(self, scope: str | None, region: str | None, limit: int, user_id: int | None = None, source: Sources | None = None) -> list[Petition]: ...
+
+    @abstractmethod
+    async def get_all(self, scope: str | None, status: str | None, region: str | None, page: int,
+                      limit: int) -> tuple[list[Petition], int]: ...
+
+    @abstractmethod
+    async def get_my(self, user_id: int, source: Sources, page: int, limit: int) -> tuple[list[Petition], int]: ...
+
+    @abstractmethod
+    async def get_supported(self, user_id: int, source: Sources, page: int, limit: int) -> tuple[list[Petition], int]: ...
+
+    @abstractmethod
+    async def support(self, petition_id: int, user_id: int, source: Sources) -> bool: ...
+
+    @abstractmethod
+    async def is_supported(self, petition_id: int, user_id: int, source: Sources) -> bool: ...
+
+    @abstractmethod
+    async def increment_share(self, petition_id: int) -> None: ...
+
+    @abstractmethod
+    async def increment_view(self, petition_id: int) -> None: ...
+
+    @abstractmethod
+    async def update_status(self, petition_id: int, status: PetitionStatus) -> None: ...
+
+    @abstractmethod
+    async def get_available_for_candidate(self, region: str, page: int, limit: int) -> tuple[list[Petition], int]: ...
+    @abstractmethod
+    async def get_by_candidate(self, candidate_id: int, status: str, page: int, limit: int) -> tuple[list[Petition], int]: ...
+    @abstractmethod
+    async def take_petition(self, petition_id: int, candidate_id: int, candidate_name: str, initial_comment: str) -> None: ...
+    @abstractmethod
+    async def update_progress(self, petition_id: int, comment: str) -> None: ...
+    @abstractmethod
+    async def complete_petition(self, petition_id: int, result: str, result_image_url: str | None) -> None: ...
+    @abstractmethod
+    async def skip_petition(self, petition_id: int, user_id: int, source: Sources) -> None: ...
+    @abstractmethod
+    async def get_skipped_ids(self, user_id: int, source: Sources) -> list[int]: ...
+
+class ICandidateRepository(ABC):
+    @abstractmethod
+    async def create(self, candidate: Candidate) -> Candidate: ...
+    @abstractmethod
+    async def get_all(self, region: str | None, page: int, limit: int) -> tuple[list[Candidate], int]: ...
+    @abstractmethod
+    async def get_by_id(self, candidate_id: int) -> Candidate | None: ...
+    @abstractmethod
+    async def get_by_user_id(self, user_id: int, source: Sources) -> Candidate | None: ...
+    @abstractmethod
+    async def get_petitions_counts(self, candidate_id: int) -> tuple[int, int]: ...
+    @abstractmethod
+    async def get_petitions_by_status(self, candidate_id: int, status: str) -> list[dict]: ...
+
+
+class ICandidateQuestionRepository(ABC):
+    @abstractmethod
+    async def create(self, question: CandidateQuestion) -> CandidateQuestion: ...
+    @abstractmethod
+    async def get_by_id(self, question_id: int) -> CandidateQuestion | None: ...
+    @abstractmethod
+    async def get_for_candidate(self, candidate_id: int, status: str | None, page: int, limit: int) -> tuple[list[CandidateQuestion], int]: ...
+    @abstractmethod
+    async def update_answer(self, question_id: int, text: str | None, voice_url: str | None, video_url: str | None) -> None: ...
+    @abstractmethod
+    async def get_by_author(self, user_id: int, source: Sources, page: int, limit: int) -> tuple[list[CandidateQuestion], int]: ...
+
+
+class IStatsRepository(ABC):
+    @abstractmethod
+    async def get_region_user_count(self, region: str) -> int: ...
+    @abstractmethod
+    async def get_user_weekly_stats(self, user_id: int, source: Sources) -> dict: ...
+
+
+class IHillRepository(ABC):
+    @abstractmethod
+    async def get_pair_for_user(self, user_id: int, source: Sources) -> tuple[
+                                                                            Petition, Petition] | None: ...
+
+    @abstractmethod
+    async def save_vote(self, vote: HillVote) -> HillVote: ...
+
+    @abstractmethod
+    async def get_user_votes_count(self, user_id: int, source: Sources) -> int: ...

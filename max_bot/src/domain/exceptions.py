@@ -48,3 +48,51 @@ class TaskNotCompletedError(DomainError):
 class VKApiError(DomainError):
     """Вызывается при ошибках обращения к VK API"""
     pass
+
+
+class AuthError(Exception):
+    pass
+
+
+class AuthBadUserError(AuthError):
+    pass
+
+
+class PetitionError(Exception):
+    pass
+
+
+class CandidateNotFoundError(Exception):
+    pass
+
+
+class QuestionNotFoundError(Exception):
+    pass
+
+
+class PetitionAlreadyModeratedError(Exception):
+    pass
+
+
+class CandidateAlreadyExistsError(Exception):
+    pass
+
+
+class PetitionAlreadyTakenError(Exception):
+    pass
+
+
+class PetitionNotAvailableError(Exception):
+    pass
+
+
+class CandidateNotAssignedError(Exception):
+    pass
+
+
+class UserAlreadyExistsError(Exception):
+    pass
+
+
+class HillError(Exception):
+    pass
