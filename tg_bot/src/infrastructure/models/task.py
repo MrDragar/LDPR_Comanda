@@ -41,6 +41,8 @@ class AcceptedOnlineTaskORM(Base):
     user_source: Mapped[Sources] = mapped_column(SQLEnum(Sources), nullable=False)
     task_id: Mapped[int] = mapped_column(nullable=False)
     status: Mapped[TaskStatus] = mapped_column(SQLEnum(TaskStatus), nullable=False)
+    result_text: Mapped[str] = mapped_column(Text(), nullable=True)
+    result_image: Mapped[str] = mapped_column(Text(), nullable=True)
     __table_args__ = (
         ForeignKeyConstraint(['user_id', 'user_source'], ['users.id', 'users.source'],
                              ondelete="CASCADE"),
