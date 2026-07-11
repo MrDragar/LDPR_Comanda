@@ -1,13 +1,15 @@
 import logging
+
+import aiohttp
 from maxapi import Router, F
-from maxapi.types import MessageCreated, InputMedia
+from maxapi.types import MessageCreated, InputMedia, InputMediaBuffer
 from maxapi.context import MemoryContext
 from src.application.states import ProfileStates
 from src.application.keyboards.profile_keyboard import get_profile_kb, get_back_kb
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.services.interfaces import IUserService, IReferralService, IBalanceService, \
-    ILearningService, IOrderService, IClosedEventService, IReferralLinkService
-from src.domain.entities.user import Sources
+    ILearningService, IOrderService, IClosedEventService, IReferralLinkService, IHeadlinerService
+from src.domain.entities.user import Sources, UserRole
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -16,7 +18,7 @@ router = Router()
 @router.message_created(F.message.body.text == "Личный кабинет")
 async def profile(event: MessageCreated, context: MemoryContext, user_service: IUserService,
                   referral_service: IReferralService, balance_service: IBalanceService,
-                  learning_service: ILearningService):
+                  learning_service: ILearningService, headliner_service: IHeadlinerService):
     try:
         u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
         balance = await balance_service.get_balance(u.id, u.source)
@@ -35,6 +37,17 @@ async def profile(event: MessageCreated, context: MemoryContext, user_service: I
             f"🎓 Обучение пройдено - {'да' if is_passed else 'нет'}\n"
             f"📅 Дата регистрации - {u.created_at.strftime('%d.%m.%Y')}"
         )
+        if u.role == UserRole.HEADLINER:
+            headliner = await headliner_service.get_by_user(u.id, u.source)
+            if headliner:
+                followers_count = await headliner_service.count_followers(headliner.id)
+                text += (
+                    f"\n\n👑 Хэдлайнер: {headliner.fio}"
+                    f"\n💼 Должность: {headliner.position}"
+                    f"\n🎯 Тема: {headliner.topic}"
+                    f"\n👥 Последователей: {followers_count}"
+                )
+
         await event.message.answer(text, attachments=[get_profile_kb().as_markup()])
         await context.set_state(ProfileStates.MENU)
     except Exception as e:
@@ -44,7 +57,42 @@ async def profile(event: MessageCreated, context: MemoryContext, user_service: I
 
 @router.message_created(F.message.body.text == "Реферальная ссылка")
 async def referral_link(event: MessageCreated, context: MemoryContext,
-                        referral_link_service: IReferralLinkService):
+                        referral_link_service: IReferralLinkService, user_service: IUserService,
+                        headliner_service: IHeadlinerService):
+    u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
+
+    # 1. Проверяем, является ли пользователь хедлайнером
+    headliner = await headliner_service.get_by_user(u.id, u.source)
+    if headliner:
+        links = headliner_service.make_referral_links(headliner.id)
+        links_text = (
+            "👑 Ваши ссылки хэдлайнера:\n"
+            f"🔹 VK: {links['VK']}\n"
+            f"🔹 MAX: {links['MAX']}\n"
+            f"🔹 Telegram: {links['Telegram']}\n\n"
+            "Все зарегистрированные по этим ссылкам попадут в вашу команду."
+        )
+
+        # Если у хедлайнера есть фото, скачиваем его и отправляем как вложение
+        if headliner.photo:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(headliner.photo) as resp:
+                        if resp.status == 200:
+                            image_bytes = await resp.read()
+                            media = InputMediaBuffer(image_bytes, filename="headliner.jpg")
+                            attachment = await event.bot.upload_media(media)
+                            await event.message.answer(text=links_text, attachments=[attachment,
+                                                                                     get_back_kb().as_markup()])
+                            await context.set_state(ProfileStates.REFERRALS)
+                            return
+            except Exception as e:
+                logger.error(f"Failed to send headliner photo: {e}")
+
+        # Если фото нет или оно не загрузилось, отправляем просто текст
+        await event.message.answer(links_text, attachments=[get_back_kb().as_markup()])
+        await context.set_state(ProfileStates.REFERRALS)
+        return
     repost_data = referral_link_service.generate_post(event.from_user.user_id)
     vk_ref = f"{referral_link_service.vk_bot_link}?ref={event.from_user.user_id}_{referral_link_service.source.value}"
     tg_ref = f"{referral_link_service.tg_bot_link}?start={event.from_user.user_id}_{referral_link_service.source.value}"
@@ -140,10 +188,11 @@ async def show_rating(event: MessageCreated, context: MemoryContext, user_servic
 @router.message_created(F.message.body.text == "Назад")
 async def back_to_profile(event: MessageCreated, context: MemoryContext, user_service: IUserService,
                           referral_service: IReferralService, balance_service: IBalanceService,
-                          learning_service: ILearningService):
-    await profile(event, context, user_service, referral_service, balance_service, learning_service)
-
-
+                          learning_service: ILearningService,
+                          headliner_service: IHeadlinerService):
+    await profile(event, context, user_service, referral_service, balance_service, learning_service,
+                  headliner_service)
+    
 @router.message_created(F.message.body.text == "На главную")
 async def back_to_main(event: MessageCreated, context: MemoryContext, user_service: IUserService):
     role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)

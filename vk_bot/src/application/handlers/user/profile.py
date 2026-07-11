@@ -1,4 +1,5 @@
 import logging
+import aiohttp
 
 from vkbottle import Keyboard, PhotoMessageUploader, Text
 from vkbottle.bot import BotLabeler, Message
@@ -84,7 +85,7 @@ async def profile(message: Message, user_service: IUserService, referral_service
 
 
 # ==================== ПОДМЕНЮ ЛК ====================
-
+# ==================== РЕФЕРАЛЬНАЯ ССЫЛКА ====================
 @router.message(state=ProfileStates.MAIN, text=["Реферальная ссылка"])
 @router.message(text=["Реферальная ссылка"])
 async def referral_link(message: Message, referral_link_service: IReferralLinkService,
@@ -92,19 +93,36 @@ async def referral_link(message: Message, referral_link_service: IReferralLinkSe
                         headliner_service: IHeadlinerService,
                         state_dispenser: BuiltinStateDispenser):
     await state_dispenser.set(message.from_id, ProfileStates.REFERRAL)
-
     headliner = await headliner_service.get_by_user(message.from_id, Sources.VK)
+
     if headliner:
         links = headliner_service.make_referral_links(headliner.id)
         links_text = (
-            "Ваши ссылки хэдлайнера:\n\n"
+            "Ваши ссылки хэдлайнера:\n"
             f"VK: {links['VK']}\n"
             f"MAX: {links['MAX']}\n"
-            f"Telegram: {links['Telegram']}\n\n"
+            f"Telegram: {links['Telegram']}\n"
             "Все зарегистрированные по этим ссылкам попадут в вашу команду."
         )
+
+        # Если у хедлайнера есть фото, скачиваем его и отправляем как вложение
+        if headliner.photo:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(headliner.photo) as resp:
+                        if resp.status == 200:
+                            file_bytes = await resp.read()
+                            photo = await photo_uploader.upload(file_source=file_bytes,
+                                                                peer_id=message.peer_id)
+                            return await message.answer(links_text, attachment=photo,
+                                                        keyboard=get_back_kb())
+            except Exception as e:
+                logger.error(f"Failed to upload headliner photo: {e}")
+
+        # Если фото нет или оно не загрузилось, отправляем просто текст
         return await message.answer(links_text, keyboard=get_back_kb())
 
+    # Стандартная логика для обычных пользователей (остается без изменений)
     repost_data = referral_link_service.generate_post(message.from_id)
     vk_ref = f"{referral_link_service.vk_bot_link}?ref={message.from_id}_{referral_link_service.source.value}"
     tg_ref = f"{referral_link_service.tg_bot_link}?start={message.from_id}_{referral_link_service.source.value}"

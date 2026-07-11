@@ -24,16 +24,17 @@ class HeadlinerService(IHeadlinerService):
         self.__max_bot_link = max_bot_link
 
     async def create_headliner(
-            self,
-            user_id: int,
-            fio: str,
-            position: str,
-            topic: str,
-            group_link: str,
-            photo: str | None
+        self,
+        user_id: int,
+        user_source: Sources,
+        fio: str,
+        position: str,
+        topic: str,
+        group_link: str,
+        photo: str | None
     ) -> Headliner:
         async with self.__uow.atomic():
-            existing = await self.__headliner_repo.get_by_user(user_id, Sources.VK)
+            existing = await self.__headliner_repo.get_by_user(user_id, user_source)
             if existing:
                 return await self.__headliner_repo.update(
                     existing.id,
@@ -43,25 +44,24 @@ class HeadlinerService(IHeadlinerService):
                     group_link=group_link,
                     photo=photo
                 )
-
             headliner = await self.__headliner_repo.create(Headliner(
                 user_id=user_id,
-                user_source=Sources.VK,
+                user_source=user_source,
                 fio=fio,
                 position=position,
                 topic=topic,
                 group_link=group_link,
                 photo=photo
             ))
-        await self.__user_service.update_user_role(user_id, Sources.VK, UserRole.HEADLINER)
-        return headliner
+            await self.__user_service.update_user_role(user_id, user_source, UserRole.HEADLINER)
+            return headliner
 
     async def publish_article(self, headliner: Headliner) -> tuple[int | None, str | None]:
         description = (
             f"Должность: {headliner.position}\n"
             f"Тема: {headliner.topic}\n"
             f"Группа: {headliner.group_link}\n\n"
-            "Присоединяйтесь к команде хэдлайнера через реферальную ссылку в боте."
+            "Присоединяйтесь к команде хедлайнера через реферальную ссылку в боте."
         )
         try:
             post_id = await self.__publication_repo.publish_headliner(

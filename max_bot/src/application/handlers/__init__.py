@@ -19,6 +19,7 @@ from .user.tasks import router as user_tasks_router
 from .user.learning import router as learning_router
 from .user.closed_events import router as user_closed_events_router
 from .user.shop import router as user_shop_router
+from .user.headliners import router as headliners_router
 
 # Admin handlers
 from .admin.tasks import router as admin_tasks_router
@@ -35,7 +36,7 @@ full_router.include_routers(
     birthday_router, phone_router, email_router, region_router, city_router,
     wish_to_join_router, home_address_router, news_router,
     profile_router, user_tasks_router, learning_router,
-    user_closed_events_router, user_shop_router,
+    user_closed_events_router, user_shop_router, headliners_router,
     admin_tasks_router, admin_ca_router, admin_closed_events_router,
     admin_orders_router, admin_shop_router, admin_post_router
 )

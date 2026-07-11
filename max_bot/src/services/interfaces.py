@@ -159,13 +159,14 @@ class IReferralLinkService(ABC):
 class IHeadlinerService(ABC):
     @abstractmethod
     async def create_headliner(
-            self,
-            user_id: int,
-            fio: str,
-            position: str,
-            topic: str,
-            group_link: str,
-            photo: str | None
+        self,
+        user_id: int,
+        user_source: Sources,
+        fio: str,
+        position: str,
+        topic: str,
+        group_link: str,
+        photo: str | None
     ) -> Headliner:
         ...
 

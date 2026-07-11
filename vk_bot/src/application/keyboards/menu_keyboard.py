@@ -92,7 +92,6 @@ def get_staff_ca_headliners_keyboard() -> str:
 def get_headliner_menu_keyboard() -> str:
     kb = Keyboard(one_time=False)
     kb.add(Text("Личный кабинет"))
-    kb.add(Text("Рассылка последователям")).row()
     kb.add(Text("Приветственное сообщение")).row()
     kb.add(Text("Рейтинг хедлайнеров")).row()
     return kb.get_json()

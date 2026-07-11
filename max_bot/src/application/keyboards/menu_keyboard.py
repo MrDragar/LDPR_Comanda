@@ -3,7 +3,17 @@ from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
 from src.domain.entities.user import UserRole
 
 
+def get_headliner_menu_keyboard() -> InlineKeyboardBuilder:
+    builder = InlineKeyboardBuilder()
+    builder.row(MessageButton(text="Личный кабинет"))
+    builder.row(MessageButton(text="Приветственное сообщение"))
+    builder.row(MessageButton(text="Рейтинг хедлайнеров"))
+    return builder
+
+
 def get_role_menu_keyboard(role: UserRole | None) -> InlineKeyboardBuilder:
+    if role == UserRole.HEADLINER:
+        return get_headliner_menu_keyboard()
     builder = InlineKeyboardBuilder()
     if role == UserRole.USER:
         builder.row(MessageButton(text="Выполнить действие"))

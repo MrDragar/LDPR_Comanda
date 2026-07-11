@@ -88,3 +88,7 @@ class ProfileStates(StatesGroup):
     orders = State()
     events = State()
     rating = State()
+
+
+class HeadlinerStates(StatesGroup):
+    welcome_message = State()

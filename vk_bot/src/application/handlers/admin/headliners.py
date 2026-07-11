@@ -1,11 +1,7 @@
-import asyncio
 import logging
 import re
-from urllib.parse import urlparse
-
 from vkbottle.bot import BotLabeler, Message
 from vkbottle.dispatch import BuiltinStateDispenser
-
 from src.application.filters import check_role
 from src.application.handlers.admin.post import parse_attachments
 from src.application.states import HeadlinerStates
@@ -17,65 +13,23 @@ logger = logging.getLogger(__name__)
 router = BotLabeler()
 
 
-def parse_vk_profile_reference(text: str) -> str:
-    value = (text or "").strip()
-    if not value:
-        return ""
-
-    value = value.split()[0].strip()
-    if value.startswith("@"):
-        value = value[1:]
-    if "://" not in value and value.startswith(("vk.com/", "m.vk.com/")):
-        value = "https://" + value
-    if value.startswith(("http://", "https://")):
-        parsed = urlparse(value)
-        if parsed.netloc.lower() not in ("vk.com", "m.vk.com", "www.vk.com"):
-            return ""
-        value = parsed.path.strip("/").split("/")[0]
-
-    value = value.strip("/")
-    if re.fullmatch(r"id\d+", value):
-        return value[2:]
-    if re.fullmatch(r"\d+", value):
-        return value
-    if re.fullmatch(r"[A-Za-z0-9_.]+", value):
-        return value
-    return ""
-
-
-async def resolve_vk_profile_id(message: Message) -> int | None:
-    user_ref = parse_vk_profile_reference(message.text or "")
-    if not user_ref:
-        return None
-    if user_ref.isdigit():
-        return int(user_ref)
-
-    users = await message.ctx_api.users.get(user_ids=user_ref)
-    if not users:
-        return None
-    return users[0].id
-
-
 def extract_photo_url(message: Message) -> str | None:
     if not message.attachments:
         return None
-
     for attachment in message.attachments:
-        att_type = attachment.type.value if hasattr(attachment.type, "value") else str(attachment.type)
+        att_type = attachment.type.value if hasattr(attachment.type, "value") else str(
+            attachment.type)
         if att_type != "photo":
             continue
-
         photo = attachment.photo
         sizes = getattr(photo, "sizes", None) or []
         if not sizes:
             return None
-
         best_size = max(
             sizes,
             key=lambda item: getattr(item, "width", 0) * getattr(item, "height", 0),
         )
         return getattr(best_size, "url", None)
-
     return None
 
 
@@ -83,7 +37,7 @@ def format_headliner(headliner: Headliner, followers_count: int | None = None) -
     followers = "" if followers_count is None else f"\nПоследователей: {followers_count}"
     return (
         f"ID: {headliner.id}\n"
-        f"VK ID: {headliner.user_id}\n"
+        f"ID пользователя: {headliner.user_id} ({headliner.user_source.value.upper()})\n"
         f"ФИО: {headliner.fio}\n"
         f"Должность: {headliner.position}\n"
         f"Тема: {headliner.topic}\n"
@@ -107,10 +61,10 @@ async def create_headliner_start(
 ):
     if not await require_staff_ca(message, user_service):
         return
-
     await state_dispenser.set(message.from_id, HeadlinerStates.CREATE_USER_ID)
     await message.answer(
-        "Отправьте ссылку на профиль VK пользователя, которого нужно сделать хедлайнером.\n"
+        "Введите ID и source пользователя, которого нужно сделать хедлайнером.\n"
+        "Формат: <id>_<source> (например, 123456_vk, 789012_tg, 345678_max).\n"
         "Пользователь должен быть уже зарегистрирован в боте."
     )
 
@@ -123,7 +77,6 @@ async def edit_headliner_start(
 ):
     if not await require_staff_ca(message, user_service):
         return
-
     await state_dispenser.set(message.from_id, HeadlinerStates.EDIT_ID)
     await message.answer("Введите ID хедлайнера, которого нужно отредактировать.")
 
@@ -147,11 +100,12 @@ async def edit_headliner_id(
         message.from_id,
         HeadlinerStates.CREATE_PHOTO,
         user_id=headliner.user_id,
+        user_source=headliner.user_source.value,
         edit_id=headliner.id,
     )
     await message.answer(
-        "Редактирование найдено.\n\n"
-        f"{format_headliner(headliner)}\n\n"
+        "Редактирование найдено.\n"
+        f"{format_headliner(headliner)}\n"
         "Отправьте новое фото хедлайнера одним сообщением."
     )
 
@@ -162,20 +116,31 @@ async def create_headliner_user_id(
         user_service: IUserService,
         state_dispenser: BuiltinStateDispenser,
 ):
+    text = message.text.strip()
+    match = re.match(r'^(\d+)_(vk|tg|max)$', text, re.IGNORECASE)
+    if not match:
+        return await message.answer(
+            "Неверный формат. Пожалуйста, отправьте ID и source в формате: 123456_vk, 789012_tg или 345678_max."
+        )
+
+    user_id = int(match.group(1))
+    source_str = match.group(2).lower()
+
     try:
-        user_id = await resolve_vk_profile_id(message)
-        if user_id is None:
-            return await message.answer(
-                "Не удалось определить профиль VK. Отправьте ссылку вида https://vk.com/id123 или https://vk.com/username."
-            )
-        await user_service.get_user(user_id, Sources.VK)
+        source = Sources(source_str)
+    except ValueError:
+        return await message.answer("Неверный source. Допустимые значения: vk, tg, max.")
+
+    try:
+        await user_service.get_user(user_id, source)
     except Exception:
-        return await message.answer("Пользователь с таким профилем VK не найден в базе бота.")
+        return await message.answer("Пользователь с таким ID и source не найден в базе бота.")
 
     await state_dispenser.set(
         message.from_id,
         HeadlinerStates.CREATE_PHOTO,
         user_id=user_id,
+        user_source=source.value,
     )
     await message.answer("Отправьте фото хедлайнера одним сообщением.")
 
@@ -236,8 +201,11 @@ async def create_headliner_finish(
         headliner_service: IHeadlinerService,
 ):
     state = await state_dispenser.get(message.from_id)
+    user_source = Sources(state.payload.get("user_source", "vk"))
+
     headliner = await headliner_service.create_headliner(
         user_id=state.payload["user_id"],
+        user_source=user_source,
         fio=state.payload["fio"],
         position=state.payload["position"],
         topic=state.payload["topic"],
@@ -245,11 +213,10 @@ async def create_headliner_finish(
         photo=state.payload.get("photo"),
     )
     await state_dispenser.delete(message.from_id)
-
     links = headliner_service.make_referral_links(headliner.id)
     await message.answer(
-        "Хедлайнер сохранен.\n\n"
-        f"{format_headliner(headliner)}\n\n"
+        "Хедлайнер сохранен.\n"
+        f"{format_headliner(headliner)}\n"
         "Реферальные ссылки:\n"
         f"VK: {links['VK']}\n"
         f"MAX: {links['MAX']}\n"
@@ -265,7 +232,6 @@ async def delete_headliner_start(
 ):
     if not await require_staff_ca(message, user_service):
         return
-
     await state_dispenser.set(message.from_id, HeadlinerStates.DELETE_ID)
     await message.answer("Введите ID хедлайнера, которого нужно удалить.")
 
@@ -287,7 +253,7 @@ async def delete_headliner_finish(
         return await message.answer("Хедлайнер с таким ID не найден.")
 
     await message.answer(
-        "Хедлайнер удален, пользователь возвращен к обычной роли.\n\n"
+        "Хедлайнер удален, пользователь возвращен к обычной роли.\n"
         f"{format_headliner(headliner)}"
     )
 
@@ -300,7 +266,6 @@ async def list_headliners(
 ):
     if not await require_staff_ca(message, user_service):
         return
-
     headliners = await headliner_service.get_all()
     if not headliners:
         return await message.answer("Хедлайнеров пока нет.")
@@ -309,9 +274,8 @@ async def list_headliners(
     for headliner in headliners[:30]:
         followers = await headliner_service.count_followers(headliner.id)
         parts.append(format_headliner(headliner, followers))
-
-    suffix = "" if len(headliners) <= 30 else f"\n\nПоказано 30 из {len(headliners)}."
-    await message.answer("Список хедлайнеров:\n\n" + "\n\n".join(parts) + suffix)
+    suffix = "" if len(headliners) <= 30 else f"\nПоказано 30 из {len(headliners)}."
+    await message.answer("Список хедлайнеров:\n" + "\n".join(parts) + suffix)
 
 
 @router.message(text=["Поиск хедлайнера"])
@@ -322,7 +286,6 @@ async def search_headliner_start(
 ):
     if not await require_staff_ca(message, user_service):
         return
-
     await state_dispenser.set(message.from_id, HeadlinerStates.SEARCH_SURNAME)
     await message.answer("Введите фамилию хедлайнера для поиска:")
 
@@ -352,9 +315,8 @@ async def search_headliner_by_surname(
     for headliner in found[:30]:
         followers = await headliner_service.count_followers(headliner.id)
         parts.append(format_headliner(headliner, followers))
-
-    suffix = "" if len(found) <= 30 else f"\n\nПоказано 30 из {len(found)}."
-    await message.answer("Найденные хедлайнеры:\n\n" + "\n\n".join(parts) + suffix)
+    suffix = "" if len(found) <= 30 else f"\nПоказано 30 из {len(found)}."
+    await message.answer("Найденные хедлайнеры:\n" + "\n".join(parts) + suffix)
 
 
 @router.message(text=["Рейтинг хедлайнеров"])
@@ -367,7 +329,6 @@ async def headliner_rating(
     if role not in [UserRole.STAFF_CA, UserRole.HEADLINER]:
         await message.answer("Недостаточно прав.")
         return
-
     rating = await headliner_service.get_rating()
     if not rating:
         return await message.answer("Хедлайнеров пока нет.")
@@ -375,29 +336,7 @@ async def headliner_rating(
     lines = []
     for index, (headliner, followers) in enumerate(rating[:30], start=1):
         lines.append(f"{index}. ID {headliner.id}: {headliner.fio} - {followers} последователей")
-
-    await message.answer("Рейтинг хедлайнеров:\n\n" + "\n".join(lines))
-
-
-@router.message(text=["Рассылка последователям"])
-async def headliner_mailing_start(
-        message: Message,
-        headliner_service: IHeadlinerService,
-        state_dispenser: BuiltinStateDispenser,
-):
-    headliner = await headliner_service.get_by_user(message.from_id, Sources.VK)
-    if headliner is None:
-        return await message.answer("Профиль хедлайнера не найден.")
-
-    await state_dispenser.set(
-        message.from_id,
-        HeadlinerStates.MAILING_MESSAGE,
-        headliner_id=headliner.id,
-    )
-    await message.answer(
-        "Отправьте сообщение для рассылки вашим последователям. "
-        "Можно приложить фото, видео или документ."
-    )
+    await message.answer("Рейтинг хедлайнеров:\n" + "\n".join(lines))
 
 
 @router.message(text=["Приветственное сообщение"])
@@ -409,11 +348,10 @@ async def headliner_welcome_start(
     headliner = await headliner_service.get_by_user(message.from_id, Sources.VK)
     if headliner is None:
         return await message.answer("Профиль хедлайнера не найден.")
-
     current = headliner.welcome_message or "не задано"
     await state_dispenser.set(message.from_id, HeadlinerStates.WELCOME_MESSAGE)
     await message.answer(
-        "Отправьте новое приветственное сообщение для людей, которые зарегистрируются по вашей ссылке.\n\n"
+        "Отправьте новое приветственное сообщение для людей, которые зарегистрируются по вашей ссылке.\n"
         f"Текущее сообщение: {current}"
     )
 
@@ -436,67 +374,4 @@ async def headliner_welcome_save(
     await state_dispenser.delete(message.from_id)
     if headliner is None:
         return await message.answer("Профиль хедлайнера не найден.")
-
     await message.answer("Приветственное сообщение сохранено.")
-
-
-@router.message(state=HeadlinerStates.MAILING_MESSAGE)
-async def headliner_mailing_confirm(message: Message, state_dispenser: BuiltinStateDispenser):
-    state = await state_dispenser.get(message.from_id)
-    attachments = parse_attachments(message)
-    await state_dispenser.set(
-        message.from_id,
-        HeadlinerStates.MAILING_CONFIRM,
-        **state.payload,
-        msg_text=message.text or "",
-        attachments=attachments,
-    )
-    att_count = len(attachments.split(",")) if attachments else 0
-    await message.answer(
-        "Подтвердите рассылку сообщением Да.\n\n"
-        f"Текст: {message.text or '(без текста)'}\n"
-        f"Вложений: {att_count}"
-    )
-
-
-@router.message(state=HeadlinerStates.MAILING_CONFIRM, text=["Да", "да"])
-async def headliner_mailing_send(
-        message: Message,
-        headliner_service: IHeadlinerService,
-        state_dispenser: BuiltinStateDispenser,
-):
-    state = await state_dispenser.get(message.from_id)
-    headliner_id = state.payload["headliner_id"]
-    followers = await headliner_service.get_followers(headliner_id)
-
-    msg_text = state.payload.get("msg_text", "")
-    attachments = state.payload.get("attachments")
-    if not msg_text and not attachments:
-        await state_dispenser.delete(message.from_id)
-        return await message.answer("Пустое сообщение не отправлено.")
-
-    await message.answer(f"Начинаю рассылку на {len(followers)} последователей...")
-    count = 0
-    for follower in followers:
-        if follower.follower_source != Sources.VK:
-            continue
-        try:
-            kwargs = {"peer_id": follower.follower_id, "random_id": 0}
-            if msg_text:
-                kwargs["message"] = msg_text
-            if attachments:
-                kwargs["attachment"] = attachments
-            await message.ctx_api.messages.send(**kwargs)
-            count += 1
-            await asyncio.sleep(0.05)
-        except Exception as e:
-            logger.debug(f"Failed to send headliner mailing to {follower.follower_id}: {e}")
-
-    await state_dispenser.delete(message.from_id)
-    await message.answer(f"Рассылка завершена. Отправлено: {count} из {len(followers)}")
-
-
-@router.message(state=HeadlinerStates.MAILING_CONFIRM)
-async def headliner_mailing_cancel(message: Message, state_dispenser: BuiltinStateDispenser):
-    await state_dispenser.delete(message.from_id)
-    await message.answer("Рассылка отменена.")

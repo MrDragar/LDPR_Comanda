@@ -24,6 +24,7 @@ from .user.learning import router as learning_router
 from .user.tasks import router as user_task_router
 from .user.closed_events import router as user_closed_events_router
 from .user.shop import router as user_shop_router
+from .user.headliners import router as headliners_router
 from .start import router as start_router, start_command_router
 
 router = Router(name=__name__)
@@ -53,4 +54,5 @@ router.include_router(learning_router)
 router.include_router(user_task_router)
 router.include_router(user_closed_events_router)
 router.include_router(user_shop_router)
+router.include_router(headliners_router)
 router.include_router(start_router)

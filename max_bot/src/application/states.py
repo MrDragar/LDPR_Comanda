@@ -86,3 +86,7 @@ class ProfileStates(StatesGroup):
 class PostsStates(StatesGroup):
     get_message = State()
     confirm = State()
+
+
+class HeadlinerStates(StatesGroup):
+    welcome_message = State()

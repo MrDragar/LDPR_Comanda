@@ -3,8 +3,19 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from src.domain.entities.user import UserRole
 
 
+def get_headliner_menu_keyboard() -> ReplyKeyboardMarkup:
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="Личный кабинет")
+    builder.button(text="Приветственное сообщение")
+    builder.button(text="Рейтинг хедлайнеров")
+    builder.adjust(1)
+    return builder.as_markup(resize_keyboard=True)
+
+
 def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
     """Генерирует главное меню в зависимости от роли пользователя (1 в 1 как в ВК)."""
+    if role == UserRole.HEADLINER:
+        return get_headliner_menu_keyboard()
     builder = ReplyKeyboardBuilder()
 
     # Базовые пользовательские кнопки
