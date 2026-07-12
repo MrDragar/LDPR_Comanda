@@ -4,7 +4,7 @@ from maxapi.types import MessageCreated, MessageButton, InputMedia
 from maxapi.context import MemoryContext
 from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
 from src.application.states import LearningStates
-from src.domain.entities.user import Sources, UserGrade
+from src.domain.entities.user import Sources
 from src.services.interfaces import IUserService, ILearningService
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 
@@ -45,12 +45,6 @@ def _format_question_text(q_text: str, options: list[str]) -> str:
 @router.message_created(F.message.body.text == "Пройти обучение ещё раз")
 async def open_learning(event: MessageCreated, user_service: IUserService):
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
-    if u.grade not in (UserGrade.BIG_TEAM_MEMBER, UserGrade.AGITATOR, UserGrade.RESERVE):
-        return await event.message.answer(
-            "Для разблокировки этого раздела необходим ранг \"Участник большой команды\". "
-            "Для его достижения выполните 3 онлайн задания.",
-            attachments=[get_role_menu_keyboard(u.role).as_markup()]
-        )
 
     builder = InlineKeyboardBuilder()
     builder.row(MessageButton(text="Начать тест"))
@@ -75,13 +69,6 @@ async def open_learning(event: MessageCreated, user_service: IUserService):
 @router.message_created(F.message.body.text == "Начать тест")
 async def start_quiz(event: MessageCreated, learning_service: ILearningService,
                      context: MemoryContext, user_service: IUserService):
-    u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
-    if u.grade not in (UserGrade.BIG_TEAM_MEMBER, UserGrade.AGITATOR, UserGrade.RESERVE):
-        return await event.message.answer(
-            "Для разблокировки этого раздела необходим ранг \"Участник большой команды\". "
-            "Для его достижения выполните 3 онлайн задания.",
-            attachments=[get_role_menu_keyboard(u.role).as_markup()]
-        )
     try:
         q_text, options, _ = await learning_service.get_question(0)
         full_text = _format_question_text(f"Вопрос 1/10\n{q_text}", options)

@@ -20,11 +20,11 @@ def get_role_menu_keyboard(role: UserRole | None) -> ReplyKeyboardMarkup:
 
     # Базовые пользовательские кнопки
     if role == UserRole.USER:
-        builder.button(text="Выполнить действие")
+        builder.button(text="Поручения штаба")
         builder.button(text="Личный кабинет")
         builder.button(text="Реферальная ссылка")
         builder.button(text="Обучение")
-        builder.button(text="Мои действия")
+        builder.button(text="Действующие поручения")
         # builder.button(text="Магазин")
         builder.button(text="Закрытые мероприятия")
         builder.adjust(1, 2, 2, 2)

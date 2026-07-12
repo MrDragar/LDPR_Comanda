@@ -12,7 +12,7 @@ from src.application.keyboards.task_keyboard import (
 )
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.domain.exceptions import DomainError
-from src.domain.entities.user import Sources, UserGrade
+from src.domain.entities.user import Sources
 from src.domain.entities.task import TaskStatus
 from src.services.interfaces import IOnlineTaskService, IOfflineTaskService, IUserService, \
     INotificationService
@@ -31,7 +31,7 @@ async def _get_task_filter(user_service: IUserService, user_id: int) -> bool | N
 
 
 # ==================== ВЫБОР ТИПА ЗАДАНИЯ ====================
-@router.message_created(F.message.body.text == "Выполнить действие")
+@router.message_created(F.message.body.text == "Поручения штаба")
 async def select_task_type(event: MessageCreated, context: MemoryContext,
                            user_service: IUserService):
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
@@ -47,7 +47,7 @@ async def select_task_type(event: MessageCreated, context: MemoryContext,
                                    attachments=[builder.as_markup()])
         return
 
-    await event.message.answer("Выберите тип действия:",
+    await event.message.answer("Выберите тип поручения:",
                                attachments=[get_task_type_keyboard().as_markup()])
     await context.set_state(UserTaskStates.SELECT_TYPE)
 
@@ -61,7 +61,7 @@ async def set_member_callback(event: MessageCallback, context: MemoryContext,
     await user_service.update_user_profile(event.from_user.user_id, Sources.MAX,
                                            is_member=is_member)
 
-    await event.message.answer("Выберите тип действия:",
+    await event.message.answer("Выберите тип поручения:",
                                attachments=[get_task_type_keyboard().as_markup()])
     await context.set_state(UserTaskStates.SELECT_TYPE)
 
@@ -75,12 +75,12 @@ async def online_list(event: MessageCallback, context: MemoryContext,
                                                                 Sources.MAX, page=1, is_member=is_member_filter)
     if not tasks:
         role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
-        await event.message.answer("Нет доступных онлайн действий. Загляните к нам снова — скоро "
+        await event.message.answer("Нет доступных онлайн поручений. Загляните к нам снова — скоро "
                                    "будут новые.",
                                    attachments=[get_role_menu_keyboard(role).as_markup()])
         await context.clear()
         return
-    await event.message.answer(f"Доступные действия (стр. 1/{total_pages}):",
+    await event.message.answer(f"Доступные поручения (стр. 1/{total_pages}):",
                                attachments=[get_online_tasks_keyboard(tasks, 1, total_pages).as_markup()])
     await context.update_data(page=1, total_pages=total_pages)
     await context.set_state(UserTaskStates.ONLINE_LIST)
@@ -97,11 +97,11 @@ async def paginate_online(event: MessageCallback, context: MemoryContext,
                                                                 Sources.MAX, page=page, is_member=is_member_filter)
     if not tasks:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                          message="На этой странице действий нет.", random_id=0)
+                                          message="На этой странице поручений нет.", random_id=0)
         return await event.ctx_api.messages.send_message_event_answer(
             event_id=event.object.event_id, user_id=event.object.user_id,
             peer_id=event.object.peer_id)
-    await event.message.answer(f"Доступные действия (стр. {page}/{total_pages}):",
+    await event.message.answer(f"Доступные поручения (стр. {page}/{total_pages}):",
                                attachments=[get_online_tasks_keyboard(tasks, page, total_pages).as_markup()])
     await context.update_data(page=page, total_pages=total_pages)
 
@@ -113,15 +113,15 @@ async def view_online(event: MessageCallback, context: MemoryContext,
     tid = int(event.callback.payload.split("_")[-1])
     task = await online_task_service.get_task(tid)
     if not task:
-        await event.message.answer("Ошибка: действий не найдено")
+        await event.message.answer("Ошибка: поручений не найдено")
         return
 
     text = f"📋 {task.title}\n"
     text += f"📝 {task.description}\n"
     text += f"📌 Тип: {task.type.value}\n"
-    text += f"🏆 Вознаграждение: {task.reward} очков\n"
+    text += f"🏆 Вклад: {task.reward} очков\n"
     if task.url:
-        text += f"🔗 Ссылка на действие: {task.url}\n"
+        text += f"🔗 Ссылка на поручение: {task.url}\n"
 
     await event.message.answer(text, attachments=[get_online_task_view_keyboard(tid).as_markup()])
     await context.update_data(tid=tid)
@@ -135,7 +135,7 @@ async def check_online(event: MessageCallback, context: MemoryContext):
     tid = int(event.callback.payload.split("_")[-1])
     await context.update_data(tid=tid)
     await event.message.answer("Отправьте текст, ссылку или скриншот, подтверждающий выполнение "
-                               "действия:")
+                               "поручения:")
     await context.set_state(UserTaskStates.TG_ONLINE_AWAIT_PROOF)
 
 
@@ -205,10 +205,10 @@ async def confirm_submit(event: MessageCallback, context: MemoryContext,
         # 2. Отправляем информацию о задании с кнопками "ПОД НИМ" (следующим сообщением)
         info_text = (
             f"#in_progress\n"
-            f"📋 Онлайн действие #{task.id} на проверку\n"
+            f"📋 Онлайн поручение #{task.id} на проверку\n"
             f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, MAX)\n"
             f"📌 Тип: {task.type.value}\n"
-            f"🏆 Вознаграждение: {task.reward} очков\n"
+            f"🏆 Вклад: {task.reward} очков\n"
         )
         if task.url:
             info_text += f"🔗 Ссылка: {task.url}\n"
@@ -226,7 +226,7 @@ async def confirm_submit(event: MessageCallback, context: MemoryContext,
 
         role = await user_service.get_user_role(uid, source)
         await event.message.answer(
-            "✅ Действие отправлено на проверку. Ожидайте решения администратора.",
+            "✅ Поручение отправлено на проверку. Ожидайте решения администратора.",
             attachments=[get_role_menu_keyboard(role).as_markup()])
         await context.clear()
     except Exception as e:
@@ -245,7 +245,7 @@ async def back_online_list(event: MessageCallback, context: MemoryContext,
         tasks, total_pages = await online_task_service.search_tasks(event.from_user.user_id,
                                                                     Sources.MAX, page=1, is_member=is_member_filter)
         page = 1
-    await event.message.answer(f"Доступные действия (стр. {page}/{total_pages}):",
+    await event.message.answer(f"Доступные поручения (стр. {page}/{total_pages}):",
                                attachments=[get_online_tasks_keyboard(tasks, page, total_pages).as_markup()])
     await context.update_data(page=page, total_pages=total_pages)
     await context.set_state(UserTaskStates.ONLINE_LIST)
@@ -257,23 +257,18 @@ async def offline_list(event: MessageCallback, context: MemoryContext,
                        offline_task_service: IOfflineTaskService, user_service: IUserService):
     await event.answer()
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
-    if u.grade not in (UserGrade.AGITATOR, UserGrade.RESERVE):
-        await event.message.answer("Этот тип действий открывается при достижении ранга 'Агитатор'.",
-                                   attachments=[get_role_menu_keyboard(u.role).as_markup()])
-        await context.clear()
-        return
 
     is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
     all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1,
                                                                      is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
     if not tasks:
-        await event.message.answer("Нет действий в вашем регионе. Загляните к нам снова — скоро "
+        await event.message.answer("Нет поручений в вашем регионе. Загляните к нам снова — скоро "
                                    "будут новые.",
                                    attachments=[get_role_menu_keyboard(u.role).as_markup()])
         await context.clear()
         return
-    await event.message.answer(f"Действия в вашем регионе (стр. 1/{total_pages}):",
+    await event.message.answer(f"Поручения в вашем регионе (стр. 1/{total_pages}):",
                                attachments=[
                                    get_offline_tasks_keyboard(tasks, 1, total_pages).as_markup()])
     await context.update_data(page=1, total_pages=total_pages)
@@ -290,7 +285,7 @@ async def paginate_offline(event: MessageCallback, context: MemoryContext,
     is_member_filter = await _get_task_filter(user_service, event.from_user.user_id)
     all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=page, is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
-    await event.message.answer(f"Действия в вашем регионе (стр. {page}/{total_pages}):",
+    await event.message.answer(f"Поручения в вашем регионе (стр. {page}/{total_pages}):",
                                attachments=[get_offline_tasks_keyboard(tasks, page, total_pages).as_markup()])
     await context.update_data(page=page, total_pages=total_pages)
 
@@ -328,10 +323,10 @@ async def accept_offline(event: MessageCallback, context: MemoryContext,
         await offline_task_service.accept_offline_task(event.from_user.user_id, Sources.MAX, tid)
         role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
         await event.message.answer(
-            "✅ Действие принято. Свяжитесь с местным отделением по контактам в описании.",
+            "✅ Поручение принято. Свяжитесь с местным отделением по контактам в описании.",
             attachments=[get_role_menu_keyboard(role).as_markup()])
         await notification_service.notify_user(event.from_user.user_id, Sources.MAX,
-                                               f"Вы взяли офлайн действие #{tid}. Ожидает "
+                                               f"Вы взяли офлайн поручение #{tid}. Ожидает "
                                                f"проверки.")
         await context.clear()
     except DomainError as e:
@@ -351,23 +346,23 @@ async def back_offline_list(event: MessageCallback, context: MemoryContext,
         all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1, is_member=is_member_filter)
         tasks = [t for t in all_tasks if t.region == u.region]
         page = 1
-    await event.message.answer(f"Действия в регионе (стр. {page}/{total_pages}):",
+    await event.message.answer(f"Поручения в регионе (стр. {page}/{total_pages}):",
                                attachments=[get_offline_tasks_keyboard(tasks, page, total_pages).as_markup()])
     await context.update_data(page=page, total_pages=total_pages)
     await context.set_state(UserTaskStates.OFFLINE_LIST)
 
 
 # ==================== МОИ ЗАДАНИЯ ====================
-@router.message_created(F.message.body.text == "Мои действия")
+@router.message_created(F.message.body.text == "Действующие поручения")
 async def my_tasks(event: MessageCreated, context: MemoryContext,
                    offline_task_service: IOfflineTaskService, user_service: IUserService):
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
     tasks, _ = await offline_task_service.get_user_tasks(u.id, u.source, page=1)
     if not tasks:
-        await event.message.answer("У вас нет активных действий.",
+        await event.message.answer("У вас нет активных поручений.",
                                    attachments=[get_role_menu_keyboard(u.role).as_markup()])
         return
-    await event.message.answer("Ваши действия:",
+    await event.message.answer("Ваши поручения:",
                                attachments=[get_my_tasks_keyboard(tasks).as_markup()])
     await context.set_state(UserTaskStates.MY_TASKS)
 
@@ -379,7 +374,7 @@ async def view_my_task(event: MessageCallback, context: MemoryContext,
     tid = int(event.callback.payload.split("_")[-1])
     task = await offline_task_service.get_task(tid)
     if not task:
-        await event.message.answer("Ошибка: действий не найдено")
+        await event.message.answer("Ошибка: поручений не найдено")
         return
 
     user_tasks, _ = await offline_task_service.get_user_tasks(event.from_user.user_id, Sources.MAX,
@@ -406,9 +401,9 @@ async def cancel_my_task(event: MessageCallback, context: MemoryContext,
     try:
         await offline_task_service.cancel_task(event.from_user.user_id, Sources.MAX, tid)
         await notification_service.notify_user(event.from_user.user_id, Sources.MAX,
-                                               f"Действие #{tid} отменено.")
+                                               f"Поручение #{tid} отменено.")
         role = await user_service.get_user_role(event.from_user.user_id, Sources.MAX)
-        await event.message.answer(f"✅ Действие #{tid} успешно отменено.",
+        await event.message.answer(f"✅ Поручение #{tid} успешно отменено.",
                                    attachments=[get_role_menu_keyboard(role).as_markup()])
         await context.clear()
     except Exception as e:
@@ -422,11 +417,11 @@ async def back_to_my_tasks(event: MessageCallback, context: MemoryContext,
     u = await user_service.get_user(event.from_user.user_id, Sources.MAX)
     tasks, _ = await offline_task_service.get_user_tasks(u.id, u.source, page=1)
     if not tasks:
-        await event.message.answer("У вас нет активных действий.",
+        await event.message.answer("У вас нет активных поручений.",
                                    attachments=[get_role_menu_keyboard(u.role).as_markup()])
         await context.clear()
         return
-    await event.message.answer("Ваши действия:",
+    await event.message.answer("Ваши поручения:",
                                attachments=[get_my_tasks_keyboard(tasks).as_markup()])
 
 

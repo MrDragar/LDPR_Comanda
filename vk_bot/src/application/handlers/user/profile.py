@@ -56,10 +56,10 @@ async def profile(message: Message, user_service: IUserService, referral_service
         is_passed = await learning_service.is_learning_passed(u.id, u.source)
 
         text = (
-            f"Ваш ранг - {u.grade.value}\n"
+            f"Ваше звание - {u.grade.value}\n"
             f"Ваша роль - {u.role.value}\n"
             f"Ваш регион - {u.region}\n"
-            f"Количество баллов - {balance}\n"
+            f"Ваш вклад - {balance}\n"
             f"Количество приглашённых людей - {refs}\n"
             f"Количество выполненных офлайн заданий - {off_count}\n"
             f"Количество выполненных онлайн заданий - {on_count}\n"

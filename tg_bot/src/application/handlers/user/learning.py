@@ -38,12 +38,6 @@ def _format_question_text(q_text: str, options: list[str]) -> str:
 @router.message(F.text == "Пройти обучение ещё раз")
 async def open_learning(message: types.Message, user_service: IUserService):
     u = await user_service.get_user(message.from_user.id, Sources.TG)
-    if u.grade not in (UserGrade.BIG_TEAM_MEMBER, UserGrade.AGITATOR, UserGrade.RESERVE):
-        return await message.answer(
-            "Для разблокировки этого раздела необходим ранг \"Участник большой команды\". "
-            "Для его достижения выполните 3 онлайн задания.",
-            reply_markup=get_role_menu_keyboard(u.role)
-        )
 
     builder = ReplyKeyboardBuilder()
     builder.button(text="Начать тест")
@@ -113,9 +107,6 @@ async def handle_quiz_answer(message: types.Message, learning_service: ILearning
         if next_q >= 10:
             result = await learning_service.finish_quiz(message.from_user.id, Sources.TG, score)
             await state.clear()
-
-            # Обновляем роль пользователя, так как она могла измениться внутри finish_quiz
-            role = await user_service.get_user_role(message.from_user.id, Sources.TG)
 
             builder = ReplyKeyboardBuilder()
             if result["status"] == "fail":

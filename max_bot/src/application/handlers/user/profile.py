@@ -28,9 +28,9 @@ async def profile(event: MessageCreated, context: MemoryContext, user_service: I
         is_passed = await learning_service.is_learning_passed(u.id, u.source)
 
         text = (
-            f"👤 Ваш ранг - {u.grade.value}\n"
+            f"👤 Ваше звание - {u.grade.value}\n"
             f"🌍 Ваш регион - {u.region}\n"
-            f"💰 Количество баллов - {balance}\n"
+            f"💰 Ваш вклад - {balance}\n"
             f"👥 Количество приглашённых людей - {refs}\n"
             f"🏢 Количество выполненных офлайн заданий - {off_count}\n"
             f"💻 Количество выполненных онлайн заданий - {on_count}\n"
@@ -164,7 +164,7 @@ async def show_rating(event: MessageCreated, context: MemoryContext, user_servic
     global_top = await user_service.get_global_top(10)
     local_top = await user_service.get_local_top(u.region, 10)
 
-    text = f"🏆 Ваш рейтинг: {user_score} баллов\n"
+    text = f"🏆 Ваш рейтинг: {user_score}\n"
     text += "🌍 Глобальный рейтинг (Топ-10):\n"
     if not global_top:
         text += "Пока нет данных.\n"

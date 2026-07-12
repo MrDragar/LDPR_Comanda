@@ -1,6 +1,6 @@
 import logging
 from datetime import date, timedelta
-from src.domain.entities.user import Sources, UserRole, UserGrade
+from src.domain.entities.user import Sources
 from src.domain.entities.task import OfflineTask, AcceptedOfflineTask, TaskStatus
 from src.domain.interfaces import IUnitOfWork, IOfflineTaskRepository, IAcceptedTaskRepository, \
     IUserRepository
@@ -41,7 +41,7 @@ class OfflineTaskService(IOfflineTaskService):
                          new_status: TaskStatus) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Оффлайн задача не найдена")
+            if not task: raise DomainError("Оффлайн порчение не найдено")
 
             if new_status not in [TaskStatus.ACCEPTED, TaskStatus.DECLINED]:
                 raise DomainError("Неподдерживаемый статус для проверки")
@@ -52,21 +52,9 @@ class OfflineTaskService(IOfflineTaskService):
 
             if new_status == TaskStatus.ACCEPTED:
                 await self.__balance_svc.add_balance(user_id, user_source, task.reward,
-                                                     f"Подтверждение оффлайн-задачи #{task_id}")
+                                                     f"Подтверждение офлайн-поручения #{task_id}")
                 logger.info(f"Offline task {task_id} status set to ACCEPTED for user {user_id}")
-                user = await self.__user_svc.get_user(user_id, user_source)
-                if user.grade == UserGrade.AGITATOR:
-                    # Считаем принятые оффлайн задачи (лимит 200 хватит для проверки)
-                    all_accepted, _ = await self.__accepted_repo.get_user_accepted_offline_tasks(
-                        user_id, user_source, skip=0, limit=1000)
-                    accepted_count = sum(1 for t in all_accepted if t.status == TaskStatus.ACCEPTED)
 
-                    if accepted_count >= 40:
-                        await self.__user_svc.update_user_grade(user_id, user_source,
-                                                                UserGrade.RESERVE)
-                        msg = ("Поздравляем! Вы получили новый ранг 'Кадровый резерв ЛДПР'. "
-                               "У вас открылся новый раздел: 'Закрытые мероприятия'.")
-                        await self.__notification_svc.notify_user(user_id, user_source, msg)
             elif new_status == TaskStatus.DECLINED:
                 logger.info(f"Offline task {task_id} status set to DECLINED for user {user_id}")
 
@@ -131,18 +119,19 @@ class OfflineTaskService(IOfflineTaskService):
             # 1. Проверка существования задачи
             task = await self.__task_repo.get_task_by_id(task_id)
             if not task:
-                raise DomainError("Оффлайн задача не найдена")
+                raise DomainError("Оффлайн поручение не найдено")
 
             # 2. Проверка на дубликат (уже принята/в процессе)
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
-                raise DomainError("Вы уже приняли эту задачу или она находится в процессе выполнения")
+                raise DomainError("Вы уже приняли это поручение или оно находится в процессе "
+                                  "выполнения")
 
             # 3. Проверка лимита активных задач (максимум 2)
             # Получаем все задачи пользователя и считаем только IN_PROGRESS
             all_user_tasks, _ = await self.__accepted_repo.get_user_accepted_offline_tasks(user_id, user_source, skip=0, limit=100)
             active_count = sum(1 for t in all_user_tasks if t.status == TaskStatus.IN_PROGRESS)
             if active_count >= 2:
-                raise DomainError("Нельзя взять более 2 активных офлайн задач одновременно")
+                raise DomainError("Нельзя взять более 2 активных офлайн поручений одновременно")
 
             # 4. Создание записи со статусом IN_PROGRESS
             accepted = AcceptedOfflineTask(

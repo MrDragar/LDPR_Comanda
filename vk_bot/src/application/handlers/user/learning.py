@@ -1,11 +1,11 @@
 import logging
 from vkbottle.bot import BotLabeler, Message
-from vkbottle import Keyboard, Text, PhotoMessageUploader, Bot, DocMessagesUploader
+from vkbottle import Keyboard, Text, DocMessagesUploader
 from vkbottle.dispatch import BuiltinStateDispenser
 from src.application.states import LearningStates
 from src.application.utils import handle_cancel
 from src.domain.entities.user import Sources, UserGrade
-from src.services.interfaces import IUserService, ILearningService, INotificationService
+from src.services.interfaces import IUserService, ILearningService
 
 logger = logging.getLogger(__name__)
 router = BotLabeler()
@@ -38,13 +38,6 @@ def _format_question_text(q_text: str, options: list[str]) -> str:
 async def open_learning(message: Message, user_service: IUserService,
                         doc_uploader: DocMessagesUploader) -> None:
     u = await user_service.get_user(message.from_id, Sources.VK)
-    if u.grade not in (UserGrade.BIG_TEAM_MEMBER, UserGrade.AGITATOR, UserGrade.RESERVE):
-        await message.answer(
-            "Для разблокировки этого раздела необходим ранг \"Участник большой команды\". "
-            "Для его достижения выполните 3 онлайн задания."
-        )
-        kb = Keyboard(one_time=True, inline=False).add(Text("На главную"))
-        return await message.answer("Меню", keyboard=kb.get_json())
     try:
         doc = await doc_uploader.upload('docs/Презентация_обучение агитаторов.pdf',
                                         peer_id=message.peer_id)

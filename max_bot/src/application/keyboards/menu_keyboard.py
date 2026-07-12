@@ -16,8 +16,8 @@ def get_role_menu_keyboard(role: UserRole | None) -> InlineKeyboardBuilder:
         return get_headliner_menu_keyboard()
     builder = InlineKeyboardBuilder()
     if role == UserRole.USER:
-        builder.row(MessageButton(text="Выполнить действие"))
-        builder.row(MessageButton(text="Мои действия"))
+        builder.row(MessageButton(text="Поручения штаба"))
+        builder.row(MessageButton(text="Действующие поручения"))
         builder.row(MessageButton(text="Личный кабинет"))
         builder.row(MessageButton(text="Обучение"), MessageButton(text="Реферальная ссылка"))
         # builder.row(MessageButton(text="Магазин"))

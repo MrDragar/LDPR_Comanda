@@ -41,20 +41,21 @@ class OnlineTaskService(IOnlineTaskService):
     async def check_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Задача не найдена")
+            if not task: raise DomainError("Поручение не найдено")
 
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
-                raise DomainError("Вы уже взяли эту задачу или она в процессе")
+                raise DomainError("Вы уже взяли это поручение или оно в процессе")
             try:
                 group_id, post_id = self.__task_repo._parse_vk_url(task.url)
             except ValueError as e:
-                raise DomainError(f"Ошибка парсинга ссылки задания: {e}")
+                raise DomainError(f"Ошибка парсинга ссылки поручения: {e}")
 
             is_completed = await self.__vk_verify_repo.verify_task(
                 task.type, user_id, group_id, post_id
             )
             if not is_completed:
-                raise TaskNotCompletedError("Задание не выполнено. Пожалуйста, выполните действие в ВК и попробуйте снова.")
+                raise TaskNotCompletedError("Поручение не выполнено. Пожалуйста, выполните "
+                                            "поручение в ВК и попробуйте снова.")
 
             accepted = AcceptedOnlineTask(user_id=user_id, user_source=user_source, task=task,
                                           status=TaskStatus.ACCEPTED)
@@ -62,22 +63,8 @@ class OnlineTaskService(IOnlineTaskService):
 
             # Начисляем награду
             await self.__balance_svc.add_balance(user_id, user_source, task.reward,
-                                                 f"Выполнение онлайн-задачи #{task_id}")
+                                                 f"Выполнение онлайн-поручения #{task_id}")
             logger.info(f"Task {task_id} checked and accepted for user {user_id}")
-            
-            # --- Логика повышения грейда ---
-            user = await self.__user_svc.get_user(user_id, user_source)
-            if user.grade == UserGrade.SYMPATHIZER:
-                completed_online = await self.__user_svc.get_completed_tasks_count(user_id, user_source, is_online=True)
-                if completed_online >= 3:
-                    await self.__user_svc.update_user_grade(user_id, user_source, UserGrade.BIG_TEAM_MEMBER)
-                    upgrade_msg = (
-                        "Поздравляем, вы получили новый уровень \"Участник большой команды\". "
-                        "Теперь вы можете вступить в нашу закрытую группу.\n"
-                        "Вам открылся отдел \"Обучение\". Чтобы перейти на следующий уровень, "
-                        "вам необходимо пройти наш курс"
-                    )
-                    await self.__notification_svc.notify_user(user_id, user.source, upgrade_msg)
 
     async def get_task(self, task_id: int) -> OnlineTask | None:
         async with self.__uow.atomic():
@@ -98,9 +85,9 @@ class OnlineTaskService(IOnlineTaskService):
     async def submit_tg_online_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Задача не найдена")
+            if not task: raise DomainError("Поручение не найдено")
             if await self.__task_repo.is_task_accepted_by_user(user_id, user_source, task_id):
-                raise DomainError("Вы уже взяли эту задачу или она в процессе")
+                raise DomainError("Вы уже взяли это поручение или оно в процессе")
 
             accepted = AcceptedOnlineTask(
                 user_id=user_id, user_source=user_source, task=task, status=TaskStatus.IN_PROGRESS
@@ -111,23 +98,11 @@ class OnlineTaskService(IOnlineTaskService):
     async def accept_tg_online_task(self, user_id: int, user_source: Sources, task_id: int) -> None:
         async with self.__uow.atomic():
             task = await self.__task_repo.get_task_by_id(task_id)
-            if not task: raise DomainError("Задача не найдена")
+            if not task: raise DomainError("Поручение не найдено")
             await self.__accepted_repo.update_online_task_status(user_id, user_source, task_id,
                                                                  TaskStatus.ACCEPTED)
             await self.__balance_svc.add_balance(user_id, user_source, task.reward,
-                                                 f"Выполнение онлайн-задачи #{task_id} (ТГ)")
-
-            # Логика повышения грейда (аналогично ВК)
-            user = await self.__user_svc.get_user(user_id, user_source)
-            if user.grade == UserGrade.SYMPATHIZER:
-                completed_online = await self.__user_svc.get_completed_tasks_count(user_id,
-                                                                                   user_source,
-                                                                                   is_online=True)
-                if completed_online >= 3:
-                    await self.__user_svc.update_user_grade(user_id, user_source,
-                                                            UserGrade.BIG_TEAM_MEMBER)
-                    upgrade_msg = "Поздравляем, вы получили новый уровень \"Участник большой команды\". Вам открылся отдел \"Обучение\"."
-                    await self.__notification_svc.notify_user(user_id, user_source, upgrade_msg)
+                                                 f"Выполнение онлайн-поручения #{task_id} (ТГ)")
 
     async def decline_tg_online_task(self, user_id: int, user_source: Sources,
                                      task_id: int) -> None:

@@ -1,7 +1,7 @@
 import json
 import logging
 from vkbottle.bot import BotLabeler, Message
-from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes, Text
+from vkbottle import Keyboard, Callback, GroupEventType, GroupTypes
 from vkbottle.dispatch import BuiltinStateDispenser
 
 from src.application.states import UserTaskStates
@@ -10,7 +10,7 @@ from src.domain.entities.task import TaskType
 from src.domain.exceptions import DomainError
 from src.services.interfaces import IOnlineTaskService, IOfflineTaskService, IUserService, \
     INotificationService
-from src.domain.entities.user import Sources, UserGrade
+from src.domain.entities.user import Sources
 from src.application.filters import CMDRule
 
 logger = logging.getLogger(__name__)
@@ -46,11 +46,11 @@ async def online_list(message: Message, online_task_service: IOnlineTaskService,
     is_member_filter = await _get_task_filter(user_service, message.from_id)
     tasks, total_pages = await online_task_service.search_tasks(message.from_id, Sources.VK, page=1, is_member=is_member_filter)
     if not tasks:
-        return await message.answer("Нет доступных онлайн действий. Загляните к нам снова — скоро "
+        return await message.answer("Нет доступных онлайн поручений. Загляните к нам снова — скоро "
                                     "будут новые.")
     kb = _build_task_keyboard(tasks, 1, total_pages, "online")
     await state_dispenser.set(message.from_id, UserTaskStates.ONLINE_LIST, page=1, total_pages=total_pages)
-    await message.answer(f"Доступные действия (стр. 1/{total_pages}):", keyboard=kb)
+    await message.answer(f"Доступные поручения (стр. 1/{total_pages}):", keyboard=kb)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_online"))
@@ -61,11 +61,11 @@ async def next_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     is_member_filter = await _get_task_filter(user_service, event.object.user_id)
     tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK, page=new_page, is_member=is_member_filter)
     if not tasks:
-        await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="На этой странице действий нет.", random_id=0)
+        await event.ctx_api.messages.send(peer_id=event.object.peer_id, message="На этой странице поручений нет.", random_id=0)
         return await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
     kb = _build_task_keyboard(tasks, new_page, total_pages, "online")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=new_page, total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные действия ("
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные поручения ("
                                                                             f"стр. {new_page}/{total_pages}):", keyboard=kb, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
@@ -79,7 +79,7 @@ async def prev_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     tasks, total_pages = await online_task_service.search_tasks(event.object.user_id, Sources.VK, page=new_page, is_member=is_member_filter)
     kb = _build_task_keyboard(tasks, new_page, total_pages, "online")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=new_page, total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные действия ("
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные поручения ("
                                                                             f"стр. {new_page}/{total_pages}):", keyboard=kb, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 
@@ -89,25 +89,18 @@ async def prev_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
 async def offline_list(message: Message, offline_task_service: IOfflineTaskService,
                        user_service: IUserService, state_dispenser: BuiltinStateDispenser):
     u = await user_service.get_user(message.from_id, Sources.VK)
-    if u.grade not in (UserGrade.AGITATOR, UserGrade.RESERVE):
-        kb = Keyboard(one_time=True).add(Text("На главную"))
-        return await message.answer(
-            "Этот тип действий открывается при достижении ранга 'Агитатор'. Для его прохождения "
-            "необходимо пройти обучене",
-            keyboard=kb.get_json())
-
     is_member_filter = await _get_task_filter(user_service, message.from_id)
     all_tasks, total_pages = await offline_task_service.search_tasks(u.id, u.source, page=1,
                                                                      is_member=is_member_filter)
     tasks = [t for t in all_tasks if t.region == u.region]
 
     if not tasks:
-        return await message.answer("Нет действий в вашем регионе. Загляните к нам снова — скоро "
+        return await message.answer("Нет поручений в вашем регионе. Загляните к нам снова — скоро "
                                     "будут новые.")
     kb = _build_task_keyboard(tasks, 1, total_pages, "offline")
     await state_dispenser.set(message.from_id, UserTaskStates.OFFLINE_LIST, page=1,
                               total_pages=total_pages)
-    await message.answer(f"Действий в вашем регионе (стр. 1/{total_pages}):", keyboard=kb)
+    await message.answer(f"Поручения в вашем регионе (стр. 1/{total_pages}):", keyboard=kb)
 
 
 @router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent, CMDRule("next_offline"))
@@ -123,7 +116,7 @@ async def next_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
     tasks = [t for t in all_tasks if t.region == u.region]
     if not tasks:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                          message="Больше действий в вашем регионе нет.",
+                                          message="Больше поручений в вашем регионе нет.",
                                           random_id=0)
         return await event.ctx_api.messages.send_message_event_answer(
             event_id=event.object.event_id, user_id=event.object.user_id,
@@ -132,7 +125,7 @@ async def next_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
     await state_dispenser.set(event.object.peer_id, UserTaskStates.OFFLINE_LIST, page=new_page,
                               total_pages=total_pages)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message=f"Действия в вашем регионе (стр. {new_page}"
+                                      message=f"Поручения в вашем регионе (стр. {new_page}"
                                               f"/{total_pages}):",
                                       keyboard=kb, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
@@ -155,7 +148,7 @@ async def prev_offline(event: GroupTypes.MessageEvent, offline_task_service: IOf
     await state_dispenser.set(event.object.peer_id, UserTaskStates.OFFLINE_LIST, page=new_page,
                               total_pages=total_pages)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                      message=f"Действия в вашем регионе (стр. {new_page}"
+                                      message=f"Поручения в вашем регионе (стр. {new_page}"
                                               f"/{total_pages}):",
                                       keyboard=kb, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
@@ -170,7 +163,8 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     task = await online_task_service.get_task(tid)
     if not task:
         return await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                                 message="Ошибка: действие не найдено", random_id=0)
+                                                 message="Ошибка: поручение не найдено",
+                                                 random_id=0)
     kb = Keyboard(inline=True)
     if task.type == TaskType.OTHER:
         kb.add(Callback("📤 Отправить подтверждение", {"cmd": "submit_proof_online", "tid": tid}))
@@ -181,7 +175,7 @@ async def view_online(event: GroupTypes.MessageEvent, online_task_service: IOnli
     text = (f"📋 {task.title}\n"
             f"📝 {task.description}\n"
             f"📌 Тип: {task.type.value}\n"
-            f"🏆 Вознаграждение: {task.reward} очков\n")
+            f"🏆 Вклад: {task.reward} очков\n")
     if task.url:
         text += f"🔗 Ссылка: {task.url}"
 
@@ -201,7 +195,7 @@ async def submit_proof_online(event: GroupTypes.MessageEvent,
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_AWAIT_PROOF, tid=tid)
     await event.ctx_api.messages.send(peer_id=event.object.peer_id,
                                       message="Отправьте текст или ссылку, подтверждающую "
-                                              "выполнение действия:",
+                                              "выполнение поручения:",
                                       random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id,
                                                            user_id=event.object.user_id,
@@ -264,7 +258,7 @@ async def confirm_submit_online(event: GroupTypes.MessageEvent,
 
         await event.ctx_api.messages.send(
             peer_id=verify_chat_id,
-            message=f"📋 Онлайн действие #{task.id} на проверку",
+            message=f"📋 Онлайн поручение #{task.id} на проверку",
             forward=forward_data,
             random_id=0
         )
@@ -274,7 +268,7 @@ async def confirm_submit_online(event: GroupTypes.MessageEvent,
             f"#in_progress\n"
             f"👤 Пользователь: {user.surname} {user.name} (ID: {uid}, VK)\n"
             f"📌 Тип: {task.type.value}\n"
-            f"🏆 Вознаграждение: {task.reward} очков\n"
+            f"🏆 Вклад: {task.reward} очков\n"
         )
         if task.url:
             info_text += f"🔗 Ссылка: {task.url}\n"
@@ -296,7 +290,7 @@ async def confirm_submit_online(event: GroupTypes.MessageEvent,
         from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
         await event.ctx_api.messages.send(
             peer_id=event.object.peer_id,
-            message="✅ Действие отправлено на проверку. Ожидайте решения администратора.",
+            message="✅ ПОручение отправлено на проверку. Ожидайте решения администратора.",
             keyboard=get_role_menu_keyboard(role),
             random_id=0
         )
@@ -344,10 +338,10 @@ async def check_online(event: GroupTypes.MessageEvent, online_task_service: IOnl
         await online_task_service.check_task(event.object.user_id, Sources.VK, tid)
         task = await online_task_service.get_task(tid)
         await notification_service.notify_user(event.object.peer_id, Sources.VK,
-                                                  f"✅ Действие #{tid} принято. Начислено"
+                                                  f"✅ Поручение #{tid} принято. Начислено"
                                                   f" {task.reward} очков.")
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                          message=f"Вы успешно выполнили действие! +{task.reward} "
+                                          message=f"Вы успешно выполнили поручение! +{task.reward} "
                                                   f"очков",
                                           random_id=0)
     except Exception as e:
@@ -364,11 +358,11 @@ async def accept_offline(event: GroupTypes.MessageEvent, offline_task_service: I
     try:
         await offline_task_service.accept_offline_task(event.object.user_id, Sources.VK, tid)
         await event.ctx_api.messages.send(peer_id=event.object.peer_id,
-                                          message="✅ Действие принято. Свяжитесь с местным "
+                                          message="✅ Поручение принято. Свяжитесь с местным "
                                                   "отделением по контактам в описании.",
                                           random_id=0)
         await notification_service.notify_user(event.object.peer_id, Sources.VK,
-                                                  f"Вы взяли офлайн действие #{tid}. Ожидает "
+                                                  f"Вы взяли офлайн поручение #{tid}. Ожидает "
                                                   f"проверки.")
     except DomainError as e:
         await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=str(e), random_id=0)
@@ -388,7 +382,7 @@ async def back_online_list(event: GroupTypes.MessageEvent, online_task_service: 
         page = 1
     kb = _build_task_keyboard(tasks, page, total_pages, "online")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.ONLINE_LIST, page=page, total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные действия ("
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Доступные поручения ("
                                                                             f"стр."
                                                                             f" {page}/{total_pages}):", keyboard=kb, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
@@ -408,7 +402,7 @@ async def back_offline_list(event: GroupTypes.MessageEvent, offline_task_service
         page = 1
     kb = _build_task_keyboard(tasks, page, total_pages, "offline")
     await state_dispenser.set(event.object.peer_id, UserTaskStates.OFFLINE_LIST, page=page, total_pages=total_pages)
-    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Действия в регионе ("
+    await event.ctx_api.messages.send(peer_id=event.object.peer_id, message=f"Поручения в регионе ("
                                                                             f"стр. {page}/{total_pages}):", keyboard=kb, random_id=0)
     await event.ctx_api.messages.send_message_event_answer(event_id=event.object.event_id, user_id=event.object.user_id, peer_id=event.object.peer_id)
 

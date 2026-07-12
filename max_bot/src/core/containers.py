@@ -108,7 +108,8 @@ class Container(DeclarativeContainer):
         source=Sources.MAX, transaction_repo=transaction_repository
     )
     balance_service: providers.Factory[IBalanceService] = providers.Factory(
-        BalanceService, uow=uow, user_repo=user_repository, transaction_repo=transaction_repository
+        BalanceService, uow=uow, user_repo=user_repository, transaction_repo=transaction_repository,
+        notification_service=notification_service
     )
     online_task_service: providers.Factory[IOnlineTaskService] = providers.Factory(
         OnlineTaskService, uow=uow, task_repo=online_task_repository,

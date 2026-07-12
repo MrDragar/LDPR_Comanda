@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from src.domain.entities.user import Sources, UserGrade
+from src.domain.entities.user import Sources
 from src.domain.entities.learning import LearningTestAttempt
 from src.domain.interfaces import IUnitOfWork, ILearningRepository
 from src.services.interfaces import ILearningService, IUserService, IBalanceService
@@ -141,19 +141,6 @@ class LearningService(ILearningService):
                 score=score, passed_at=now, is_passed=score >= 7
             )
             await self.__repo.save_attempt(attempt)
-
-            user = await self.__user_svc.get_user(user_id, user_source)
-            grade_updated = False
-            new_grade = user.grade
-
-            # Апгрейд до Агитатора при первом успешном прохождении
-            if score >= 7 and user.grade == UserGrade.BIG_TEAM_MEMBER:
-                new_grade = UserGrade.AGITATOR
-                grade_updated = True
-
-            if grade_updated:
-                await self.__user_svc.update_user_grade(user_id, user_source, new_grade)
-
             if score >= 7:
                 if not is_first_pass:
                     return {
@@ -165,9 +152,7 @@ class LearningService(ILearningService):
                     await self.__balance_svc.add_balance(user_id, user_source, 5,
                                                          "Прохождение обучения")
                     msg = "Поздравляем, вы успешно прошли тест. Вам начислено 5 баллов\n"
-                    if grade_updated:
-                        msg += "Вы получили новый ранг \"Агитатор\". Теперь вам открываются офлайн задания"
-                    return {"status": "success_first", "message": msg, "grade": new_grade}
+                    return {"status": "success_first", "message": msg}
             else:
                 return {
                     "status": "fail",
