@@ -67,6 +67,9 @@ async def finish_registration(
                 f"{referral_headliner.welcome_message}"
             )
         await event.message.answer(
+            f"Вы присоединились к Большой команде ЛДПР.\nВаше звание — Сторонник."
+        )
+        await event.message.answer(
             "Отправьте заявку на вступление в нашу закрытую группу, чтобы стать частью нашей большой команды\n"
             f"{group_link}"
         )

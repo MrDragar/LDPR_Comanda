@@ -74,7 +74,7 @@ async def finish_registration(
             message="Приглашай друзей и получи 10 баллов за приглашённого пользователя.",
             random_id=0,
         )
-
+        
         if referral_headliner and referral_headliner.welcome_message:
             await ctx_api.messages.send(
                 peer_id=peer_id,
@@ -84,7 +84,11 @@ async def finish_registration(
                 ),
                 random_id=0,
             )
-
+        await ctx_api.messages.send(
+            peer_id=peer_id,
+            message=f"Вы присоединились к Большой команде ЛДПР.\nВаше звание — Сторонник.",
+            random_id=0,
+        )
         await ctx_api.messages.send(
             peer_id=peer_id,
             message="Меню",
