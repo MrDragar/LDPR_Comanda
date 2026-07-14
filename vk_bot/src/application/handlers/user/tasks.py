@@ -290,7 +290,7 @@ async def confirm_submit_online(event: GroupTypes.MessageEvent,
         from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
         await event.ctx_api.messages.send(
             peer_id=event.object.peer_id,
-            message="✅ ПОручение отправлено на проверку. Ожидайте решения администратора.",
+            message="✅ Поручение отправлено на проверку. Ожидайте решения администратора.",
             keyboard=get_role_menu_keyboard(role),
             random_id=0
         )
