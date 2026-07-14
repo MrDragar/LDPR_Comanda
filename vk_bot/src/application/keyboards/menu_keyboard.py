@@ -1,12 +1,15 @@
 import random
 
-from vkbottle import Keyboard, Text
+from vkbottle import Keyboard, Text, VKApps
 
 from src.domain.entities.user import UserRole
+
+vk_app = VKApps(app_id=54510502, owner_id=200072379, label="Открыть приложение")
 
 
 def get_user_menu_keyboard() -> str:
     kb = Keyboard(one_time=False)
+    kb.add(vk_app).row()
     kb.add(Text("Поручения штаба", payload=f"{random.randint(0, 1000000)}"))
     kb.add(Text("Действующие поручения")).row()
     kb.add(Text("Личный кабинет"))
@@ -29,6 +32,7 @@ def get_role_entry_keyboard(role: UserRole | None) -> str:
 
 def get_staff_ro_menu_keyboard() -> str:
     kb = Keyboard(one_time=False)
+    kb.add(vk_app).row()
     kb.add(Text("Проверить офлайн задачи"))
     kb.add(Text("Управление заказами")).row()
     kb.add(Text("Список участников мероприятия")).row()
@@ -38,7 +42,7 @@ def get_staff_ro_menu_keyboard() -> str:
 
 def get_coordinator_ro_menu_keyboard() -> str:
     kb = Keyboard(one_time=False)
-    kb.add(Text("Проверить офлайн задачи"))
+    kb.add(vk_app).row()
     kb.add(Text("Управление заказами")).row()
     kb.add(Text("Список участников мероприятия")).row()
     kb.add(Text("Создать офлайн задачу"))
@@ -50,6 +54,7 @@ def get_coordinator_ro_menu_keyboard() -> str:
 
 def get_staff_ca_menu_keyboard() -> str:
     kb = Keyboard(one_time=False)
+    kb.add(Text("Проверить офлайн задачи"))
     kb.add(Text("Магазин ЦА"))
     kb.add(Text("Задачи")).row()
     kb.add(Text("Хедлайнеры")).row()
