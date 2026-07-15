@@ -1,6 +1,8 @@
-from maxapi.types import MessageButton
+from maxapi.types import MessageButton, OpenAppButton
 from maxapi.utils.inline_keyboard import InlineKeyboardBuilder
 from src.domain.entities.user import UserRole
+
+MINI_APP_URL = "https://командалдпр.рф/app"
 
 
 def get_headliner_menu_keyboard() -> InlineKeyboardBuilder:
@@ -15,7 +17,8 @@ def get_role_menu_keyboard(role: UserRole | None) -> InlineKeyboardBuilder:
     if role == UserRole.HEADLINER:
         return get_headliner_menu_keyboard()
     builder = InlineKeyboardBuilder()
-    if role == UserRole.USER:
+    if role == UserRole.USER or role == UserRole.CANDIDATE:
+        builder.row(OpenAppButton(text="Открыть приложение", url=MINI_APP_URL))
         builder.row(MessageButton(text="Поручения штаба"))
         builder.row(MessageButton(text="Действующие поручения"))
         builder.row(MessageButton(text="Личный кабинет"))
