@@ -2,6 +2,7 @@ from maxapi.context import StatesGroup, State
 
 
 class RegistrationStates(StatesGroup):
+    CHOICE = State()
     PERSONAL_DATA = State()
     MEMBERSHIP = State()
     SURNAME = State()

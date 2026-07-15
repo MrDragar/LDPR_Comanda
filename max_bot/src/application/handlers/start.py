@@ -1,10 +1,11 @@
 import logging
 import re
 from maxapi import Router, Bot, F
-from maxapi.types import MessageCreated, Command, BotStarted, InputMedia
+from maxapi.types import MessageCreated, Command, BotStarted, InputMedia, MessageCallback
 from maxapi.context import MemoryContext
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
+from src.application.keyboards.start_choice_keyboard import get_start_choice_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources
 from src.services.interfaces import IUserService, IReferralService, IActiveUserService, \
@@ -73,10 +74,10 @@ async def _handle_start_payload(event, context: MemoryContext, bot: Bot, payload
         "Готовы? Давайте знакомиться!"
     )
     await event.send(
-        "Для начала дайте согласие на обработку персональных данных",
-        attachments=[get_personal_data_keyboard().as_markup()]
+        "👇 Выберите удобный способ регистрации:",
+        attachments=get_start_choice_keyboard()
     )
-    await context.set_state(RegistrationStates.PERSONAL_DATA)
+    await context.set_state(RegistrationStates.CHOICE)
 
 
 @router.bot_started()
@@ -118,4 +119,19 @@ async def catch_all_handler(event: MessageCreated, context: MemoryContext, bot: 
     if state is not None:
         return
     await on_start_message(event, context, bot, user_service, referral_service, active_user_service, headliner_service)
-    
+
+
+@router.message_callback(F.callback.payload == "start_text_reg")
+async def handle_start_text_reg(event: MessageCallback, context: MemoryContext):
+    if await context.get_state() != RegistrationStates.CHOICE:
+        await event.answer()
+        return
+
+    # Переводим пользователя в стандартный флоу согласия на ПД
+    await context.set_state(RegistrationStates.PERSONAL_DATA)
+
+    await event.message.answer(
+        "Для начала дайте согласие на обработку персональных данных",
+        attachments=[get_personal_data_keyboard().as_markup()]
+    )
+    await event.answer()
