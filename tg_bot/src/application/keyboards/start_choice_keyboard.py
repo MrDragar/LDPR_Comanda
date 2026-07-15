@@ -1,7 +1,7 @@
 from aiogram.types import InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-MINI_APP_URL = "https://командалдпр.рф/app"
+MINI_APP_URL = "https://миниапп.командалдпр.рф/app"
 
 
 def get_start_choice_keyboard() -> InlineKeyboardMarkup:
