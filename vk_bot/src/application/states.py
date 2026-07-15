@@ -2,6 +2,7 @@ from vkbottle import BaseStateGroup
 
 
 class RegistrationStates(BaseStateGroup):
+    REGISTRATION_CHOICE = "registration_choice"
     PERSONAL_DATA = "personal_data"
     MEMBERSHIP = "membership"
     SURNAME = "surname"

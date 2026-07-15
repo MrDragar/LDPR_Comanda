@@ -1,7 +1,5 @@
 import random
-
 from vkbottle import Keyboard, Text, VKApps
-
 from src.domain.entities.user import UserRole
 
 vk_app = VKApps(app_id=54510502, owner_id=200072379, label="Открыть приложение")

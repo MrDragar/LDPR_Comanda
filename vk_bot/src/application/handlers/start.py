@@ -4,9 +4,13 @@ import re
 from vkbottle.bot import BotLabeler, Message
 from vkbottle import PhotoMessageUploader
 from vkbottle.dispatch import BuiltinStateDispenser
+from vkbottle_types import GroupTypes
+from vkbottle_types.events import GroupEventType
 
+from src.application.filters import CMDRule
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import get_personal_data_keyboard
+from src.application.keyboards.start_choice_keyboard import get_start_choice_keyboard
 from src.application.states import RegistrationStates
 from src.domain.entities import Sources
 from src.services.interfaces import IUserService, IReferralService, IActiveUserService, IHeadlinerService
@@ -90,15 +94,52 @@ async def start(
         "Готовы? Давайте знакомиться!"
 
     )
-    await message.answer("Если вы допустили ошибку при заполнении анкеты, напишите мне 'Заново' или 'Начать'")
     await message.answer(
-        "Для начала дайте согласие на обработку персональных данных",
-        keyboard=get_personal_data_keyboard()
-    )
+        "Если вы допустили ошибку при заполнении анкеты, напишите мне 'Заново' или 'Начать'")
+
     payload = {}
     if headliner_ref is not None:
         payload = {
             "headliner_id": headliner_ref[0],
             "headliner_source": headliner_ref[1].value
         }
-    await state_dispenser.set(message.from_id, RegistrationStates.PERSONAL_DATA, **payload)
+
+    await state_dispenser.set(message.from_id, RegistrationStates.REGISTRATION_CHOICE, **payload)
+
+    await message.answer(
+        "👇 Выберите удобный способ регистрации:",
+        keyboard=get_start_choice_keyboard()
+    )
+
+
+@router.raw_event(GroupEventType.MESSAGE_EVENT, GroupTypes.MessageEvent,
+                  CMDRule("start_text_reg"))
+async def handle_start_text_reg(event: GroupTypes.MessageEvent,
+                                state_dispenser: BuiltinStateDispenser):
+    state = await state_dispenser.get(event.object.peer_id)
+    if not state or state.state != str(RegistrationStates.REGISTRATION_CHOICE):
+        await event.ctx_api.messages.send_message_event_answer(
+            event_id=event.object.event_id, user_id=event.object.user_id,
+            peer_id=event.object.peer_id
+        )
+        return
+
+    await state_dispenser.set(event.object.peer_id, RegistrationStates.PERSONAL_DATA,
+                              **state.payload)
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message="Если вы допустили ошибку при заполнении анкеты, напишите мне 'Заново' или 'Начать'",
+        random_id=0
+    )
+    await event.ctx_api.messages.send(
+        peer_id=event.object.peer_id,
+        message="Для начала дайте согласие на обработку персональных данных",
+        keyboard=get_personal_data_keyboard(),
+        random_id=0
+    )
+
+    await event.ctx_api.messages.send_message_event_answer(
+        event_id=event.object.event_id, user_id=event.object.user_id,
+        peer_id=event.object.peer_id
+    )
+

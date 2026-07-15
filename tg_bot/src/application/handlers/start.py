@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from src.application.keyboards.menu_keyboard import get_role_menu_keyboard
 from src.application.keyboards.personal_data_keyboard import \
     get_personal_data_keyboard
+from src.application.keyboards.start_choice_keyboard import get_start_choice_keyboard
 from src.application.states import RegistrationStates
 
 from src.application.filters import IsRegisteredFilter, ValidatedStartFilter, HeadlinerStartFilter
@@ -96,8 +97,22 @@ async def start(message: types.Message,
         "обучение и доступ в магазин подарков.\n\n"
         "Готовы? Давайте знакомиться!"
     )
-
+    # Сохраняем headliner_id в стейте, если он был передан по рефералке
+    if headliner_id is not None:
+        await state.update_data(headliner_id=headliner_id)
+    await state.set_state(RegistrationStates.choice)
     await message.reply(
-        "Для начала дайте согласие на обработку персональных данных",
-        reply_markup=get_personal_data_keyboard())
+        "👇 Выберите удобный способ регистрации:",
+        reply_markup=get_start_choice_keyboard()
+    )
+
+
+@router.callback_query(F.data == "start_text_reg", RegistrationStates.choice)
+async def handle_start_text_reg(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(RegistrationStates.personal_data)
+
+    await callback.message.answer(
+        "Для начала дайте согласие на обработку персональных данных",
+        reply_markup=get_personal_data_keyboard()
+    )
+    await callback.answer()

@@ -2,6 +2,7 @@ from aiogram.fsm.state import StatesGroup, State
 
 
 class RegistrationStates(StatesGroup):
+    choice = State()
     personal_data = State()
     membership = State()
     surname = State()
