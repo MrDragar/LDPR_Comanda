@@ -18,7 +18,7 @@ def get_role_menu_keyboard(role: UserRole | None) -> InlineKeyboardBuilder:
         return get_headliner_menu_keyboard()
     builder = InlineKeyboardBuilder()
     if role == UserRole.USER or role == UserRole.CANDIDATE:
-        builder.row(OpenAppButton(text="Открыть приложение", url=MINI_APP_URL))
+        builder.row(OpenAppButton(text="Открыть приложение", web_app="id7708195631_bot"))
         builder.row(MessageButton(text="Поручения штаба"))
         builder.row(MessageButton(text="Действующие поручения"))
         builder.row(MessageButton(text="Личный кабинет"))
