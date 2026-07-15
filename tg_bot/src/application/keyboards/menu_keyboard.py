@@ -1,15 +1,24 @@
-from aiogram.types import ReplyKeyboardMarkup, WebAppInfo
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.types import ReplyKeyboardMarkup, WebAppInfo, InlineKeyboardMarkup, \
+    InlineKeyboardButton
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from src.domain.entities.user import UserRole
 
 
-WEBAPP_URL = "https://командалдпр.рф/app"
+WEBAPP_URL = "https://миниапп.командалдпр.рф/app"
 web_app_info = WebAppInfo(url=WEBAPP_URL)
+
+
+def get_miniapp_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(text="Запустить", web_app=web_app_info))
+    builder.add(InlineKeyboardButton(text="Назад"))
+    builder.adjust(1, 1)
+    return builder.as_markup()
 
 
 def get_headliner_menu_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
-    builder.button(text="Открыть приложение", web_app=web_app_info)
+    builder.button(text="Открыть приложение")
     builder.button(text="Личный кабинет")
     builder.button(text="Приветственное сообщение")
     builder.button(text="Рейтинг хедлайнеров")
