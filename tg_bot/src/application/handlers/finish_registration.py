@@ -59,7 +59,7 @@ async def finish_registration(
         f"Вы присоединились к Большой команде ЛДПР.\nВаше звание — Сторонник."
     )
     await message.answer(
-        "Отправьте заявку на вступление в нашу закрытую группу, чтобы стать частью нашей большой команды\n"
+        "Вступайте в нашу группу, чтобы стать частью нашей Большой команды\n"
         f"{group_link}"
     )
     await message.answer("Меню", reply_markup=get_role_menu_keyboard(user.role))

@@ -92,6 +92,7 @@ async def on_bot_started(event: BotStarted, context: MemoryContext, bot: Bot,
 
 
 @router.message_created(Command('start'))
+@router.message_created(RegistrationStates.CHOICE)
 async def on_start_message(event: MessageCreated, context: MemoryContext, bot: Bot,
                            user_service: IUserService, referral_service: IReferralService,
                            active_user_service: IActiveUserService,
