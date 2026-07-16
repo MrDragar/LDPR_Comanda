@@ -34,7 +34,7 @@ def parse_headliner_ref(ref: str) -> tuple[int, Sources] | None:
         return int(match.group(1)), Sources(match.group(2))
 
 
-@router.message(from_chat=True)
+@start_command_router.message(from_chat=True)
 async def hello_handler(message: Message):
     ...
 
