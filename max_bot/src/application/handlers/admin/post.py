@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import aiohttp
@@ -187,7 +188,7 @@ async def confirm_post_file(event: MessageCreated, context: MemoryContext,
         return
 
     success_count = 0
-    for uid in user_ids:
+    for idx, uid in enumerate(user_ids):
         try:
             # В MaxAPI отправка может отличаться, используем стандартный метод send_message
             # Если msg.body содержит текст и вложения, копируем их
@@ -200,6 +201,9 @@ async def confirm_post_file(event: MessageCreated, context: MemoryContext,
                 parse_mode=ParseMode.MARKDOWN
             )
             success_count += 1
+            await asyncio.sleep(0.6)
+            if idx % 100 == 0:
+                await event.message.answer(f"{idx}({success_count})/{len(user_ids)}")
         except Exception as e:
             logger.debug(f"Failed to send to {uid}: {e}")
 
@@ -256,13 +260,16 @@ async def confirm_post(event: MessageCreated, context: MemoryContext, user_servi
         await context.clear()
         return
 
-    for user in users:
+    for idx, user in enumerate(users):
         try:
             await bot.send_message(
                 chat_id=None, user_id=user.id, text=msg.body.md_text,
                 attachments=msg.body.attachments, parse_mode=ParseMode.MARKDOWN
             )
             success_count += 1
+            await asyncio.sleep(0.6)
+            if idx % 100 == 0:
+                await event.message.answer(f"{idx}({success_count})/{len(users)}")
         except Exception as e:
             logger.debug(f"Failed to forward to {user.id}: {e}")
 
