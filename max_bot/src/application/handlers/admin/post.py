@@ -201,7 +201,7 @@ async def confirm_post_file(event: MessageCreated, context: MemoryContext,
                 parse_mode=ParseMode.MARKDOWN
             )
             success_count += 1
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.1)
             if idx % 100 == 0:
                 await event.message.answer(f"{idx}({success_count})/{len(user_ids)}")
         except Exception as e:
@@ -267,7 +267,7 @@ async def confirm_post(event: MessageCreated, context: MemoryContext, user_servi
                 attachments=msg.body.attachments, parse_mode=ParseMode.MARKDOWN
             )
             success_count += 1
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.1)
             if idx % 100 == 0:
                 await event.message.answer(f"{idx}({success_count})/{len(users)}")
         except Exception as e:

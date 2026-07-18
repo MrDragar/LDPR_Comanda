@@ -50,7 +50,7 @@ class Container(DeclarativeContainer):
         UnitOfWork, database=database
     )
     bot: providers.Singleton[MaxBot] = providers.Singleton(MaxBot, token=config.MAX_API_TOKEN)
-    dp: providers.Singleton[Dispatcher] = providers.Singleton(Dispatcher)
+    dp: providers.Singleton[Dispatcher] = providers.Singleton(Dispatcher, use_create_task=True)
     tg_bot: providers.Singleton[TgBot] = providers.Singleton(
         TgBot, token=config.TG_API_TOKEN, session=AiohttpSession(proxy=config.proxy)
     )
