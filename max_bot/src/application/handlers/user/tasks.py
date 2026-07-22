@@ -131,7 +131,7 @@ async def view_online(event: MessageCallback, context: MemoryContext,
 # ==================== ПРОВЕРКА ОНЛАЙН ЗАДАНИЯ ====================
 @router.message_callback(F.callback.payload.startswith("check_online_"))
 async def check_online(event: MessageCallback, context: MemoryContext):
-    await event.answer()
+    # await event.answer()
     tid = int(event.callback.payload.split("_")[-1])
     await context.update_data(tid=tid)
     await event.message.answer("Отправьте текст, ссылку или скриншот, подтверждающий выполнение "
