@@ -29,11 +29,14 @@ class OnlineTaskService(IOnlineTaskService):
         if page < 1: raise DomainError("Страница должна быть >= 1")
         today = date.today()
         async with self.__uow.atomic():
+            user = await self.__user_svc.get_user(user_id, user_source)
+            user_region = user.region
             tasks, total = await self.__task_repo.get_active_tasks_for_user(
                 user_id, user_source, today,
                 skip=(page - 1) * ITEMS_PER_PAGE,
                 limit=ITEMS_PER_PAGE,
-                is_member=is_member
+                is_member=is_member,
+                user_region=user_region
             )
             pages = (total + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE
             return tasks, pages
@@ -70,7 +73,10 @@ class OnlineTaskService(IOnlineTaskService):
         async with self.__uow.atomic():
             return await self.__task_repo.get_task_by_id(task_id)
 
-    async def create_task(self, date: date, duration: int, type: TaskType, reward: int, url: str | None, title: str, description: str, is_for_members: bool) -> OnlineTask:
+    async def create_task(
+            self, date: date, duration: int, type: TaskType, reward: int, url: str | None,
+            title: str, description: str, is_for_members: bool, region: str | None = None
+    ) -> OnlineTask:
         if reward <= 0: raise DomainError("Награда должна быть больше нуля")
         if duration <= 0: raise DomainError("Длительность должна быть больше нуля")
         if type != TaskType.OTHER and url and not url.startswith("https://vk.com/"):
@@ -78,7 +84,7 @@ class OnlineTaskService(IOnlineTaskService):
         async with self.__uow.atomic():
             task = OnlineTask(
                 id=0, date=date, duration=duration, type=type, reward=reward, url=url,
-                title=title, description=description, is_for_members=is_for_members
+                title=title, description=description, is_for_members=is_for_members, region=region
             )
             return await self.__task_repo.create_task(task)
 

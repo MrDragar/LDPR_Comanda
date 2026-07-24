@@ -88,6 +88,7 @@ async def process_online_fields(message: Message, state_dispenser: BuiltinStateD
             return await message.answer(
                 "Это задание предназначено только для членов партии ЛДПР? (Да/Нет)",
                 keyboard=get_boolean_keyboard())
+
         elif step == "is_for_members":
             text_lower = text.lower().strip()
             if text_lower not in ['да', 'нет']:
@@ -95,10 +96,30 @@ async def process_online_fields(message: Message, state_dispenser: BuiltinStateD
                                             keyboard=get_boolean_keyboard())
             is_for_members = (text_lower == 'да')
 
+            # Переходим к шагу ввода региона
+            await state_dispenser.set(message.from_id, AdminTaskStates.CREATE_ONLINE, **payload,
+                                      is_for_members=is_for_members, step="region")
+            return await message.answer(
+                "🌍 Введите регион для задачи (или '-', если задание без привязки к региону):",
+                keyboard=get_cancel_kb())
+
+        elif step == "region":
+            region_input = text.strip()
+            if region_input == '-':
+                region_val = None
+            else:
+                similar = await user_service.get_similar_regions(region_input)
+                if not similar or region_input != similar[0]:
+                    hint = f"Регион не найден. Возможно, вы имели в виду: {', '.join(similar[:3])}" if similar else "Регион не найден."
+                    return await message.answer(f"⚠️ {hint}\nВведите название региона точно:",
+                                                keyboard=get_cancel_kb())
+                region_val = region_input
+
             await online_task_service.create_task(
                 date=payload["date"], duration=payload["duration"], type=payload["type"],
-                reward=payload["reward"], url=payload["url"], title=payload["title"],
-                description=payload["description"], is_for_members=is_for_members
+                reward=payload["reward"], url=payload.get("url"), title=payload["title"],
+                description=payload["description"], is_for_members=payload["is_for_members"],
+                region=region_val
             )
             await state_dispenser.delete(message.from_id)
             return await message.answer("✅ Онлайн задача успешно создана!")

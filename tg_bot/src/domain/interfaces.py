@@ -154,8 +154,9 @@ class IVKPublicationRepository(ABC):
 class IOnlineTaskRepository(ABC):
     @abstractmethod
     async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int, is_member: bool | None = None) -> \
-    tuple[list[OnlineTask], int]: ...
+                                        skip: int, limit: int, is_member: bool | None = None,
+                                        user_region: str | None = None) -> \
+            tuple[list[OnlineTask], int]: ...
 
     @abstractmethod
     async def get_task_by_id(self, task_id: int) -> OnlineTask | None: ...

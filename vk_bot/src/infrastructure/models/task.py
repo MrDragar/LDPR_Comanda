@@ -18,6 +18,7 @@ class OnlineTaskORM(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     is_for_members: Mapped[bool] = mapped_column(default=False, nullable=False)
+    region: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class OfflineTaskORM(Base):

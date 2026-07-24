@@ -26,8 +26,9 @@ class OnlineTask:
     reward: int
     url: str | None
     title: str
-    description: str 
+    description: str
     is_for_members: bool = False
+    region: str | None = None
 
 
 @dataclass
