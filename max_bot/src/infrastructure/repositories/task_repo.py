@@ -23,18 +23,25 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         self.__uow = uow
 
     async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
-                                        skip: int, limit: int, is_member: bool | None = None) -> \
-    tuple[list[OnlineTask], int]:
+                                        skip: int, limit: int, is_member: bool | None = None,
+                                        user_region: str | None = None) -> \
+            tuple[list[OnlineTask], int]:
+
         session = self.__uow.get_session()
         base_stmt = select(OnlineTaskORM).where(
             and_(
                 OnlineTaskORM.date <= today,
-                text("DATE_ADD(date, INTERVAL duration DAY) >= :today").bindparams(today=today)            )
+                text("DATE_ADD(date, INTERVAL duration DAY) >= :today").bindparams(today=today))
         )
 
         # Фильтрация по членству в партии
         if is_member is not None:
             base_stmt = base_stmt.where(OnlineTaskORM.is_for_members == is_member)
+
+        if user_region is not None:
+            base_stmt = base_stmt.where(
+                or_(OnlineTaskORM.region == user_region, OnlineTaskORM.region.is_(None))
+            )
 
         subquery = (
             select(AcceptedOnlineTaskORM.task_id)
@@ -56,7 +63,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
                 id=t.id, date=t.date, duration=t.duration,
                 type=t.type, reward=t.reward, url=t.url,
                 title=t.title, description=t.description,
-                is_for_members=t.is_for_members
+                is_for_members=t.is_for_members, region=t.region 
             ) for t in tasks_orm
         ]
         return tasks, total
@@ -69,7 +76,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
         return OnlineTask(id=orm.id, date=orm.date, duration=orm.duration, type=orm.type,
                           reward=orm.reward, url=orm.url, title=orm.title,
                           description=orm.description,
-                          is_for_members=orm.is_for_members)
+                          is_for_members=orm.is_for_members, region=orm.region)
 
     async def create_task(self, task: OnlineTask) -> OnlineTask:
         session = self.__uow.get_session()
@@ -108,7 +115,7 @@ class OfflineTaskRepository(IOfflineTaskRepository):
 
     async def get_active_tasks_for_user(self, user_id: int, user_source: Sources, today: date,
                                         skip: int, limit: int, is_member: bool | None = None) -> \
-    tuple[list[OfflineTask], int]:
+            tuple[list[OfflineTask], int]:
         session = self.__uow.get_session()
         base_stmt = select(OfflineTaskORM).where(
             and_(
@@ -337,8 +344,9 @@ class AcceptedTaskRepository(IAcceptedTaskRepository):
         )
         session.add(orm)
         await session.flush()
-    
-    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int, status: TaskStatus) -> None:
+
+    async def update_online_task_status(self, user_id: int, user_source: Sources, task_id: int,
+                                        status: TaskStatus) -> None:
         session = self.__uow.get_session()
         stmt = select(AcceptedOnlineTaskORM).where(
             AcceptedOnlineTaskORM.user_id == user_id,
@@ -350,4 +358,5 @@ class AcceptedTaskRepository(IAcceptedTaskRepository):
             orm.status = status
             logger.info(f"Updated online task {task_id} status to {status.value}")
         else:
-            logger.warning(f"Tried to update status for non-existing online accepted task {task_id}")
+            logger.warning(
+                f"Tried to update status for non-existing online accepted task {task_id}")
