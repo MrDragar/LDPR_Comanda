@@ -37,15 +37,14 @@ class BalanceService(IBalanceService):
                     await self.__user_repo.update_user_grade(user.id, user.source, UserGrade.BIG_TEAM_MEMBER)
                     await self.__notification_service.notify_user(
                         user.id, user.source,
-                        "Поздравляем! Вы получили звание Участник Большой команды ЛДПР. Вам "
-                        "открыт цифровой набор Большой команды."
+                        "Поздравляем! Вы получили звание Участник Большой команды ЛДПР."
                     )
                 if new_amount >= 200 and user.grade in [UserGrade.SYMPATHIZER, UserGrade.BIG_TEAM_MEMBER]:
                     await self.__user_repo.update_user_grade(user.id, user.source, UserGrade.AGITATOR)
                     await self.__notification_service.notify_user(
                         user.id, user.source,
                         "Вы получили звание Агитатор.\nВаш вклад помогает усиливать Большую "
-                        "команду в регионе.\nВам открыта награда Большой команды ЛДПР."
+                        "команду в регионе."
                     )
                 if new_amount >= 500 and user.grade in [UserGrade.SYMPATHIZER,
                                                         UserGrade.BIG_TEAM_MEMBER, UserGrade.AGITATOR]:
@@ -53,8 +52,7 @@ class BalanceService(IBalanceService):
                     await self.__notification_service.notify_user(
                         user.id, user.source,
                         "Вы получили звание Соратник Большой команды ЛДПР. Вы вошли в число "
-                        "участников, которые регулярно помогают команде. Вам открыт мерч-набор и "
-                        "доступ к событиям команды."
+                        "участников, которые регулярно помогают команде."
                     )
                 logger.info(f"Balance updated for user {user_id}. Added {amount}")
             except DomainError:

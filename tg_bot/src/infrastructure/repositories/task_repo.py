@@ -32,7 +32,7 @@ class OnlineTaskRepository(IOnlineTaskRepository):
             and_(
                 OnlineTaskORM.date <= today,
                 text("DATE_ADD(date, INTERVAL duration DAY) >= :today").bindparams(today=today))
-        )
+        .order_by(OnlineTaskORM.date.desc()))
 
         # Фильтрация по членству в партии
         if is_member is not None:
